@@ -119,6 +119,7 @@ export function SubcategoryIconGrid({
                         const isActive = activeSlug === sub.slug
                         return (
                             <Link
+                                    prefetch={false}
                                 key={sub.id ?? sub.slug}
                                 href={`${basePath}/${sub.slug}`}
                                 ref={isActive ? activeItemRef : null}

@@ -52,7 +52,11 @@ try {
       await listingLink.locator('span').click()
       await page.waitForURL('**/thiet-bi-ve-sinh/bon-cau')
       await page.locator('#main-content h1').waitFor()
+      const visibleProduct = page.locator('#main-content a[href^="/thiet-bi-ve-sinh/bon-cau/"]').first()
+      await visibleProduct.waitFor({ state: 'visible' })
       await page.reload({ waitUntil: 'networkidle' })
+      await visibleProduct.waitFor({ state: 'visible' })
+      assert.ok(!(await page.locator('#main-content').innerText()).includes('Chưa tải được danh sách sản phẩm'))
       // Choose the real DB-only product via its search result link.
       await page.goto(origin + '/tim-kiem?q=A-LFV-402S-1', { waitUntil: 'networkidle' })
       await page.locator(`#main-content a[href="${pdp}"]`).first().click()

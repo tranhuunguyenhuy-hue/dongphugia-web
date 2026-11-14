@@ -110,7 +110,7 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
     })
 
     return (
-        <Link href={resolvedHref} className="group flex flex-col w-full h-full transition-all duration-300 relative">
+        <Link prefetch={false} href={resolvedHref} className="group flex flex-col w-full h-full transition-all duration-300 relative">
             {product.is_featured && (
                 <>
                     {/* Fading Border Wrapper */}
