@@ -176,10 +176,13 @@ describe('V1 packaged Worker preflight diagnostics', () => {
 
 
 describe('concurrent browser preflight failure evidence', () => {
+  it('classifies a proxy exit during navigation using fresh process state', () => {
+    expect(buildPreflightDiagnostics({state:{stage:'navigation',lastHttpStatus:'200',workerAlive:false,workerExitCode:1}}).classification).toBe('wrangler_dev_process_exit')
+  })
   it('keeps late read failures after more than 128 successes', () => {
     const raw = Array.from({ length: 150 }, () => JSON.stringify({
-      event: 'PUBLIC_DATABASE_READ_OK', queryTables: ['products'], elapsedMs: 10,
-    })).concat(JSON.stringify({ event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['products'], elapsedMs: 20, sqlState: '53300' })).join('\n')
+      event: 'PUBLIC_DATABASE_READ_OK', queryTables: ['products'], elapsedMs: 10, activePgClients: 1, peakPgClients: 4,
+    })).concat(JSON.stringify({ event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['products'], elapsedMs: 20, activePgClients: 1, peakPgClients: 4, sqlState: '53300' })).join('\n')
     const result = parseSafeRuntimeEvents(raw)
     expect(result).toHaveLength(128)
     expect(result.at(-1)).toMatchObject({ event: 'PUBLIC_DATABASE_READ_FAILURE', sqlState: '53300' })
