@@ -16,4 +16,9 @@ describe('safe Public route failure summary', () => {
     const summary = publicRouteFailureSummary(new Error('permission denied for customers: private details'))
     expect(summary).toEqual({ errorClass: 'Error' })
   })
+
+  it('labels bounded PostgreSQL capacity failures without exposing query details', () => {
+    const summary = publicRouteFailureSummary(new Error('PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED'))
+    expect(summary).toEqual({ errorClass: 'Error', publicErrorCode: 'PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED' })
+  })
 })

@@ -12,6 +12,32 @@ const DIAGNOSTIC_TABLES = new Set([
 ])
 let activeReadClients = 0
 let peakReadClients = 0
+const MAX_CONCURRENT_PUBLIC_READS = 4
+const MAX_QUEUED_PUBLIC_READS = 32
+const readClientWaiters: Array<() => void> = []
+let hyperdriveBinding: Promise<PublicHyperdrive> | undefined
+let pgClientModule: Promise<typeof import('pg')> | undefined
+
+async function acquireReadClientSlot() {
+  if (activeReadClients >= MAX_CONCURRENT_PUBLIC_READS) {
+    if (readClientWaiters.length >= MAX_QUEUED_PUBLIC_READS) {
+      throw new Error('PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED')
+    }
+    await new Promise<void>((resolve) => readClientWaiters.push(resolve))
+  } else {
+    activeReadClients += 1
+    peakReadClients = Math.max(peakReadClients, activeReadClients)
+  }
+
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    const next = readClientWaiters.shift()
+    if (next) next()
+    else activeReadClients -= 1
+  }
+}
 
 function publicQueryTables(statement: string) {
   const tables = [...statement.matchAll(/\b(?:FROM|JOIN)\s+dpg_app\.([a-z_]+)/gi)]
@@ -33,11 +59,17 @@ function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_D
   }))
 }
 
-async function getHyperdrive() {
-  const { env } = await import('cloudflare:workers')
-  const hyperdrive = (env as { PUBLIC_DB?: PublicHyperdrive }).PUBLIC_DB
-  if (!hyperdrive?.connectionString) throw new Error('PUBLIC_DATABASE_BINDING_REQUIRED')
-  return hyperdrive
+function getHyperdrive() {
+  hyperdriveBinding ??= import('cloudflare:workers').then(({ env }) => {
+    const hyperdrive = (env as { PUBLIC_DB?: PublicHyperdrive }).PUBLIC_DB
+    if (!hyperdrive?.connectionString) throw new Error('PUBLIC_DATABASE_BINDING_REQUIRED')
+    return hyperdrive
+  })
+  return hyperdriveBinding
+}
+function getPgClientModule() {
+  pgClientModule ??= import('pg')
+  return pgClientModule
 }
 /** Fixed SELECT only; all dynamic parameters are bound, no Postgres writes allowed. */
 export async function readPublicRows<T>(
@@ -51,20 +83,18 @@ export async function readPublicRows<T>(
   }
   const started = performance.now()
   const queryTables = publicQueryTables(statement)
+  let releaseReadSlot: (() => void) | null = null
   let closeClient: (() => Promise<unknown>) | null = null
-  let countedActiveClient = false
   try {
+    releaseReadSlot = await acquireReadClientSlot()
     const { connectionString } = await getHyperdrive()
-    const { Client } = await import('pg')
+    const { Client } = await getPgClientModule()
     const client = new Client({
       connectionString,
       connectionTimeoutMillis: 3000,
       query_timeout: 5000,
     })
     closeClient = () => client.end()
-    activeReadClients += 1
-    countedActiveClient = true
-    peakReadClients = Math.max(peakReadClients, activeReadClients)
     await client.connect()
     const response = await client.query(statement, [...values])
     recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_OK', queryTables, started)
@@ -75,6 +105,6 @@ export async function readPublicRows<T>(
     throw error
   } finally {
     if (closeClient) await closeClient().catch(() => undefined)
-    if (countedActiveClient) activeReadClients -= 1
+    releaseReadSlot?.()
   }
 }
