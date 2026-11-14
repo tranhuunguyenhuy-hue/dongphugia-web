@@ -40,7 +40,15 @@ test.describe('Public client navigation Flight acceptance', () => {
         })
 
         await page.goto('/', { waitUntil: 'domcontentloaded' })
-        await page.locator('main a[href="/thiet-bi-ve-sinh"]').first().click()
+        if ((page.viewportSize()?.width ?? 0) < 1024) {
+            await page.getByRole('button', { name: 'Mở menu điều hướng' }).click()
+            await page.getByRole('navigation', { name: 'Menu di động' })
+                .getByRole('link', { name: 'Thiết bị vệ sinh' }).click()
+        } else {
+            await page.getByRole('button', { name: 'Xem sản phẩm' }).click()
+            await page.getByRole('menu', { name: 'Danh mục sản phẩm' })
+                .getByRole('menuitem', { name: 'Thiết bị vệ sinh' }).click()
+        }
         await expect(page).toHaveURL(/\/thiet-bi-ve-sinh$/)
         await expect(page.locator('main h1')).toContainText('Thiết Bị Vệ Sinh')
 
@@ -57,7 +65,7 @@ test.describe('Public client navigation Flight acceptance', () => {
         await page.getByRole('link', { name: /Đông Phú Gia - Trang chủ/i }).first().click()
         await expect(page).toHaveURL('/')
 
-        await page.locator('main a[href="/blog"]').first().click()
+        await page.locator('footer a[href="/blog"]').first().click()
         await expect(page).toHaveURL(/\/blog$/)
         await expect(page.locator('main')).toBeVisible()
 
