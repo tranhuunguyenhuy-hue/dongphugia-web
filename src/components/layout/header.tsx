@@ -48,7 +48,7 @@ function ProductsDropdown() {
             <div id={menuId} role="menu" aria-label="Danh mục sản phẩm" aria-hidden={!isOpen} inert={!isOpen}
                 className={`absolute left-0 top-full z-50 w-64 rounded-xl border border-stone-200 bg-white p-2 shadow-xl ${isOpen ? '' : 'hidden'}`}>
                 {NAV_PRODUCT_CATEGORIES.filter((category) => category.active).map((category) => (
-                    <Link key={category.href} href={category.href} role="menuitem" onClick={() => setIsOpen(false)}
+                    <Link prefetch={false} key={category.href} href={category.href} role="menuitem" onClick={() => setIsOpen(false)}
                         className="block rounded-lg px-4 py-3 text-stone-800 hover:bg-brand-50 hover:text-brand-700 focus:bg-brand-50">
                         {category.label}
                     </Link>
@@ -92,7 +92,7 @@ function AboutDropdown() {
                 className={`absolute top-[calc(50%+24px)] left-1/2 -translate-x-1/2 w-[220px] bg-white shadow-[0_12px_40px_rgba(0,0,0,0.08)] rounded-[16px] border border-stone-100 py-2 transition-all duration-300 z-50 origin-top ${isOpen ? 'opacity-100 visible translate-y-0 scale-100' : 'opacity-0 invisible translate-y-2 scale-95 pointer-events-none'}`}
             >
                 {ABOUT_LINKS.map(link => (
-                    <Link key={link.href} href={link.href} role="menuitem" onClick={() => setIsOpen(false)} className="block px-4 py-2.5 text-[15px] font-medium text-stone-700 hover:bg-stone-50 hover:text-brand-600 transition-colors">
+                    <Link prefetch={false} key={link.href} href={link.href} role="menuitem" onClick={() => setIsOpen(false)} className="block px-4 py-2.5 text-[15px] font-medium text-stone-700 hover:bg-stone-50 hover:text-brand-600 transition-colors">
                         {link.label}
                     </Link>
                 ))}
@@ -121,7 +121,7 @@ export function Header() {
                     <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
                         <div className="h-[72px] lg:h-[88px] flex items-center justify-between transition-all duration-300 w-full">
                             {/* Logo */}
-                            <Link href="/" className="flex items-center shrink-0" aria-label="Đông Phú Gia - Trang chủ">
+                            <Link prefetch={false} href="/" className="flex items-center shrink-0" aria-label="Đông Phú Gia - Trang chủ">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src="/images/Logo.png"
@@ -137,7 +137,7 @@ export function Header() {
                                 <ProductsDropdown />
                                 <AboutDropdown />
                                 {NAV_LINKS.map((link) => (
-                                    <Link key={link.href} href={link.href} className="px-4 py-2 rounded-full font-medium text-[15px] leading-[20px] text-stone-700 hover:text-brand-600 hover:bg-brand-50 transition-all duration-300 h-[38px] flex items-center bg-transparent">
+                                    <Link prefetch={false} key={link.href} href={link.href} className="px-4 py-2 rounded-full font-medium text-[15px] leading-[20px] text-stone-700 hover:text-brand-600 hover:bg-brand-50 transition-all duration-300 h-[38px] flex items-center bg-transparent">
                                         {link.label}
                                     </Link>
                                 ))}
@@ -149,7 +149,7 @@ export function Header() {
                                 <div className="h-6 w-px bg-stone-200 ml-1"></div>
                                 <CartIcon />
                                 <Button asChild className="px-6 h-11 text-[15px] font-medium gap-2 bg-brand-700 hover:bg-brand-800 text-white rounded-full shadow-sm ml-2">
-                                    <Link href="/lien-he" aria-label="Liên hệ" onClick={() => trackGenerateLead('navbar_contact')}>
+                                    <Link prefetch={false} href="/lien-he" aria-label="Liên hệ" onClick={() => trackGenerateLead('navbar_contact')}>
                                         Liên hệ
                                         <Phone className="h-[18px] w-[18px]" aria-hidden="true" />
                                     </Link>

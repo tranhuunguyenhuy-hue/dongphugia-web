@@ -35,6 +35,7 @@ function CategoryAccordionItem({
             <div className="flex items-center">
                 {/* Category name → navigates to category page */}
                 <Link
+          prefetch={false}
                     href={category.href}
                     onClick={onNavigate}
                     className="flex-1 py-3.5 text-[15px] font-medium text-stone-900 active:text-brand-600 transition-colors"
@@ -75,6 +76,7 @@ function CategoryAccordionItem({
                         <div className="pl-4 pb-3 flex flex-col">
                             {subs.map(sub => (
                                 <Link
+          prefetch={false}
                                     key={sub.id}
                                     href={`${category.href}/${sub.slug}`}
                                     onClick={onNavigate}
@@ -85,6 +87,7 @@ function CategoryAccordionItem({
                             ))}
                             {/* "View all" link */}
                             <Link
+          prefetch={false}
                                 href={category.href}
                                 onClick={onNavigate}
                                 className="py-2 text-[12px] font-semibold text-brand-600 active:text-brand-700 transition-colors flex items-center gap-1 mt-1"
@@ -127,7 +130,7 @@ export function MobileMenuSheet({
                 <div className="flex flex-col h-full bg-background">
                     {/* ── Logo header ── */}
                     <div className="flex items-center px-6 h-[64px] border-b border-border shrink-0">
-                        <Link href="/" onClick={handleNavigate} className="flex items-center">
+                        <Link prefetch={false} href="/" onClick={handleNavigate} className="flex items-center">
                             <Image
                                 src="/images/logo-dpg.png"
                                 alt="Đông Phú Gia"
@@ -181,6 +184,7 @@ export function MobileMenuSheet({
                             </p>
                             {[...ABOUT_LINKS, ...NAV_LINKS].map(link => (
                                 <Link
+          prefetch={false}
                                     key={link.href}
                                     href={link.href}
                                     onClick={handleNavigate}
@@ -196,6 +200,7 @@ export function MobileMenuSheet({
                     <div className="p-5 border-t border-border shrink-0">
                         <Button asChild variant="default" className="w-full h-12 gap-2 rounded-xl">
                             <Link
+          prefetch={false}
                                 href="/lien-he"
                                 onClick={() => { handleNavigate(); trackGenerateLead('mobile_menu_contact'); }}
                                 className="flex items-center justify-center w-full"

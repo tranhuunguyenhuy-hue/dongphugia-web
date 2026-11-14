@@ -2,6 +2,7 @@ import React from 'react'
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProductCard } from '@/components/ui/product-card'
+import { StaticSubcategoryNavigation } from '@/components/category/static-subcategory-navigation'
 import { SubcategoryIconGrid } from '@/components/category/subcategory-icon-grid'
 
 vi.mock('next/link', () => ({ default: ({ href, prefetch, children, ...props }: { href: string; prefetch?: boolean; children: React.ReactNode }) =>
@@ -20,6 +21,11 @@ describe('Public navigation read budget', () => {
     expect(links).toHaveLength(48)
     expect(links.every(link => link.dataset.speculativeRead === 'disabled')).toBe(true)
     expect(links.map(link => link.getAttribute('href'))).toEqual(products.map(product => product.url))
+  })
+  it('keeps static PLP navigation from starting background DB reads', () => {
+    const categories = ['bon-cau','lavabo','bon-tam'].map((slug,id)=>({id,slug,name:slug,thumbnail_url:null}))
+    const {container} = render(<StaticSubcategoryNavigation subcategories={categories} basePath="/thiet-bi-ve-sinh" />)
+    expect([...container.querySelectorAll('a')].every(link=>link.dataset.speculativeRead==='disabled')).toBe(true)
   })
   it('keeps category carousel routes clickable without prefetching every PLP', () => {
     const categories = ['bon-cau', 'lavabo', 'bon-tam', 'bon-tieu'].map((slug, id) => ({

@@ -46,7 +46,7 @@ export function ListingPagination({
   if (startPage > 1) {
     items.push(
       <li key="1">
-        <Link href={createPageURL(1)} className={linkClasses()}>1</Link>
+        <Link prefetch={false} href={createPageURL(1)} className={linkClasses()}>1</Link>
       </li>,
     )
     if (startPage > 2) {
@@ -64,6 +64,7 @@ export function ListingPagination({
     items.push(
       <li key={page}>
         <Link
+          prefetch={false}
           href={createPageURL(page)}
           aria-current={currentPage === page ? "page" : undefined}
           className={linkClasses(currentPage === page)}
@@ -86,7 +87,7 @@ export function ListingPagination({
     }
     items.push(
       <li key={totalPages}>
-        <Link href={createPageURL(totalPages)} className={linkClasses()}>
+        <Link prefetch={false} href={createPageURL(totalPages)} className={linkClasses()}>
           {totalPages}
         </Link>
       </li>,
@@ -99,6 +100,7 @@ export function ListingPagination({
         <li>
           {currentPage > 1 ? (
             <Link
+          prefetch={false}
               href={createPageURL(currentPage - 1)}
               aria-label="Trang trước"
               className={cn(linkClasses(), "gap-1 pl-2.5")}
@@ -122,6 +124,7 @@ export function ListingPagination({
         <li>
           {currentPage < totalPages ? (
             <Link
+          prefetch={false}
               href={createPageURL(currentPage + 1)}
               aria-label="Trang sau"
               className={cn(linkClasses(), "gap-1 pr-2.5")}
