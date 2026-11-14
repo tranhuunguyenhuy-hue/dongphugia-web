@@ -1,3 +1,4 @@
+import { withPublicReadScope } from './src/runtime/public-read-scope'
 import vinextHandler from 'vinext/server/fetch-handler'
 import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnostic-safety.mjs'
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
@@ -138,7 +139,7 @@ export default {
       }
     }
 
-    const rendered = await vinextHandler.fetch(request, environment, context)
+    const rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
     if(environment.PUBLIC_DB_DIAGNOSTICS==='true'&&rendered.status>=500){
       const marker=rendered.headers.get('X-DPG-Render-Failure')??''
       const safeMarkers=new Set(['CROSS_REQUEST_IO','GLOBAL_SCOPE_IO','SUBREQUEST_LIMIT','CPU_LIMIT','MEMORY_LIMIT','NO_RESPONSE','STREAM_CLOSED','BODY_USED','NETWORK_LOST','ASSET_UNAVAILABLE','UNCLASSIFIED_EXCEPTION'])

@@ -1,3 +1,4 @@
+import { acquirePublicReadSlot, publicReadScope, withPublicReadScope } from './public-read-scope'
 // M1: read-only connection to V1 Supabase through a scoped Cloudflare Hyperdrive.
 // Disabled by default; never insert connection strings or service keys in source.
 export type PublicHyperdrive = { connectionString: string }
@@ -10,35 +11,6 @@ const DIAGNOSTIC_TABLES = new Set([
   'product_feature_values', 'product_features', 'blog_posts', 'blog_categories',
   'blog_post_categories', 'blog_post_tags', 'tags',
 ])
-let activeReadClients = 0
-let peakReadClients = 0
-const MAX_CONCURRENT_PUBLIC_READS = 4
-const MAX_QUEUED_PUBLIC_READS = 32
-const readClientWaiters: Array<() => void> = []
-let hyperdriveBinding: Promise<PublicHyperdrive> | undefined
-let pgClientModule: Promise<typeof import('pg')> | undefined
-
-async function acquireReadClientSlot() {
-  if (activeReadClients >= MAX_CONCURRENT_PUBLIC_READS) {
-    if (readClientWaiters.length >= MAX_QUEUED_PUBLIC_READS) {
-      throw new Error('PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED')
-    }
-    await new Promise<void>((resolve) => readClientWaiters.push(resolve))
-  } else {
-    activeReadClients += 1
-    peakReadClients = Math.max(peakReadClients, activeReadClients)
-  }
-
-  let released = false
-  return () => {
-    if (released) return
-    released = true
-    const next = readClientWaiters.shift()
-    if (next) next()
-    else activeReadClients -= 1
-  }
-}
-
 function publicQueryTables(statement: string) {
   const tables = [...statement.matchAll(/\b(?:FROM|JOIN)\s+dpg_app\.([a-z_]+)/gi)]
     .map(match => match[1])
@@ -53,23 +25,21 @@ function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_D
     event,
     queryTables,
     elapsedMs: Math.max(0, Math.round(performance.now() - started)),
-    activePgClients: activeReadClients,
-    peakPgClients: peakReadClients,
+    activePgClients: publicReadScope()?.active ?? 0,
+    peakPgClients: publicReadScope()?.peak ?? 0,
     ...(event === 'PUBLIC_DATABASE_READ_FAILURE' && /^[0-9A-Z]{5}$/.test(code) ? { sqlState: code } : {}),
   }))
 }
 
-function getHyperdrive() {
-  hyperdriveBinding ??= import('cloudflare:workers').then(({ env }) => {
-    const hyperdrive = (env as { PUBLIC_DB?: PublicHyperdrive }).PUBLIC_DB
-    if (!hyperdrive?.connectionString) throw new Error('PUBLIC_DATABASE_BINDING_REQUIRED')
-    return hyperdrive
-  })
-  return hyperdriveBinding
-}
-function getPgClientModule() {
-  pgClientModule ??= import('pg')
-  return pgClientModule
+// Cache resolved module/binding values only, never an in-flight request Promise.
+let hyperdriveBinding: PublicHyperdrive | undefined
+let pgClientModule: typeof import('pg') | undefined
+async function getHyperdrive() {
+  if (hyperdriveBinding) return hyperdriveBinding
+  const { env } = await import('cloudflare:workers')
+  const hyperdrive = (env as { PUBLIC_DB?: PublicHyperdrive }).PUBLIC_DB
+  if (!hyperdrive?.connectionString) throw new Error('PUBLIC_DATABASE_BINDING_REQUIRED')
+  return (hyperdriveBinding = hyperdrive)
 }
 /** Fixed SELECT only; all dynamic parameters are bound, no Postgres writes allowed. */
 export async function readPublicRows<T>(
@@ -81,20 +51,32 @@ export async function readPublicRows<T>(
     || /\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|GRANT|REVOKE|TRUNCATE|COPY|CALL)\b/i.test(statement)) {
     throw new Error('PUBLIC_DATABASE_READ_ONLY_REQUIRED')
   }
+  // Local Next.js callers also get an independent scope; Worker rendering
+  // establishes one shared scope for all reads belonging to that invocation.
+  if (!publicReadScope()) return withPublicReadScope(undefined, () => readPublicRows<T>(statement, values))
   const started = performance.now()
   const queryTables = publicQueryTables(statement)
   let releaseReadSlot: (() => void) | null = null
   let closeClient: (() => Promise<unknown>) | null = null
+  let removeAbortListener = () => {}
   try {
-    releaseReadSlot = await acquireReadClientSlot()
+    releaseReadSlot = await acquirePublicReadSlot()
     const { connectionString } = await getHyperdrive()
-    const { Client } = await getPgClientModule()
+    const { Client } = pgClientModule ?? (pgClientModule = await import('pg'))
     const client = new Client({
       connectionString,
       connectionTimeoutMillis: 3000,
       query_timeout: 5000,
     })
-    closeClient = () => client.end()
+    // pg.end() destroys an in-flight query's socket. Reuse its Promise when
+    // cancellation races finally; never close a client from another request.
+    let closing: Promise<void> | undefined
+    closeClient = () => (closing ??= client.end())
+    const signal = publicReadScope()?.signal
+    const abort = () => { void closeClient?.().catch(() => undefined) }
+    signal?.addEventListener('abort', abort, { once: true })
+    removeAbortListener = () => signal?.removeEventListener('abort', abort)
+    if (signal?.aborted) throw new Error('PUBLIC_DATABASE_REQUEST_ABORTED')
     await client.connect()
     const response = await client.query(statement, [...values])
     recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_OK', queryTables, started)
@@ -104,6 +86,7 @@ export async function readPublicRows<T>(
     recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_FAILURE', queryTables, started, error)
     throw error
   } finally {
+    removeAbortListener()
     if (closeClient) await closeClient().catch(() => undefined)
     releaseReadSlot?.()
   }
