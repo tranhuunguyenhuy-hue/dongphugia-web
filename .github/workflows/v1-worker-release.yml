@@ -14,6 +14,11 @@ on:
         type: choice
         options: [snapshot, postgresql]
         default: snapshot
+      rollback_on_failure:
+        description: 'Automatically restore the verified snapshot if a published Worker fails Production smoke checks.'
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -399,7 +404,7 @@ jobs:
           echo "DEPLOYED_WORKER_VERSION=$deployed_version" >> "$GITHUB_STEP_SUMMARY"
           echo "DEPLOYED_WORKER_BINDING=PUBLIC_DB:Hyperdrive" >> "$GITHUB_STEP_SUMMARY"
       - name: Restore verified snapshot and smoke it after a failed Production release
-        if: failure() && inputs.publish && steps.deploy.outcome != 'skipped' && steps.rollback.outputs.version_id != ''
+        if: failure() && inputs.publish && inputs.rollback_on_failure && steps.deploy.outcome != 'skipped' && steps.rollback.outputs.version_id != ''
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -427,6 +432,7 @@ jobs:
             echo "- Target: dongphugia-v1-public-production"
             echo "- Publish requested: $PUBLISH"
             echo "- Public data source: $PUBLIC_CATALOGUE_SOURCE"
+            echo "- Automatic rollback on failure requested: ${{ inputs.rollback_on_failure }}"
             echo "- PostgreSQL permission/TLS/read smoke: ${{ steps.db_preflight.outcome }}"
             echo "- Live Public Worker PostgreSQL preflight: ${{ steps.public_preflight.outcome }}"
             echo "- Snapshot rollback version: ${{ steps.rollback.outputs.version_id }}"
