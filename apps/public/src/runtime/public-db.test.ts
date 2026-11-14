@@ -17,6 +17,7 @@ vi.mock('pg', () => ({
   },
 }))
 
+import { withPublicReadScope } from './public-read-scope'
 import { readPublicRows } from './public-db'
 
 describe('Public PostgreSQL read boundary', () => {
@@ -34,7 +35,7 @@ describe('Public PostgreSQL read boundary', () => {
     expect(mocks.end).toHaveBeenCalledOnce()
   })
 
-  it('caps concurrent read clients in one Worker isolate', async () => {
+  it('caps concurrent read clients and queue within one request', async () => {
     let active = 0
     let peak = 0
     mocks.connect.mockImplementation(async () => {
@@ -49,9 +50,9 @@ describe('Public PostgreSQL read boundary', () => {
       active -= 1
     })
 
-    const results = await Promise.allSettled(Array.from({ length: 40 }, () =>
+    const results = await withPublicReadScope(undefined, () => Promise.allSettled(Array.from({ length: 40 }, () =>
       readPublicRows<{ id: number }>('SELECT id FROM dpg_app.products'),
-    ))
+    )))
 
     expect(peak).toBe(4)
     expect(active).toBe(0)

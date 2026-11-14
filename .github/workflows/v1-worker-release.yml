@@ -62,6 +62,10 @@ jobs:
         run: |
           npm ci
           npm ci --prefix apps/public
+      - name: Verify request ownership and install browser acceptance runtime
+        run: |
+          node scripts/app-foundation/public-db-workerd-regression.mjs
+          npx playwright install --with-deps chromium
       - name: Build actual Cloudflare Public Worker
         shell: bash
         env:
@@ -269,6 +273,8 @@ jobs:
             exit "$smoke_exit_code"
           fi
           cat "$diagnostic_dir/smoke.log"
+          node "$GITHUB_WORKSPACE/scripts/app-foundation/public-navigation-acceptance.mjs" \
+            http://127.0.0.1:8793 "$GITHUB_SHA"
           write_state complete "$worker_alive" "$worker_exit_code" "$smoke_exit_code"
       - name: Collect sanitized packaged Public Worker preflight diagnostics
         if: always() && steps.public_preflight.outcome == 'failure'
@@ -367,6 +373,9 @@ jobs:
           set -euo pipefail
           node "$GITHUB_WORKSPACE/scripts/app-foundation/public-postgres-release-smoke.mjs" \
             https://www.dongphugia.vn "$GITHUB_SHA" production
+      - name: Repeat mobile and desktop navigation on Production
+        if: inputs.publish
+        run: node scripts/app-foundation/public-navigation-acceptance.mjs https://www.dongphugia.vn "$GITHUB_SHA"
       - name: Verify deployed Worker version and Hyperdrive binding
         if: inputs.publish
         shell: bash

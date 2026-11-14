@@ -106,6 +106,10 @@ jobs:
         if: needs.repo-code-gate.outputs.preview_required == 'true'
         run: npm run typecheck:public
 
+      - name: Regress request-owned DB scheduling in real workerd
+        if: needs.repo-code-gate.outputs.preview_required == 'true'
+        run: node scripts/app-foundation/public-db-workerd-regression.mjs
+
       - name: Check official vinext compatibility
         if: needs.repo-code-gate.outputs.preview_required == 'true'
         working-directory: apps/public
