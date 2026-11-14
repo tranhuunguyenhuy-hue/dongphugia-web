@@ -260,7 +260,7 @@ export function parseSafeRuntimeEvents(raw) {
   const lines = String(raw ?? '').slice(-MAX_RUNTIME_LOG_CHARS).split(/\r?\n/)
   const result = []
   for (const line of lines) {
-    if (result.length >= MAX_RUNTIME_EVENTS || ![...SAFE_RUNTIME_EVENT_NAMES].some(name => line.includes(name))) continue
+    if (![...SAFE_RUNTIME_EVENT_NAMES].some(name => line.includes(name))) continue
     const start = line.indexOf('{')
     if (start < 0) continue
     try {
@@ -268,7 +268,19 @@ export function parseSafeRuntimeEvents(raw) {
       if (event) result.push(event)
     } catch { /* Only parseable, allowlisted Worker diagnostics are retained. */ }
   }
-  return result
+  // Preserve late failures even after a burst of successful reads.
+  const failures = result.filter(event => event.event !== 'PUBLIC_DATABASE_READ_OK')
+  const successes = result.filter(event => event.event === 'PUBLIC_DATABASE_READ_OK')
+  return [...successes.slice(-Math.max(0, MAX_RUNTIME_EVENTS - failures.length)), ...failures].slice(-MAX_RUNTIME_EVENTS)
+}
+
+export function safeWranglerInternalErrors(raw) {
+  // Internal debug logs contain request headers/session tokens: retain stack
+  // and exception lines only, then apply the existing secret redactor.
+  return redactDiagnosticText(String(raw ?? '').split(/\r?\n/)
+    .filter(line => /(?:^\s*at |\b(?:[A-Za-z]*Error|ERR_[A-Z_]+|cause:)\b)/.test(line)
+      && !/(?:headers|cookie|authorization|https?:\/\/)/i.test(line))
+    .slice(-80).join('\n'))
 }
 
 function removeRuntimeEventLines(raw) {
@@ -382,7 +394,7 @@ if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) {
     curlError: readOptional(`${directory}/curl.stderr`),
     history: readOptional(`${directory}/http-history.tsv`),
     smokeOutput: readOptional(`${directory}/smoke.log`),
-    wranglerLog: readOptional(`${directory}/wrangler.log`),
+    wranglerLog: readOptional(`${directory}/wrangler.log`) + '\n' + safeWranglerInternalErrors(readOptional(`${directory}/wrangler-internal.log`)),
   }, secretValues)
   writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 })
   const summary = [

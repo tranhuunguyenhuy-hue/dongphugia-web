@@ -219,6 +219,7 @@ jobs:
             if kill -0 "$worker_pid" 2>/dev/null; then kill "$worker_pid" 2>/dev/null || true; fi
             wait "$worker_pid" 2>/dev/null || true
           }
+          WRANGLER_LOG_PATH="$diagnostic_dir/wrangler-internal.log" \
           node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" dev \
             --remote --config "$RUNNER_TEMP/v1-release/wrangler.public-preflight.json" \
             --host www.dongphugia.vn --upstream-protocol https \
@@ -273,8 +274,24 @@ jobs:
             exit "$smoke_exit_code"
           fi
           cat "$diagnostic_dir/smoke.log"
+          set +e
           node "$GITHUB_WORKSPACE/scripts/app-foundation/public-navigation-acceptance.mjs" \
             http://127.0.0.1:8793 "$GITHUB_SHA"
+          navigation_exit_code=$?
+          set -e
+          if [ "$navigation_exit_code" -ne 0 ]; then
+            if kill -0 "$worker_pid" 2>/dev/null; then
+              worker_alive=true
+            else
+              worker_alive=false
+              set +e
+              wait "$worker_pid"
+              worker_exit_code=$?
+              set -e
+            fi
+            write_state navigation "$worker_alive" "$worker_exit_code" "$navigation_exit_code"
+            exit "$navigation_exit_code"
+          fi
           write_state complete "$worker_alive" "$worker_exit_code" "$smoke_exit_code"
       - name: Collect sanitized packaged Public Worker preflight diagnostics
         if: always() && steps.public_preflight.outcome == 'failure'
