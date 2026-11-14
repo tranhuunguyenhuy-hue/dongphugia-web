@@ -14,6 +14,7 @@ try {
   for (const width of [390, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width === 390 })
     const page = await context.newPage()
+    page.setDefaultTimeout(30000)
     const errors = []
     const responseChecks = []
     page.on('pageerror', () => errors.push('browser-pageerror'))
@@ -36,6 +37,7 @@ try {
     assert.match(pdp ?? '', /^\/thiet-bi-ve-sinh\/[^/]+\/[^/]+$/)
     // Actual link clicks exercise client navigation and hydration, including back.
     for (let round = 0; round < 2; round++) {
+      console.log(`PUBLIC_BROWSER_ROUND width=${width} round=${round} start=home`)
       if (width === 390) {
         await page.getByRole('button', { name: 'Mở menu điều hướng' }).click()
         await page.getByRole('navigation', { name: 'Menu di động' }).getByRole('link', { name: 'Thiết bị vệ sinh' }).click()
@@ -45,7 +47,9 @@ try {
       }
       await page.waitForURL('**/thiet-bi-ve-sinh')
       await page.locator('#main-content h1').waitFor()
-      await page.locator('#main-content a[href="/thiet-bi-ve-sinh/bon-cau"]').first().click()
+      const listingLink = page.locator('#main-content a[href="/thiet-bi-ve-sinh/bon-cau"]').first()
+      await listingLink.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' }))
+      await listingLink.locator('span').click()
       await page.waitForURL('**/thiet-bi-ve-sinh/bon-cau')
       await page.locator('#main-content h1').waitFor()
       await page.reload({ waitUntil: 'networkidle' })
