@@ -290,7 +290,7 @@ jobs:
           retention-days: 1
       - name: Verify live snapshot rollback and record active version
         id: rollback
-        if: inputs.publish
+        if: inputs.publish && inputs.rollback_on_failure
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
