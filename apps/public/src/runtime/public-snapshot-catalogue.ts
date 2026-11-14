@@ -1,6 +1,6 @@
 import { cache } from 'react'
 import { publicPostgresEnabled } from './public-db'
-import { getLiveCategories,getLiveListing,getLiveProduct,getLiveVariantSiblings } from './live-public-catalogue'
+import { getLiveCategories,getLiveCategory,getLiveListing,getLiveProduct,getLiveVariantSiblings } from './live-public-catalogue'
 import { usesPublicSnapshot, usesProductionPublishedCatalogue, publicSnapshotCheckpoint } from './public-snapshot-mode'
 import { buildSnapshotCategoryRoot } from './public-category-root'
 import { readBoundedPublicAssetText } from './bounded-public-asset'
@@ -182,9 +182,13 @@ export async function getSnapshotVariantSiblings(group:string,currentId:number){
  return members.filter(p=>p.id!==currentId)
 }
 export async function getSnapshotCategories() { return publicPostgresEnabled()?getLiveCategories():(await readSnapshotManifest()).categories }
+async function getSnapshotCategory(categorySlug:string) {
+ if(publicPostgresEnabled())return getLiveCategory(categorySlug)
+ return (await readSnapshotManifest()).categories.find(category=>category.slug===categorySlug)??null
+}
 export async function getSnapshotCategoryRoot(categorySlug:string,brandSlugs:readonly string[]=[]){
   if(!SLUG.test(categorySlug)||brandSlugs.some(brandSlug=>!SLUG.test(brandSlug)))return null
-  const category=(await getSnapshotCategories()).find(c=>c.slug===categorySlug)
+  const category=await getSnapshotCategory(categorySlug)
   return category?buildSnapshotCategoryRoot(category,brandSlugs):null
 }
 export async function getSnapshotProducts(category:string,listing:string,page=1) {
@@ -226,7 +230,7 @@ export async function resolveSnapshotRoute(segments:readonly string[]) {
     const product=await getSnapshotProduct(segments[0],segments[1],segments[2])
     return product?{kind:'product' as const,product,category:{slug:segments[0],name:product.categoryName},listing:{slug:segments[1],name:product.listingName}}:{kind:'not-found' as const}
   }
-  const category=(await getSnapshotCategories()).find(c=>c.slug===segments[0])
+  const category=await getSnapshotCategory(segments[0])
   if(!category)return {kind:'not-found' as const}
   if(segments.length===1)return {kind:'category' as const,category}
   const listing=category.listings.find(l=>l.slug===segments[1])

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ readPublicRows: vi.fn() }))
 vi.mock('./public-db', () => ({ readPublicRows: mocks.readPublicRows }))
 
-import { getLiveListing, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
+import { getLiveCategory, getLiveListing, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
 
 const product = {
   id: 42,
@@ -83,6 +83,30 @@ describe('Live public catalogue projection', () => {
     expect(statement).not.toContain('LEFT JOIN dpg_app.brands')
     expect(statement).not.toContain('ORDER BY p.listing_priority')
     expect(values).toEqual(['thiet-bi-ve-sinh'])
+  })
+
+  it('loads a single category root without fan-out to the other three categories', async () => {
+    mocks.readPublicRows
+      .mockResolvedValueOnce([{
+        category_slug: 'thiet-bi-bep', category_name: 'Thiết bị bếp',
+        listing_slug: 'voi-rua-chen', listing_name: 'Vòi rửa chén', total_count: '12',
+      }])
+      .mockResolvedValueOnce([{ category_slug: 'thiet-bi-bep', slug: 'acme', name: 'Acme' }])
+      .mockResolvedValueOnce([{ ...product, total_count: '12' }])
+
+    const category = await getLiveCategory('thiet-bi-bep')
+
+    expect(category).toMatchObject({
+      slug: 'thiet-bi-bep', name: 'Thiết bị bếp', totalCount: 12,
+      listings: [{ slug: 'voi-rua-chen', totalCount: 12 }],
+      homeProducts: [{ id: 42 }], brands: [{ slug: 'acme', name: 'Acme' }],
+    })
+    expect(mocks.readPublicRows).toHaveBeenCalledTimes(3)
+    expect(mocks.readPublicRows.mock.calls[0][1]).toEqual(['thiet-bi-bep'])
+    expect(mocks.readPublicRows.mock.calls[1][1]).toEqual(['thiet-bi-bep'])
+    expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48])
+    expect(mocks.readPublicRows.mock.calls[0][0]).toContain('AND c.slug=$1 GROUP BY')
+    expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND b.slug IS NOT NULL')
   })
 
   it('returns no route metadata for unsupported categories or missing eligible listings', async () => {

@@ -110,12 +110,22 @@ export const getLiveListingRouteMetadata=cache(async(category:string,listing:str
 type Count={category_slug:string;category_name:string;listing_slug:string;listing_name:string;total_count:number|string}
 type Brand={category_slug:string;slug:string;name:string}
 export const getLiveCategories=cache(async():Promise<SnapshotCategory[]>=>{
+ return loadLiveCategories()
+})
+export const getLiveCategory=cache(async(category:string):Promise<SnapshotCategory|null>=>{
+ if(!ROUTE_CATEGORIES.has(category))return null
+ return (await loadLiveCategories(category))[0]??null
+})
+async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCategory[]> {
+ const categoryClause=categoryFilter?' AND c.slug=$1':''
+ const values=categoryFilter?[categoryFilter]:[]
  const rows=await readPublicRows<Count>('SELECT c.slug AS category_slug,c.name AS category_name,s.slug AS listing_slug,'+
-  's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+
-  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100')
+  's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+categoryClause+
+  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100',values)
  const brands=await readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
-   ' WHERE '+PUBLIC+' AND '+LIST+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500')
- const result=await Promise.all(['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat'].map(async (slug): Promise<SnapshotCategory | null>=>{
+   ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values)
+ const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
+ const result=await Promise.all(categorySlugs.map(async (slug): Promise<SnapshotCategory | null>=>{
   const byCategory=rows.filter(r=>r.category_slug===slug)
   if(!byCategory.length)return null
   const listings=byCategory.map(r=>({slug:r.listing_slug,name:r.listing_name,thumbnail_url:null,totalCount:Number(r.total_count)}))
@@ -127,7 +137,7 @@ export const getLiveCategories=cache(async():Promise<SnapshotCategory[]>=>{
    brands:brands.filter(b=>b.category_slug===slug).map(b=>({slug:b.slug,name:b.name}))}
  }))
  return result.filter((x):x is SnapshotCategory=>x!==null)
-})
+}
 
 export const getLiveBrandsForListing=cache(async(category:string,listing:string)=>{
  if(![category,listing].every(s=>SLUG.test(s)))return [] as {slug:string;name:string}[]

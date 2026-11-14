@@ -30,19 +30,29 @@ export const getAvailableFiltersBySubcategory:typeof Original.getAvailableFilter
 export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
  // Listing HTML and Flight share a neutral shell. The browser loads the exact
  // immutable shards and applies URL filters; PDP related cards keep their data.
- if(publicPostgresEnabled()&&f.pageSize===5&&typeof f.subcategory_slug==='string'
-   &&!f.brand_slug&&!f.is_featured&&!f.feature_slugs&&!f.material_slug&&!f.origin_slug&&!f.color_slug){
-  const live=await getLiveListing(f.category_slug??'thiet-bi-ve-sinh',f.subcategory_slug,f.page??1,6)
-  const size=f.pageSize??5,total=live.totalCount
-  return {products:live.products.slice(0,size),total,totalPages:Math.max(1,Math.ceil(total/size)),currentPage:f.page??1,page:f.page??1,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
- }
- if((f.pageSize===12||f.pageSize===24)&&typeof f.subcategory_slugs==='string'){
-  if(publicPostgresEnabled()){
-   const category=f.category_slug??'thiet-bi-ve-sinh'
-   const listing=(await getLiveListingLeaves(category)).find(l=>l.slug===f.subcategory_slugs)
-   const total=listing?.totalCount??0,size=f.pageSize,page=f.page??1
+ if(publicPostgresEnabled()){
+  const category=f.category_slug??'thiet-bi-ve-sinh'
+  const page=f.page??1
+  const size=f.pageSize??24
+  if(size===5&&typeof f.subcategory_slug==='string'
+    &&!f.brand_slug&&!f.is_featured&&!f.feature_slugs&&!f.material_slug&&!f.origin_slug&&!f.color_slug){
+   const live=await getLiveListing(category,f.subcategory_slug,page,6)
+   const total=live.totalCount
+   return {products:live.products.slice(0,size),total,totalPages:Math.max(1,Math.ceil(total/size)),currentPage:page,page,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
+  }
+  const listingSlug=typeof f.subcategory_slugs==='string'
+   ?f.subcategory_slugs:Array.isArray(f.subcategory_slugs)&&f.subcategory_slugs.length===1?f.subcategory_slugs[0]:undefined
+  // PostgreSQL mode must never enumerate every page of a listing into Worker
+  // memory. RSC Listing renders need only the bounded total; the browser loads
+  // one page at a time from the read-only listing endpoint.
+  if((size===12||size===24)&&typeof listingSlug==='string'){
+   const listing=(await getLiveListingLeaves(category)).find(l=>l.slug===listingSlug)
+   const total=listing?.totalCount??0
    return {products:[],total,totalPages:Math.max(1,Math.ceil(total/size)),currentPage:page,page,pageSize:size} as Awaited<ReturnType<typeof Original.getPublicProducts>>
   }
+  throw new Error('PUBLIC_DATABASE_PRODUCT_QUERY_UNSUPPORTED')
+ }
+ if((f.pageSize===12||f.pageSize===24)&&typeof f.subcategory_slugs==='string'){
   const category=(await getSnapshotCategories()).find(c=>c.slug===f.category_slug)
   const listing=category?.listings.find(l=>l.slug===f.subcategory_slugs)
   if(!listing)return {products:[],total:0,totalPages:1,currentPage:f.page??1,page:f.page??1,pageSize:f.pageSize} as Awaited<ReturnType<typeof Original.getPublicProducts>>

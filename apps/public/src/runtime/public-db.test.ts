@@ -34,6 +34,34 @@ describe('Public PostgreSQL read boundary', () => {
     expect(mocks.end).toHaveBeenCalledOnce()
   })
 
+  it('caps concurrent read clients in one Worker isolate', async () => {
+    let active = 0
+    let peak = 0
+    mocks.connect.mockImplementation(async () => {
+      active += 1
+      peak = Math.max(peak, active)
+    })
+    mocks.query.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return { rows: [{ id: 7 }] }
+    })
+    mocks.end.mockImplementation(async () => {
+      active -= 1
+    })
+
+    const results = await Promise.allSettled(Array.from({ length: 40 }, () =>
+      readPublicRows<{ id: number }>('SELECT id FROM dpg_app.products'),
+    ))
+
+    expect(peak).toBe(4)
+    expect(active).toBe(0)
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(36)
+    const rejected = results.filter((result) => result.status === 'rejected')
+    expect(rejected).toHaveLength(4)
+    expect(rejected.every((result) => result.status === 'rejected'
+      && result.reason.message === 'PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED')).toBe(true)
+  })
+
   it.each([
     'UPDATE dpg_app.products SET name = $1',
     'SELECT id FROM dpg_app.products; DELETE FROM dpg_app.products',
