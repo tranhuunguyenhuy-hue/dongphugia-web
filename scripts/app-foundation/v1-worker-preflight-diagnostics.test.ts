@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildPreflightDiagnostics, parseSafeRuntimeEvents, redactDiagnosticText } from './v1-worker-preflight-diagnostics.mjs'
+import { buildPreflightDiagnostics, parseSafeRuntimeEvents, redactDiagnosticText, safeWranglerInternalErrors } from './v1-worker-preflight-diagnostics.mjs'
 
 describe('V1 packaged Worker preflight diagnostics', () => {
   it('redacts credentials, bearer tokens, database URLs, JWTs, and labeled secrets', () => {
@@ -171,5 +171,24 @@ describe('V1 packaged Worker preflight diagnostics', () => {
     expect(JSON.stringify(result)).not.toContain('private customer data')
     expect(JSON.stringify(result)).not.toContain('postgresql://reader')
     expect(JSON.stringify(result)).not.toContain('SELECT customer')
+  })
+})
+
+
+describe('concurrent browser preflight failure evidence', () => {
+  it('keeps late read failures after more than 128 successes', () => {
+    const raw = Array.from({ length: 150 }, () => JSON.stringify({
+      event: 'PUBLIC_DATABASE_READ_OK', queryTables: ['products'], elapsedMs: 10,
+    })).concat(JSON.stringify({ event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['products'], elapsedMs: 20, sqlState: '53300' })).join('\n')
+    const result = parseSafeRuntimeEvents(raw)
+    expect(result).toHaveLength(128)
+    expect(result.at(-1)).toMatchObject({ event: 'PUBLIC_DATABASE_READ_FAILURE', sqlState: '53300' })
+  })
+  it('extracts internal exception stacks without request headers or session URLs', () => {
+    const text = safeWranglerInternalErrors('headers: {authorization: secret}\nError: ERR_STREAM_PREMATURE_CLOSE\n    at proxy (file.js:7)\nError: https://preview.invalid/?token=private\ncookie: private')
+    expect(text).toContain('ERR_STREAM_PREMATURE_CLOSE')
+    expect(text).toContain('at proxy')
+    expect(text).not.toContain('private')
+    expect(text).not.toContain('headers')
   })
 })
