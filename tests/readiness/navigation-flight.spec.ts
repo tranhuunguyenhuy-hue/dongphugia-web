@@ -50,15 +50,15 @@ test.describe('Public client navigation Flight acceptance', () => {
                 .getByRole('menuitem', { name: 'Thiết bị vệ sinh' }).click()
         }
         await expect(page).toHaveURL(/\/thiet-bi-ve-sinh$/)
-        await expect(page.locator('main h1')).toContainText('Thiết Bị Vệ Sinh')
+        await expect(page.locator('#main-content h1').first()).toContainText('Thiết Bị Vệ Sinh')
 
-        await page.locator('main a[href="/thiet-bi-ve-sinh/bon-cau"]').first().click()
+        await page.locator('#main-content a[href="/thiet-bi-ve-sinh/bon-cau"]').first().click()
         await expect(page).toHaveURL(/\/thiet-bi-ve-sinh\/bon-cau$/)
-        await expect(page.locator('main')).toContainText('Bồn cầu')
+        await expect(page.locator('#main-content')).toContainText('Bồn cầu')
 
-        await page.locator(`main a[href="${PDP_PATH}"]`).first().click()
+        await page.locator(`#main-content a[href="${PDP_PATH}"]`).first().click()
         await expect(page).toHaveURL(new RegExp(`${PDP_PATH.replaceAll('/', '\\/')}$`))
-        await expect(page.locator('main')).toContainText('STG-DEMO')
+        await expect(page.locator('#main-content')).toContainText('STG-DEMO')
 
         await page.goBack()
         await expect(page).toHaveURL(/\/thiet-bi-ve-sinh\/bon-cau$/)
@@ -67,13 +67,13 @@ test.describe('Public client navigation Flight acceptance', () => {
 
         await page.locator('footer a[href="/blog"]').first().click()
         await expect(page).toHaveURL(/\/blog$/)
-        await expect(page.locator('main')).toBeVisible()
+        await expect(page.locator('#main-content')).toBeVisible()
 
         await page.getByRole('button', { name: 'Mở tìm kiếm' }).first().click()
         await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().fill('STG-DEMO')
         await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().press('Enter')
         await expect(page).toHaveURL(/\/tim-kiem\?q=STG-DEMO/)
-        await expect(page.locator('main')).toContainText('STG-DEMO')
+        await expect(page.locator('#main-content')).toContainText('STG-DEMO')
 
         expect(failedFlightResponses).toEqual([])
         expect(flightResponses.length).toBeGreaterThanOrEqual(4)
