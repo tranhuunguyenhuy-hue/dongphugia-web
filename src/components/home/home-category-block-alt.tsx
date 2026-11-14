@@ -66,6 +66,7 @@ export function HomeCategoryBlockAlt({
                         >
                             {brands.map((brand) => (
                                 <Link
+                                    prefetch={false}
                                     key={brand.slug}
                                     href={`${categoryData.basePath}?brands=${encodeURIComponent(brand.slug)}`}
                                     className="flex h-16 min-w-[116px] shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white px-3 opacity-70 transition-colors hover:border-brand-300 hover:opacity-100"
@@ -88,6 +89,7 @@ export function HomeCategoryBlockAlt({
                         >
                             {subcategories.map((subcategory) => (
                                 <Link
+                                    prefetch={false}
                                     key={subcategory.slug}
                                     href={`${categoryData.basePath}/${subcategory.slug}`}
                                     className="min-h-11 shrink-0 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-stone-600 transition-colors hover:border-brand-300 hover:text-brand-700"
@@ -124,6 +126,7 @@ export function HomeCategoryBlockAlt({
 
             <div className="mt-6 flex justify-center">
                 <Link
+                                    prefetch={false}
                     href={categoryData.basePath}
                     className="inline-flex min-h-11 items-center rounded-full border border-brand-600 px-5 py-2 text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-50"
                 >

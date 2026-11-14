@@ -219,6 +219,7 @@ function parseSafeRuntimeEvent(value) {
     event.elapsedMs = elapsedMs
     event.activePgClients = activePgClients
     event.peakPgClients = peakPgClients
+    if (['QUERY_TIMEOUT', 'QUEUE_TIMEOUT', 'ABORTED', 'CONNECT_TIMEOUT', 'OTHER'].includes(value.failureKind)) event.failureKind = value.failureKind
     if (value.event === 'PUBLIC_DATABASE_READ_FAILURE' && typeof value.sqlState === 'string' && SAFE_SQL_STATES.test(value.sqlState)) {
       event.sqlState = value.sqlState
     }

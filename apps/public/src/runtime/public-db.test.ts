@@ -78,6 +78,16 @@ describe('Public PostgreSQL read boundary', () => {
     expect(mocks.connect).not.toHaveBeenCalled()
   })
 
+  it('reports a query timeout safely and still closes the client', async () => {
+    vi.stubEnv('PUBLIC_DB_DIAGNOSTICS', 'true')
+    mocks.query.mockRejectedValueOnce(new Error('Query read timeout'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    await expect(readPublicRows('SELECT id FROM dpg_app.products')).rejects.toThrow('Query read timeout')
+    expect(mocks.end).toHaveBeenCalledOnce()
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({event:'PUBLIC_DATABASE_READ_FAILURE',failureKind:'QUERY_TIMEOUT'})
+    log.mockRestore()
+  })
+
   it('logs bounded query labels and concurrent read-client counts only in the diagnostic Worker', async () => {
     vi.stubEnv('PUBLIC_CATALOGUE_SOURCE', 'postgresql')
     vi.stubEnv('PUBLIC_DB_DIAGNOSTICS', 'true')

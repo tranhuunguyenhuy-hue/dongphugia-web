@@ -21,9 +21,15 @@ function publicQueryTables(statement: string) {
 function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_DATABASE_READ_FAILURE', queryTables: string[], started: number, error?: unknown) {
   if (process.env.PUBLIC_DB_DIAGNOSTICS !== 'true') return
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+  const message = error instanceof Error ? error.message : ''
+  const failureKind = message === 'Query read timeout' ? 'QUERY_TIMEOUT'
+    : message === 'PUBLIC_DATABASE_READ_QUEUE_TIMEOUT' ? 'QUEUE_TIMEOUT'
+    : message === 'PUBLIC_DATABASE_REQUEST_ABORTED' ? 'ABORTED'
+    : /timeout expired|Connection terminated due to connection timeout/.test(message) ? 'CONNECT_TIMEOUT' : 'OTHER'
   console.log(JSON.stringify({
     event,
     queryTables,
+    ...(event === 'PUBLIC_DATABASE_READ_FAILURE' ? { failureKind } : {}),
     elapsedMs: Math.max(0, Math.round(performance.now() - started)),
     activePgClients: publicReadScope()?.active ?? 0,
     peakPgClients: publicReadScope()?.peak ?? 0,
