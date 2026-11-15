@@ -137,7 +137,7 @@ describe('V1 packaged Worker preflight diagnostics', () => {
     const rawEvents = [
       JSON.stringify({
         event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['brands', 'products'],
-        elapsedMs: 5001, activePgClients: 6, peakPgClients: 6, sqlState: '53300',
+        queryLabel: 'listing-page', elapsedMs: 5001, activePgClients: 6, peakPgClients: 6, sqlState: '53300',
         sql: 'SELECT customer email', connectionString: 'postgresql://reader:private@db.invalid/postgres',
       }),
       JSON.stringify({
@@ -158,7 +158,7 @@ describe('V1 packaged Worker preflight diagnostics', () => {
     })
 
     expect(events).toEqual([
-      { event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['brands', 'products'], elapsedMs: 5001,
+      { event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['brands', 'products'], queryLabel: 'listing-page', elapsedMs: 5001,
         activePgClients: 6, peakPgClients: 6, sqlState: '53300' },
       { event: 'PUBLIC_LISTING_ROUTE_FAILURE', stage: 'render', categorySlug: 'thiet-bi-ve-sinh',
         subcategorySlug: 'bon-cau', errorClass: 'Error', publicErrorCode: 'PUBLIC_CATALOGUE_UNAVAILABLE', sqlState: '53300' },

@@ -106,10 +106,22 @@ describe('Public PostgreSQL read boundary', () => {
     const record = JSON.parse(String(log.mock.calls[0][0]))
     expect(record).toMatchObject({
       event: 'PUBLIC_DATABASE_READ_OK', queryTables: ['products'],
-      activePgClients: 1,
+      queryLabel: 'other', activePgClients: 1,
     })
     expect(JSON.stringify(record)).not.toContain('private-sku')
     expect(JSON.stringify(record)).not.toContain('postgresql://readonly.invalid')
+    log.mockRestore()
+  })
+
+  it('retains only a static allowlisted label for a timed-out listing query', async () => {
+    vi.stubEnv('PUBLIC_DB_DIAGNOSTICS', 'true')
+    mocks.query.mockRejectedValueOnce(new Error('Query read timeout'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    await expect(readPublicRows('SELECT id FROM dpg_app.products', [], 'listing-page')).rejects.toThrow('Query read timeout')
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({
+      event: 'PUBLIC_DATABASE_READ_FAILURE', queryTables: ['products'], queryLabel: 'listing-page',
+      failureKind: 'QUERY_TIMEOUT',
+    })
     log.mockRestore()
   })
 })

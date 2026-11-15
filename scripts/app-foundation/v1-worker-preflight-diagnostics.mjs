@@ -58,6 +58,10 @@ const SAFE_QUERY_TABLES = new Set([
   'product_feature_values', 'product_features', 'blog_posts', 'blog_categories',
   'blog_post_categories', 'blog_post_tags', 'tags',
 ])
+const SAFE_QUERY_LABELS = new Set([
+  'listing-page', 'listing-route-metadata', 'listing-leaves', 'category-listing-counts',
+  'category-brand-facets', 'category-root-featured', 'listing-brand-facets', 'public-search', 'other',
+])
 const SAFE_RUNTIME_EVENT_NAMES = new Set([
   'PUBLIC_DATABASE_READ_OK', 'PUBLIC_DATABASE_READ_FAILURE', 'PUBLIC_LISTING_ROUTE_FAILURE',
   'PUBLIC_RENDER_HTTP_FAILURE', 'PUBLIC_RENDER_FAILURE',
@@ -212,6 +216,7 @@ function parseSafeRuntimeEvent(value) {
       || !value.queryTables.every(table => typeof table === 'string' && SAFE_QUERY_TABLES.has(table))
       || new Set(value.queryTables).size !== value.queryTables.length) return null
     event.queryTables = value.queryTables
+    if (SAFE_QUERY_LABELS.has(value.queryLabel)) event.queryLabel = value.queryLabel
     const elapsedMs = safeElapsed(value.elapsedMs)
     const activePgClients = safeCount(value.activePgClients)
     const peakPgClients = safeCount(value.peakPgClients)

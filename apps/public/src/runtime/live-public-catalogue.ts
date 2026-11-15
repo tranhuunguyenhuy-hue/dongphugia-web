@@ -75,8 +75,19 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
    ' AND (NOT $6::boolean OR p.is_featured=true)'+
    ' ORDER BY p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3',
-   [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true])
+   [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true], 'listing-page')
  return {products:rows.map(mapLiveProduct),totalCount:Number(rows[0]?.total_count??0),page}
+})
+// Category roots show eight cards and up to eight featured cards from the same
+// first listing. Keep the original 48-row selection for identical ordering,
+// while avoiding a full-listing window count that the root never uses.
+export const getLiveListingPreview=cache(async(category:string,listing:string)=>{
+ if(![category,listing].every(s=>SLUG.test(s)))return [] as SnapshotProduct[]
+ const rows=await readPublicRows<Row>('SELECT '+COLS+FROM+
+   ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
+   ' ORDER BY p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $3',
+   [category,listing,48], 'category-root-featured')
+ return rows.map(mapLiveProduct)
 })
 type ListingLeaf={slug:string;name:string;totalCount:number}
 export const getLiveListingLeaves=cache(async(category:string):Promise<ListingLeaf[]>=>{
@@ -89,7 +100,7 @@ export const getLiveListingLeaves=cache(async(category:string):Promise<ListingLe
   " AND c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"+
   ' AND '+PUBLIC_PRODUCT+' AND '+LIST+
   ' GROUP BY s.id,s.slug,s.name HAVING count(p.id)>0 ORDER BY s.name,s.slug LIMIT 100',
-  [category])
+  [category], 'listing-leaves')
  return rows.flatMap(row=>{
   const totalCount=Number(row.total_count)
   return SLUG.test(row.slug)&&typeof row.name==='string'&&row.name.length>0&&row.name.length<=240
@@ -106,7 +117,7 @@ export const getLiveListingRouteMetadata=cache(async(category:string,listing:str
   ' WHERE c.is_active=true AND c.slug=$1 AND s.slug=$2'+
   ' AND EXISTS (SELECT 1 FROM dpg_app.products p WHERE p.category_id=c.id AND p.subcategory_id=s.id'+
   ' AND '+PUBLIC_PRODUCT+' AND '+LIST+') LIMIT 1',
-  [category,listing])
+  [category,listing], 'listing-route-metadata')
  const row=rows[0]
  return row&&typeof row.categoryName==='string'&&row.categoryName.length>0&&row.categoryName.length<=240
   &&typeof row.listingName==='string'&&row.listingName.length>0&&row.listingName.length<=240
@@ -126,18 +137,20 @@ async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCatego
  const values=categoryFilter?[categoryFilter]:[]
  const rows=await readPublicRows<Count>('SELECT c.slug AS category_slug,c.name AS category_name,s.slug AS listing_slug,'+
   's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+categoryClause+
-  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100',values)
+  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100',values,
+  'category-listing-counts')
  const brands=await readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
-   ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values)
+   ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values,
+   'category-brand-facets')
  const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
  const result=await Promise.all(categorySlugs.map(async (slug): Promise<SnapshotCategory | null>=>{
   const byCategory=rows.filter(r=>r.category_slug===slug)
   if(!byCategory.length)return null
   const listings=byCategory.map(r=>({slug:r.listing_slug,name:r.listing_name,thumbnail_url:null,totalCount:Number(r.total_count)}))
-  const first=await getLiveListing(slug,listings[0].slug,1)
+  const first=await getLiveListingPreview(slug,listings[0].slug)
   return {slug,name:byCategory[0].category_name,listings,
-   homeProducts:first.products.slice(0,8),
-   featuredProducts:first.products.filter(p=>p.is_featured).slice(0,8),
+   homeProducts:first.slice(0,8),
+   featuredProducts:first.filter(p=>p.is_featured).slice(0,8),
    totalCount:listings.reduce((n,l)=>n+l.totalCount,0),
    brands:brands.filter(b=>b.category_slug===slug).map(b=>({slug:b.slug,name:b.name}))}
  }))
@@ -149,7 +162,7 @@ export const getLiveBrandsForListing=cache(async(category:string,listing:string)
  return readPublicRows<{slug:string;name:string}>(
   'SELECT DISTINCT b.slug,b.name'+FROM+' WHERE '+PUBLIC+' AND '+LIST+
   ' AND c.slug=$1 AND s.slug=$2 AND b.slug IS NOT NULL ORDER BY b.slug LIMIT 32',
-  [category,listing])
+  [category,listing], 'listing-brand-facets')
 })
 const loadLiveProduct=async(where:string,values:readonly string[])=>{
  const detailSelect=`
@@ -200,7 +213,7 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
  const rows=await readPublicRows<Row>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
   ' WHERE '+PUBLIC+" AND p.search_visibility='visible' AND (p.sku ILIKE $1 OR p.name ILIKE $1)"+
   " ORDER BY CASE WHEN lower(p.sku)=lower($2) THEN 0 WHEN lower(p.sku) LIKE lower($2)||'%' THEN 1 ELSE 2 END,p.name,p.id"+
-  ' LIMIT $3 OFFSET $4',['%'+query+'%',query,limit,(page-1)*limit])
+  ' LIMIT $3 OFFSET $4',['%'+query+'%',query,limit,(page-1)*limit], 'public-search')
  const results=rows.map(row=>{
   const p=mapLiveProduct(row)
   return {id:p.id,sku:p.sku,name:p.name,slug:p.slug,url:p.url,price:null,original_price:null,

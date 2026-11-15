@@ -21,3 +21,9 @@ export function publicRouteFailureSummary(error: unknown) {
     ...(code ? { sqlState: code } : {}),
   }
 }
+
+/** Next's intentional notFound() signal is a route result, not a render failure. */
+export function isExpectedPublicNotFound(error: unknown) {
+  if (!error || typeof error !== 'object' || !('digest' in error)) return false
+  return (error as { digest?: unknown }).digest === 'NEXT_HTTP_ERROR_FALLBACK;404'
+}

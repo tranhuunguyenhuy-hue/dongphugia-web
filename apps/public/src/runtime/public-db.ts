@@ -3,6 +3,13 @@ import { acquirePublicReadSlot, publicReadScope, withPublicReadScope } from './p
 // Disabled by default; never insert connection strings or service keys in source.
 export type PublicHyperdrive = { connectionString: string }
 export type PublicQueryValue = string | number | boolean | readonly string[]
+export type PublicQueryLabel = 'listing-page' | 'listing-route-metadata' | 'listing-leaves'
+  | 'category-listing-counts' | 'category-brand-facets' | 'category-root-featured'
+  | 'listing-brand-facets' | 'public-search' | 'other'
+const SAFE_QUERY_LABELS = new Set<PublicQueryLabel>([
+  'listing-page', 'listing-route-metadata', 'listing-leaves', 'category-listing-counts',
+  'category-brand-facets', 'category-root-featured', 'listing-brand-facets', 'public-search', 'other',
+])
 export function publicPostgresEnabled() {
   return process.env.PUBLIC_CATALOGUE_SOURCE === 'postgresql'
 }
@@ -19,7 +26,7 @@ function publicQueryTables(statement: string) {
   return [...new Set(tables)].sort()
 }
 
-function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_DATABASE_READ_FAILURE', queryTables: string[], started: number, error?: unknown) {
+function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_DATABASE_READ_FAILURE', queryTables: string[], queryLabel: PublicQueryLabel, started: number, error?: unknown) {
   if (process.env.PUBLIC_DB_DIAGNOSTICS !== 'true') return
   const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
   const message = error instanceof Error ? error.message : ''
@@ -30,6 +37,7 @@ function recordPublicReadDiagnostic(event: 'PUBLIC_DATABASE_READ_OK' | 'PUBLIC_D
   console.log(JSON.stringify({
     event,
     queryTables,
+    queryLabel: SAFE_QUERY_LABELS.has(queryLabel) ? queryLabel : 'other',
     ...(event === 'PUBLIC_DATABASE_READ_FAILURE' ? { failureKind } : {}),
     elapsedMs: Math.max(0, Math.round(performance.now() - started)),
     activePgClients: publicReadScope()?.active ?? 0,
@@ -52,6 +60,7 @@ async function getHyperdrive() {
 export async function readPublicRows<T>(
   statement: string,
   values: readonly PublicQueryValue[] = [],
+  queryLabel: PublicQueryLabel = 'other',
 ): Promise<T[]> {
   if (!publicPostgresEnabled()) throw new Error('PUBLIC_DATABASE_MODE_DISABLED')
   if (!/^\s*SELECT\b/i.test(statement) || statement.includes(';')
@@ -60,7 +69,7 @@ export async function readPublicRows<T>(
   }
   // Local Next.js callers also get an independent scope; Worker rendering
   // establishes one shared scope for all reads belonging to that invocation.
-  if (!publicReadScope()) return withPublicReadScope(undefined, () => readPublicRows<T>(statement, values))
+  if (!publicReadScope()) return withPublicReadScope(undefined, () => readPublicRows<T>(statement, values, queryLabel))
   const started = performance.now()
   const queryTables = publicQueryTables(statement)
   let releaseReadSlot: (() => void) | null = null
@@ -86,11 +95,11 @@ export async function readPublicRows<T>(
     if (signal?.aborted) throw new Error('PUBLIC_DATABASE_REQUEST_ABORTED')
     await client.connect()
     const response = await client.query(statement, [...values])
-    recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_OK', queryTables, started)
+    recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_OK', queryTables, queryLabel, started)
     return response.rows as T[]
   } catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
-    recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_FAILURE', queryTables, started, error)
+    recordPublicReadDiagnostic('PUBLIC_DATABASE_READ_FAILURE', queryTables, queryLabel, started, error)
     throw error
   } finally {
     removeAbortListener()
