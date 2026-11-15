@@ -27,3 +27,18 @@ it('does not persist Preview HTML in Worker Cache storage',async()=>{
  expect(response.status).toBe(200);expect(open).not.toHaveBeenCalled();expect(response.headers.get('X-DPG-Cache')).toBe('BYPASS')
  vi.unstubAllGlobals()
 })
+
+it('serves trailing-dot catalogue paths as uncached 404 without invoking the render handler',async()=>{
+ const log=vi.spyOn(console,'error').mockImplementation(()=>{})
+ state.message='render-should-not-be-invoked'
+ const response=await worker.fetch(new Request('http://127.0.0.1:8787/thiet-bi-ve-sinh/bon-cau.'),{
+   APP_ENV:'preview',APP_BUILD_TARGET:'public',APP_ORIGIN:'http://127.0.0.1:8787',PREVIEW_NOINDEX:'true',
+ },{} as ExecutionContext)
+ expect(response.status).toBe(404)
+ expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+ expect(response.headers.get('X-DPG-Source-SHA')).toBe('a'.repeat(40))
+ expect(response.headers.get('X-Robots-Tag')).toBe('noindex, nofollow')
+ expect(await response.text()).toBe('Not found.')
+ expect(log).not.toHaveBeenCalled()
+ log.mockRestore()
+})
