@@ -4,10 +4,18 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 export async function verifyM2SnapshotReadAccess(client, production) {
+  // pg_stat_ssl observes the PostgreSQL backend connection. A session pooler's
+  // internal connection is not the runner's TLS transport. Attest the actual
+  // Node pg socket plus the strict CA/hostname configuration used by connect().
+  const socket = client.connection?.stream
+  const ssl = client.connectionParameters?.ssl
+  if (socket?.encrypted !== true || socket.authorized !== true || socket.authorizationError
+    || ssl?.rejectUnauthorized !== true || !ssl.ca?.includes('-----BEGIN CERTIFICATE-----')
+    || typeof ssl.checkServerIdentity !== 'function' || !ssl.servername) throw new Error('CLIENT_TLS_REQUIRED')
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
   try {
     const identity = (await client.query("SELECT current_user AS role, current_setting('transaction_read_only') AS read_only, (SELECT ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()) AS tls")).rows[0]
-    if (!identity || identity.read_only !== 'on' || identity.tls !== true) throw new Error('READ_ONLY_TLS_REQUIRED')
+    if (!identity || identity.read_only !== 'on') throw new Error('READ_ONLY_TRANSACTION_REQUIRED')
     // Same visibility predicates as the existing M1 public-db preflight.
     const from = `FROM dpg_app.products p
       JOIN dpg_app.categories c ON c.id=p.category_id AND c.is_active=true
@@ -26,7 +34,9 @@ export async function verifyM2SnapshotReadAccess(client, production) {
       || counts.blogs !== production.publishedBlogs || !counts.sample_present) throw new Error('PRODUCTION_SQL_COUNTS_MISMATCH')
     await client.query('ROLLBACK')
     return { contract: 'dpg:m2-snapshot-read-access:v1', status: 'PASS', role: identity.role,
-      readOnly: true, tls: true, products: counts.products, listingProducts: counts.listings,
+      readOnly: true, tls: true, tlsVerification: 'verified-client-transport',
+      backendTls: typeof identity.tls === 'boolean' ? identity.tls : null,
+      products: counts.products, listingProducts: counts.listings,
       publishedBlogs: counts.blogs, sampleSku: 'A-LFV-402S-1', snapshotCreated: false }
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {})
