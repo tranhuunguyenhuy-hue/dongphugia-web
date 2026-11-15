@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import { connect, closeConnections } from '../catalogue-direct/run.mjs'
 import { verifyM2SnapshotReadAccess } from './verify-m2-snapshot-read-access.mjs'
+import { diagnoseM2CaptureFailure } from './m2-public-diagnostics.mjs'
 import { buildM2PublicSnapshot, type CaptureEntry, type CaptureCategory } from './m2-public-snapshot.mjs'
 import type { PublicProductRow } from '../../apps/public/src/runtime/live-public-catalogue'
 // Reuse tsx's CommonJS loader for root TS aliases, matching the existing
@@ -33,6 +34,7 @@ async function main() {
   if (!process.env.DIRECT_TARGET_READ_DATABASE_URL?.trim()) throw new Error('M2_SELECT_SECRET_MISSING')
   if (!process.env.DIRECT_TARGET_CA?.trim()) throw new Error('M2_SELECT_CA_MISSING')
   const client = await connect('read')
+  phase = 'VERIFY_PUBLIC_READ_COUNTS'
   const access = await verifyM2SnapshotReadAccess(client, before.body)
   phase = 'CAPTURE_PUBLIC_ONLY'
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
@@ -86,9 +88,6 @@ async function main() {
     assets: snapshot.files.length, bytes: snapshot.files.reduce((n, f) => n + f.bytes, 0), snapshotCreated: true }))
 }
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : ''
-  const allowed = new Set(['M2_SELECT_SECRET_MISSING','M2_SELECT_CA_MISSING','INVALID_CONNECTION','WRONG_PROJECT','CA_REQUIRED','ROLE_ATTRIBUTES','ROLE_TABLE_BOUNDARY','ROLE_TABLE_SET','ROLE_AUTHORITY_BOUNDARY','ROLE_SEQUENCE_BOUNDARY','M2_CAPTURE_PARITY_MISMATCH','M2_PRODUCTION_CHANGED_DURING_CAPTURE','M2_PUBLIC_ASSET_TOO_LARGE','M2_PUBLIC_SNAPSHOT_BUDGET'])
-  const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
-  console.error(JSON.stringify({ status: 'STOP', phase, reason: allowed.has(message) ? message : 'M2_PROTECTED_CAPTURE_FAILED', ...(/^[0-9A-Z]{5}$/.test(code) ? { sqlState: code } : {}) }))
+  console.error(JSON.stringify({ status: 'STOP', phase, ...diagnoseM2CaptureFailure(error) }))
   process.exitCode = 1
 }).finally(closeConnections)

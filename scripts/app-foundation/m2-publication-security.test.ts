@@ -3,13 +3,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
-import { sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
+import { diagnoseM2CaptureFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { validateM2PreviewConfig } from './publish-m2-fixed-preview.mjs'
 import { readFile } from 'node:fs/promises'
 const origin = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
 const checkpoint = 'a'.repeat(40)
 
 describe('M2 publisher safety boundaries', () => {
+  it('reports only closed database diagnostic codes, never arbitrary connection details', () => {
+    const privateError = Object.assign(new Error('postgresql://private-user:private-password@private-host/postgres'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' })
+    expect(diagnoseM2CaptureFailure(privateError)).toEqual({ reason: 'M2_PROTECTED_CAPTURE_FAILED', connectionCode: 'SELF_SIGNED_CERT_IN_CHAIN' })
+    expect(diagnoseM2CaptureFailure(new Error('SESSION_CONNECTION_REQUIRED'))).toEqual({ reason: 'SESSION_CONNECTION_REQUIRED' })
+    expect(diagnoseM2CaptureFailure(Object.assign(new Error('private-row'), { code: '42501' }))).toEqual({ reason: 'M2_PROTECTED_CAPTURE_FAILED', sqlState: '42501' })
+    expect(JSON.stringify(diagnoseM2CaptureFailure(privateError))).not.toContain('private')
+    expect(diagnoseM2CaptureFailure({ code: 'private-password' })).toEqual({ reason: 'M2_PROTECTED_CAPTURE_FAILED' })
+  })
   it('allows only localhost or this Worker Preview and cannot use M2 mode to bypass Production checks', () => {
     expect(navigationTarget(origin, { M2_PUBLIC_SNAPSHOT_CHECKPOINT: checkpoint }).hosted).toBe(true)
     expect(() => navigationTarget('https://www.dongphugia.vn', { M2_PUBLIC_SNAPSHOT_CHECKPOINT: checkpoint })).toThrow('M2_PREVIEW_ORIGIN_REQUIRED')
