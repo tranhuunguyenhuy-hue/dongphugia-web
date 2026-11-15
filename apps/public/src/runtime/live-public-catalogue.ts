@@ -139,9 +139,14 @@ async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCatego
   's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+categoryClause+
   ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100',values,
   'category-listing-counts')
- const brands=await readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
-   ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values,
-   'category-brand-facets')
+ // Homepage brand choices are derived from its bounded first-listing card
+ // previews. Only a single category-root page consumes this SQL facet; avoid a
+ // global DISTINCT scan across every listing while assembling the homepage.
+ const brands=categoryFilter
+  ?await readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
+    ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values,
+    'category-brand-facets')
+  :[]
  const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
  const result=await Promise.all(categorySlugs.map(async (slug): Promise<SnapshotCategory | null>=>{
   const byCategory=rows.filter(r=>r.category_slug===slug)

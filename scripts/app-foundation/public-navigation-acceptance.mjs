@@ -69,6 +69,22 @@ try {
       await page.goBack({ waitUntil: 'networkidle' })
       await page.getByRole('link', { name: /Đông Phú Gia - Trang chủ/i }).first().click()
       await page.waitForURL(origin + '/')
+      const homeChrome = await page.evaluate(() => ({
+        headerCount: document.querySelectorAll('header').length,
+        desktopNavigationCount: document.querySelectorAll('nav[aria-label="Menu chính"]').length,
+        desktopBlogLinkCount: document.querySelectorAll('nav[aria-label="Menu chính"] a[href="/blog"]').length,
+        desktopBlogLinkVisibleCount: [...document.querySelectorAll('nav[aria-label="Menu chính"] a[href="/blog"]')]
+          .filter((element) => element.getClientRects().length > 0
+            && getComputedStyle(element).visibility !== 'hidden'
+            && getComputedStyle(element).display !== 'none').length,
+        footerCount: document.querySelectorAll('footer').length,
+        footerBlogLinkCount: document.querySelectorAll('footer a[href="/blog"]').length,
+        mainContentPresent: document.querySelector('#main-content') !== null,
+        mainHeadingCount: document.querySelectorAll('#main-content h1').length,
+        errorPageMarker: /This page couldn.t load|Internal Server Error/.test(document.body.innerText),
+      }))
+      console.log(JSON.stringify({ event: 'PUBLIC_BROWSER_HOME_CHROME', width, ...homeChrome }))
+      await page.locator('#main-content h1').waitFor({ state: 'attached' })
       const blogLink = width === 390
         ? page.locator('footer a[href="/blog"]').first()
         : page.getByRole('navigation', { name: 'Menu chính' }).getByRole('link', { name: 'Tin tức' })
