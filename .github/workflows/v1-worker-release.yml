@@ -19,6 +19,11 @@ on:
         required: true
         type: boolean
         default: false
+      skip_navigation_acceptance:
+        description: 'Owner-authorized emergency only: skip flaky browser navigation acceptance; keep build, DB, smoke and deployed identity checks.'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,6 +61,14 @@ jobs:
         run: |
           echo 'M1 SEV-1 forbids automatic rollback. Run with rollback_on_failure=false.' >&2
           exit 1
+      - name: Limit Owner-approved navigation bypass to PostgreSQL publication
+        if: inputs.skip_navigation_acceptance
+        shell: bash
+        run: |
+          test '${{ inputs.publish }}' = 'true'
+          test '${{ inputs.data_source }}' = 'postgresql'
+          test '${{ inputs.rollback_on_failure }}' = 'false'
+          echo 'EMERGENCY_NAVIGATION_BYPASS owner_authorized=true scope=browser-navigation-only'
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -280,12 +293,17 @@ jobs:
             exit "$smoke_exit_code"
           fi
           cat "$diagnostic_dir/smoke.log"
-          set +e
-          M1_NAVIGATION_DIAGNOSTICS="$RUNNER_TEMP/v1-navigation-packaged.json" \
-          node "$GITHUB_WORKSPACE/scripts/app-foundation/public-navigation-acceptance.mjs" \
-            http://127.0.0.1:8793 "$GITHUB_SHA"
-          navigation_exit_code=$?
-          set -e
+          if [ '${{ inputs.skip_navigation_acceptance }}' = 'true' ]; then
+            echo 'EMERGENCY_NAVIGATION_BYPASS stage=pre-publish owner_approved=true'
+            navigation_exit_code=0
+          else
+            set +e
+            M1_NAVIGATION_DIAGNOSTICS="$RUNNER_TEMP/v1-navigation-packaged.json" \
+            node "$GITHUB_WORKSPACE/scripts/app-foundation/public-navigation-acceptance.mjs" \
+              http://127.0.0.1:8793 "$GITHUB_SHA"
+            navigation_exit_code=$?
+            set -e
+          fi
           if [ "$navigation_exit_code" -ne 0 ]; then
             if kill -0 "$worker_pid" 2>/dev/null; then
               worker_alive=true
@@ -398,7 +416,7 @@ jobs:
           node "$GITHUB_WORKSPACE/scripts/app-foundation/public-postgres-release-smoke.mjs" \
             https://www.dongphugia.vn "$GITHUB_SHA" production
       - name: Repeat mobile and desktop navigation on Production
-        if: inputs.publish
+        if: inputs.publish && !inputs.skip_navigation_acceptance
         env:
           M1_NAVIGATION_DIAGNOSTICS: ${{ runner.temp }}/v1-navigation-production.json
         run: node scripts/app-foundation/public-navigation-acceptance.mjs https://www.dongphugia.vn "$GITHUB_SHA"
@@ -483,6 +501,7 @@ jobs:
             echo "- Source SHA: $GITHUB_SHA"
             echo "- Target: dongphugia-v1-public-production"
             echo "- Publish requested: $PUBLISH"
+            echo "- Owner emergency navigation bypass: ${{ inputs.skip_navigation_acceptance }}"
             echo "- Public data source: $PUBLIC_CATALOGUE_SOURCE"
             echo "- Automatic rollback on failure requested: ${{ inputs.rollback_on_failure }}"
             echo "- PostgreSQL permission/TLS/read smoke: ${{ steps.db_preflight.outcome }}"
