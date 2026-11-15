@@ -5,6 +5,12 @@ import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 describe('fixed staging survives source-driven Production publication', () => {
+  it('preserves the reviewed main campaign Worker-first asset routes in fixed Preview', async () => {
+    const production = JSON.parse(await readFile('apps/public/wrangler.production.jsonc', 'utf8'))
+    const staging = JSON.parse(await readFile('apps/public/wrangler.fixed-preview.jsonc', 'utf8'))
+    expect(staging.assets.run_worker_first).toEqual(production.assets.run_worker_first)
+    expect(staging.assets.run_worker_first).toEqual(['/uudaicuoinam2026', '/uudaicuoinam2026/*'])
+  })
   it('fails the existing Production identity gate if a packaged artifact would disable staging', async () => {
     const release = await readFile('.github/workflows/v1-worker-release.yml', 'utf8')
     expect(release).toContain('if(x.preview_urls!==true) process.exit(1)')

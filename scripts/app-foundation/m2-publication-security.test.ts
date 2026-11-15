@@ -45,7 +45,7 @@ describe('M2 publisher safety boundaries', () => {
   it('rejects DB bindings, arbitrary Preview destinations and privileged vars', async () => {
     const template = JSON.parse(await readFile('apps/public/wrangler.fixed-preview.jsonc', 'utf8'))
     const meta = { workerName: template.name, previewName: 'staging', checkpoint }
-    const config = { ...template, main: 'worker/index.js', no_bundle: true, assets: { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none' } }
+    const config = { ...template, main: 'worker/index.js', no_bundle: true, assets: { ...template.assets, directory: 'assets' } }
     delete config.$schema // Packaged config is rebuilt from a closed field allowlist.
     config.vars.PUBLIC_CATALOGUE_CHECKPOINT = checkpoint; config.previews.vars.PUBLIC_CATALOGUE_CHECKPOINT = checkpoint
     expect(() => validateM2PreviewConfig(config, meta)).not.toThrow()
