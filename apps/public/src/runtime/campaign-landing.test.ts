@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { serveCampaignLanding } from './campaign-landing'
 
 describe('serveCampaignLanding', () => {
-  it('serves the campaign directory index through the static asset binding', async () => {
+  it('passes the campaign directory URL to the static asset binding', async () => {
     const fetch = vi.fn(async (request: Request) => new Response('<html>campaign</html>', {
       headers: { 'Content-Type': 'text/html' },
     }))
@@ -14,7 +14,7 @@ describe('serveCampaignLanding', () => {
     expect(response?.status).toBe(200)
     expect(fetch).toHaveBeenCalledTimes(1)
     const assetRequest = fetch.mock.calls[0][0]
-    expect(new URL(assetRequest.url).pathname).toBe('/uudaicuoinam2026/index.html')
+    expect(new URL(assetRequest.url).pathname).toBe('/uudaicuoinam2026/')
     expect(new URL(assetRequest.url).searchParams.get('utm_source')).toBe('test')
   })
 

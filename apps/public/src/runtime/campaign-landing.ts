@@ -31,8 +31,7 @@ export async function serveCampaignLanding(
     })
   }
 
-  // Workers Static Assets does not guarantee directory-index resolution when
-  // not_found_handling is "none". Request the entry document explicitly.
-  if (pathname === `${CAMPAIGN_PATH}/`) url.pathname = `${CAMPAIGN_PATH}/index.html`
+  // Preserve the public directory URL so the Static Assets binding resolves
+  // its index.html using the configured HTML handling behavior.
   return assets.fetch(new Request(url, request))
 }
