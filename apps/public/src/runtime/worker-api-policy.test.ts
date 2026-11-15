@@ -27,7 +27,7 @@ beforeEach(() => mocks.vinextFetch.mockClear())
 describe('public Worker API route ownership', () => {
     it('serves the campaign landing from static assets before the Vinext fallback', async () => {
         const assetFetch = vi.fn(async (request: Request) => {
-            expect(new URL(request.url).pathname).toBe('/uudaicuoinam2026/index.html')
+            expect(new URL(request.url).pathname).toBe('/uudaicuoinam2026/')
             return new Response('<html>campaign</html>', { headers: { 'Content-Type': 'text/html' } })
         })
         const response = await worker.fetch(
