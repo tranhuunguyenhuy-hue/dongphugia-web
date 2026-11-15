@@ -40,7 +40,7 @@ export function validateM2PreviewConfig(config, source) {
   assert.deepEqual(config.previews.durable_objects, { bindings: [] })
   assert.ok(Object.keys(config.vars).every(key => ['APP_ENV','APP_BUILD_TARGET','APP_ORIGIN','PREVIEW_NOINDEX','PUBLIC_CATALOGUE_SOURCE','PUBLIC_CATALOGUE_CHECKPOINT'].includes(key)))
   assert.equal(config.vars.APP_BUILD_TARGET, 'public')
-  assert.deepEqual(config.assets, { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none' })
+  assert.deepEqual(config.assets, { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none', run_worker_first: ['/uudaicuoinam2026', '/uudaicuoinam2026/*'] })
   assert.equal(config.compatibility_date, '2026-08-30')
   assert.deepEqual(config.compatibility_flags, ['nodejs_compat'])
 }

@@ -6,7 +6,7 @@
   "main": "worker.ts",
   "workers_dev": true,
   "preview_urls": true,
-  "assets": {"directory": "dist/client", "not_found_handling": "none", "binding": "ASSETS"},
+  "assets": {"directory": "dist/client", "not_found_handling": "none", "binding": "ASSETS", "run_worker_first": ["/uudaicuoinam2026", "/uudaicuoinam2026/*"]},
   "vars": {
     "APP_ENV": "staging",
     "APP_BUILD_TARGET": "public",

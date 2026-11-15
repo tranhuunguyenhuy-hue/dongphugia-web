@@ -35,6 +35,19 @@ jobs:
         with:
           node-version: 24.13.0
           cache: npm
+      - name: Verify protected Public reader is configured
+        env:
+          M2_READ_CREDENTIAL_PRESENT: ${{ secrets.M2_PUBLIC_READ_DATABASE_URL != '' }}
+          M2_READ_CA_PRESENT: ${{ secrets.DIRECT_TARGET_CA != '' }}
+        run: |
+          if [ "$M2_READ_CREDENTIAL_PRESENT" != true ]; then
+            echo '{"status":"STOP","reason":"M2_PUBLIC_SELECT_SECRET_MISSING"}'
+            exit 1
+          fi
+          if [ "$M2_READ_CA_PRESENT" != true ]; then
+            echo '{"status":"STOP","reason":"M2_SELECT_CA_MISSING"}'
+            exit 1
+          fi
       - name: Install locked tools before scoped credentials
         run: |
           npm ci
@@ -44,13 +57,13 @@ jobs:
       - name: Verify existing SELECT credential and actual Production counts
         if: inputs.operation == 'verify-read-access'
         env:
-          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          M2_PUBLIC_READ_DATABASE_URL: ${{ secrets.M2_PUBLIC_READ_DATABASE_URL }}
           DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
         run: node scripts/app-foundation/verify-m2-snapshot-read-access.mjs
       - name: Capture fresh Public-only immutable snapshot
         if: inputs.operation != 'verify-read-access'
         env:
-          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          M2_PUBLIC_READ_DATABASE_URL: ${{ secrets.M2_PUBLIC_READ_DATABASE_URL }}
           DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
         shell: bash
         run: |

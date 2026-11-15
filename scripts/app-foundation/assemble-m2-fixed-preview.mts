@@ -64,7 +64,7 @@ async function main() {
     PREVIEW_NOINDEX: 'true', PUBLIC_CATALOGUE_SOURCE: 'snapshot', PUBLIC_CATALOGUE_CHECKPOINT: lock.checkpoint }
   const config = { name: FIXED_PREVIEW_WORKER, compatibility_date: '2026-08-30', compatibility_flags: ['nodejs_compat'],
     main: 'worker/index.js', workers_dev: true, preview_urls: true, no_bundle: true,
-    rules: [{ type: 'ESModule', globs: ['**/*.js', '**/*.mjs'] }], assets: { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none' },
+    rules: [{ type: 'ESModule', globs: ['**/*.js', '**/*.mjs'] }], assets: { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none', run_worker_first: ['/uudaicuoinam2026', '/uudaicuoinam2026/*'] },
     vars, previews: { vars, secrets: { required: [] }, hyperdrive: [], services: [], durable_objects: { bindings: [] } } }
   const text = JSON.stringify(config, null, 2) + '\n'
   await writeFile(join(output, 'wrangler.fixed-preview.json'), text, { mode: 0o600 })
