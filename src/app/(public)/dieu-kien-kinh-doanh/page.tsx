@@ -28,10 +28,10 @@ export default function ConditionalBusinessPage() {
                 <li><strong>Mã số doanh nghiệp/Mã số thuế:</strong> 5800929167</li>
                 <li><strong>Ngày đăng ký lần đầu:</strong> 20/08/2010</li>
                 <li><strong>Đăng ký thay đổi lần thứ 5:</strong> 12/05/2025</li>
-                <li><strong>Trụ sở chính:</strong> 275 Phan Đình Phùng, Phường Xuân Hương - Đà Lạt, Tỉnh Lâm Đồng, Việt Nam</li>
+                <li><strong>Trụ sở chính:</strong> Số 275 Phan Đình Phùng, Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng</li>
                 <li><strong>Vốn điều lệ:</strong> 15.000.000.000 đồng</li>
                 <li><strong>Người đại diện theo pháp luật:</strong> Ông Dương Tiến Sỹ - Giám đốc</li>
-                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:02633520316">0263 352 0316</a></li>
+                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:0913865685">0913 865 685</a></li>
                 <li><strong>Email:</strong> <a href="mailto:vlxd.dongphu@gmail.com">vlxd.dongphu@gmail.com</a></li>
                 <li><strong>Website:</strong> <a href="https://www.dongphugia.vn">https://www.dongphugia.vn</a></li>
             </ul>
@@ -70,8 +70,8 @@ export default function ConditionalBusinessPage() {
             <h2>5. Thông tin liên hệ chính thức</h2>
             <p className="font-semibold">CÔNG TY TNHH ĐÔNG PHÚ GIA</p>
             <ul>
-                <li><strong>Địa chỉ:</strong> 275 Phan Đình Phùng, Phường Xuân Hương - Đà Lạt, Tỉnh Lâm Đồng, Việt Nam</li>
-                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:02633520316">02633520316</a></li>
+                <li><strong>Địa chỉ:</strong> Số 275 Phan Đình Phùng, Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng</li>
+                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:0913865685">0913 865 685</a></li>
                 <li><strong>Email:</strong> <a href="mailto:vlxd.dongphu@gmail.com">vlxd.dongphu@gmail.com</a></li>
                 <li><strong>Website:</strong> <a href="https://www.dongphugia.vn">https://www.dongphugia.vn</a></li>
             </ul>

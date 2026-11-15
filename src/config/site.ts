@@ -6,10 +6,17 @@ export const siteConfig = {
     description: "Vật liệu xây dựng cao cấp, uy tín, chính hãng. Đồng hành & Phát triển.",
     url: getCanonicalSiteUrl(),
     
+    // Legal data supplied for Meta business verification, 15/11/2026.
+    legal: {
+        name: "CÔNG TY TNHH ĐÔNG PHÚ GIA",
+        registrationNumber: "5800929167",
+        registeredAddress: "Số 275 Phan Đình Phùng, Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng",
+    },
+
     // Contact Info
     contact: {
-        hotline: "0949349949",
-        hotlineLabel: "094 9349 949 - 094 5343 494",
+        hotline: "0913865685",
+        hotlineLabel: "0913 865 685",
         businessRoom: "0855528688",
         businessRoomLabel: "0855 528 688",
         phone: "0855528688", // legacy field, kept for compatibility if needed, map to business room

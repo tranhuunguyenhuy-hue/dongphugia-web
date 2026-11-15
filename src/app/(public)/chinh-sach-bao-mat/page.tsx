@@ -42,7 +42,7 @@ export default function PrivacyPolicyPage() {
 
             <h2>3. Thời gian lưu trữ thông tin</h2>
             <p>
-                Thông tin cá nhân của khách hàng được lưu trữ trong thời gian cần thiết để phục vụ mục đích giao dịch, chăm sóc khách hàng, bảo hành, kế toán, thuế và các nghĩa vụ pháp lý liên quan. Khi khách hàng có yêu cầu kiểm tra, cập nhật, điều chỉnh hoặc hủy bỏ thông tin cá nhân, khách hàng có thể liên hệ với Đông Phú Gia qua email vlxd.dongphu@gmail.com hoặc số điện thoại 0263 352 0316 để được tiếp nhận và hỗ trợ.
+                Thông tin cá nhân của khách hàng được lưu trữ trong thời gian cần thiết để phục vụ mục đích giao dịch, chăm sóc khách hàng, bảo hành, kế toán, thuế và các nghĩa vụ pháp lý liên quan. Khi khách hàng có yêu cầu kiểm tra, cập nhật, điều chỉnh hoặc hủy bỏ thông tin cá nhân, khách hàng có thể liên hệ với Đông Phú Gia qua email vlxd.dongphu@gmail.com hoặc số điện thoại 0913 865 685 để được tiếp nhận và hỗ trợ.
             </p>
 
             <h2>4. Đối tượng được tiếp cận với thông tin cá nhân</h2>
@@ -70,8 +70,8 @@ export default function PrivacyPolicyPage() {
             <h2>8. Địa chỉ đơn vị thu thập và quản lý thông tin</h2>
             <p className="font-semibold">CÔNG TY TNHH ĐÔNG PHÚ GIA</p>
             <ul>
-                <li><strong>Địa chỉ:</strong> 275 Phan Đình Phùng, Phường Xuân Hương - Đà Lạt, Tỉnh Lâm Đồng, Việt Nam</li>
-                <li><strong>Điện thoại:</strong> <a href="tel:02633520316">0263 352 0316</a></li>
+                <li><strong>Địa chỉ:</strong> Số 275 Phan Đình Phùng, Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng</li>
+                <li><strong>Điện thoại:</strong> <a href="tel:0913865685">0913 865 685</a></li>
                 <li><strong>Email:</strong> <a href="mailto:vlxd.dongphu@gmail.com">vlxd.dongphu@gmail.com</a></li>
                 <li><strong>Website:</strong> <a href="https://www.dongphugia.vn">https://www.dongphugia.vn</a></li>
             </ul>

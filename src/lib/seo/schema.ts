@@ -13,10 +13,16 @@
  */
 
 import { siteConfig } from "@/config/site"
-import { canonicalUrl, getCanonicalSiteUrl } from "@/lib/site"
+import { DEFAULT_CANONICAL_SITE_URL } from "@/lib/site"
 import { resolveProductCommerce } from "@/lib/product-commerce"
 
-const BASE_URL = getCanonicalSiteUrl()
+const BASE_URL = DEFAULT_CANONICAL_SITE_URL
+
+// Public structured data must not depend on a local build origin.
+function publicCanonicalUrl(pathOrUrl: string) {
+  const path = new URL(pathOrUrl, `${BASE_URL}/`).pathname
+  return new URL(path, `${BASE_URL}/`).toString()
+}
 
 // ─── Organization / LocalBusiness ─────────────────────────────────────────────
 
@@ -28,14 +34,14 @@ export function buildOrganizationSchema() {
   return {
     "@context": "https://schema.org",
     "@type": "LocalBusiness",
-    name: "Đông Phú Gia",
+    name: siteConfig.legal.name,
     url: BASE_URL,
     logo: `${BASE_URL}/images/Logo.png`,
     telephone: siteConfig.contact.hotline,
     email: siteConfig.contact.email,
     address: {
       "@type": "PostalAddress",
-      streetAddress: siteConfig.contact.address,
+      streetAddress: siteConfig.legal.registeredAddress,
       addressLocality: "Đà Lạt",
       addressRegion: "Lâm Đồng",
       addressCountry: "VN",
@@ -86,8 +92,8 @@ export function buildProductSchema(product: ProductSchemaInput) {
   ) return null
 
   const productUrl = product.urlPath
-    ? canonicalUrl(product.urlPath)
-    : canonicalUrl(`/${product.categorySlug}/${product.subcategorySlug ?? "_"}/${product.slug}`)
+    ? publicCanonicalUrl(product.urlPath)
+    : publicCanonicalUrl(`/${product.categorySlug}/${product.subcategorySlug ?? "_"}/${product.slug}`)
 
   return {
     "@context": "https://schema.org",
@@ -143,7 +149,7 @@ export function buildBreadcrumbSchema(items: BreadcrumbItem[]) {
       "@type": "ListItem",
       position: index + 1,
       name: item.name,
-      item: item.url.startsWith("http") ? canonicalUrl(item.url) : canonicalUrl(item.url),
+      item: item.url.startsWith("http") ? publicCanonicalUrl(item.url) : publicCanonicalUrl(item.url),
     })),
   }
 }
@@ -186,6 +192,6 @@ export function buildArticleSchema(post: ArticleSchemaInput) {
     },
     datePublished: post.published_at ? new Date(post.published_at).toISOString() : undefined,
     dateModified: new Date(post.updated_at).toISOString(),
-    mainEntityOfPage: canonicalUrl(`/blog/${post.blog_categories.slug}/${post.slug}`),
+    mainEntityOfPage: publicCanonicalUrl(`/blog/${post.blog_categories.slug}/${post.slug}`),
   }
 }

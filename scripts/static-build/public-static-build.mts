@@ -457,7 +457,7 @@ export async function buildStaticArtifact(input: StaticBuildInput, options: Stat
           name: 'Đông Phú Gia',
           url: STATIC_SITE_URL,
           logo: `${STATIC_SITE_URL}/images/Logo.png`,
-          telephone: '0949349949',
+          telephone: '0913865685',
           email: 'vlxd.dongphu@gmail.com',
           sameAs: ['https://facebook.com/dongphugia', 'https://zalo.me/0855528688'],
         },
@@ -467,7 +467,7 @@ export async function buildStaticArtifact(input: StaticBuildInput, options: Stat
           name: 'Đông Phú Gia',
           url: STATIC_SITE_URL,
           logo: `${STATIC_SITE_URL}/images/Logo.png`,
-          telephone: '0949349949',
+          telephone: '0913865685',
           email: 'vlxd.dongphu@gmail.com',
           address: {
             '@type': 'PostalAddress',

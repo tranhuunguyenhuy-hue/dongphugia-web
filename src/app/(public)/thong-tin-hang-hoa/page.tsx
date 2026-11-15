@@ -64,8 +64,8 @@ export default function ProductsInfoPage() {
             <p className="font-semibold">CÔNG TY TNHH ĐÔNG PHÚ GIA</p>
             <ul>
                 <li><strong>Mã số doanh nghiệp:</strong> 5800929167</li>
-                <li><strong>Địa chỉ:</strong> 275 Phan Đình Phùng, Phường Xuân Hương – Đà Lạt, Tỉnh Lâm Đồng, Việt Nam</li>
-                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:02633520316">02633520316</a></li>
+                <li><strong>Địa chỉ:</strong> Số 275 Phan Đình Phùng, Phường 2, Thành phố Đà Lạt, Tỉnh Lâm Đồng</li>
+                <li><strong>Điện thoại/Hotline:</strong> <a href="tel:0913865685">0913 865 685</a></li>
                 <li><strong>Email:</strong> <a href="mailto:vlxd.dongphu@gmail.com">vlxd.dongphu@gmail.com</a></li>
                 <li><strong>Website:</strong> <a href="https://www.dongphugia.vn">https://www.dongphugia.vn</a></li>
             </ul>

@@ -353,7 +353,7 @@ export function AboutClient() {
 
                         <Reveal direction="right" delay={150} className="flex flex-col sm:flex-row gap-3 shrink-0">
                             <a
-                                href="tel:02633520316"
+                                href="tel:0913865685"
                                 className="inline-flex items-center justify-center gap-2 px-7 py-4 text-[#2E7A96] bg-white font-bold rounded-xl hover:bg-[#EAF6FB] transition-colors text-sm shadow-lg shadow-black/10 group"
                             >
                                 <Phone className="w-4 h-4" />
