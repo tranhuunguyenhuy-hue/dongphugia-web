@@ -8,7 +8,7 @@ const requireWorker = createRequire(new URL('../../apps/public/package.json', im
 const { Miniflare, convertV4MiniflareOptions } = requireWorker('miniflare')
 const compile = source => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
 const baseline = process.env.M1_REGRESSION_BASELINE === 'true'
-const db = baseline ? execFileSync('git', ['show', 'origin/main:apps/public/src/runtime/public-db.ts'], { encoding: 'utf8' })
+const db = baseline ? execFileSync('git', ['show', '5d3588c1948e2bca5786b13e04c1ded6322e15fd:apps/public/src/runtime/public-db.ts'], { encoding: 'utf8' })
   : readFileSync('apps/public/src/runtime/public-db.ts', 'utf8')
 const scope = readFileSync('apps/public/src/runtime/public-read-scope.ts', 'utf8')
 const modules = [

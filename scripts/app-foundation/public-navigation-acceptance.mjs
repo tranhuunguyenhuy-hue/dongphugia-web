@@ -1,25 +1,43 @@
 import assert from 'node:assert/strict'
-import { chromium } from '@playwright/test'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { chromium, webkit } from '@playwright/test'
 import { validatePublicNavigationResponse } from './public-navigation-response.mjs'
 const [base, sha] = process.argv.slice(2)
 assert.match(sha ?? '', /^[a-f0-9]{40}$/)
 const origin = new URL(base).origin
 assert.ok(origin === 'https://www.dongphugia.vn' || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin))
 const proxyUrl = origin.startsWith('https:') && process.env.https_proxy ? new URL(process.env.https_proxy) : null
-const browser = await chromium.launch({ headless: true, ...(proxyUrl ? { proxy: {
+let browser
+const browserTypes = [chromium, webkit]
+const launchBrowser = type => type.launch({ headless: true, ...(proxyUrl ? { proxy: {
   server: proxyUrl.origin, username: proxyUrl.username, password: proxyUrl.password,
 } } : {}) })
 const started = Date.now()
 let probes = 0
+const evidence = []
+const record = value => { if (evidence.length < 2500) evidence.push({ utc: new Date().toISOString(), ...value }) }
+const routeClass = raw => {
+  const p = new URL(raw).pathname
+  return p === '/' ? 'home' : p === '/gach-op-lat' ? 'tile-category'
+    : p.startsWith('/thiet-bi-ve-sinh') ? 'sanitary-catalogue'
+    : p.startsWith('/blog') ? 'blog' : p === '/tim-kiem' ? 'search' : 'other'
+}
 try {
-  for (const width of [390, 1440]) {
+ for (const browserType of browserTypes) {
+  browser = await launchBrowser(browserType)
+  record({ event: "browser-start", engine: browserType.name() })
+  for (const width of browserType === webkit ? [390] : [390, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width === 390 })
     const page = await context.newPage()
     page.setDefaultTimeout(30000)
     const errors = []
     const responseChecks = []
     const listingShardRequests = []
-    page.on('pageerror', () => errors.push('browser-pageerror'))
+    page.on('pageerror', () => { errors.push('browser-pageerror'); record({ event: 'pageerror', width, route: routeClass(page.url()) }) })
+    page.on('requestfailed', request => {
+      if (new URL(request.url()).origin === origin) record({ event: 'requestfailed', width, route: routeClass(request.url()), kind: request.isNavigationRequest() ? 'document' : request.headers().rsc ? 'rsc' : 'other' })
+    })
     page.on('request', request => {
       const url = new URL(request.url())
       if (url.origin === origin && url.pathname.startsWith('/api/catalogue/listings/')) {
@@ -27,9 +45,13 @@ try {
       }
     })
     page.on('response', r => {
+      if (new URL(r.url()).origin === origin && (r.request().isNavigationRequest() || r.request().headers().rsc)) {
+        const h = r.headers()
+        record({ event: 'response', width, route: routeClass(r.url()), kind: r.request().isNavigationRequest() ? 'document' : r.request().headers()['next-router-prefetch'] ? 'prefetch' : 'rsc', status: r.status(), mime: ['text/html', 'text/x-component'].includes(h['content-type']?.split(';')[0]) ? h['content-type'].split(';')[0] : 'other', sha: /^[a-f0-9]{40}$/.test(h['x-dpg-source-sha'] || '') ? h['x-dpg-source-sha'] : null, ray: /^[a-f0-9]+-[A-Z]+$/.test(h['cf-ray'] || '') ? h['cf-ray'] : null, cache: ['HIT','MISS','BYPASS'].includes(h['x-dpg-cache']) ? h['x-dpg-cache'] : 'other' })
+      }
       responseChecks.push(validatePublicNavigationResponse(r, { origin, sha })
         .then(checked => { if (checked) probes += 1 })
-        .catch(e => errors.push(e.message)))
+        .catch(e => { errors.push(e.message); record({ event: 'response-validation-failed', width, route: routeClass(r.url()) }) }))
     })
     await page.goto(origin, { waitUntil: 'networkidle' })
     const api = await context.request.get(origin + '/api/search?q=A-LFV-402S-1&limit=8')
@@ -84,6 +106,7 @@ try {
         errorPageMarker: /This page couldn.t load|Internal Server Error/.test(document.body.innerText),
       }))
       console.log(JSON.stringify({ event: 'PUBLIC_BROWSER_HOME_CHROME', width, ...homeChrome }))
+      record({ event: 'home-dom', width, ...homeChrome })
       await page.locator('#main-content h1').waitFor({ state: 'attached' })
       const blogLink = width === 390
         ? page.locator('footer a[href="/blog"]').first()
@@ -96,6 +119,16 @@ try {
       await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().press('Enter')
       await page.waitForURL('**/tim-kiem?q=A-LFV-402S-1')
       await page.locator('#main-content h1').waitFor()
+      // Probe the warmed homepage separately; preserve the original burst size.
+      const homeFlight = await context.request.get(origin + '/', { headers: {
+        RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
+        'Next-URL': '/thiet-bi-ve-sinh/bon-cau.',
+      }, timeout: 30000 })
+      assert.equal(homeFlight.status(), 200)
+      assert.match(homeFlight.headers()['content-type'], /text\/x-component/)
+      assert.equal(homeFlight.headers()['x-dpg-source-sha'], sha)
+      assert.ok(!/(?:^|\n)[0-9a-f]+:E\{|"digest":|This page couldn.t load/.test(await homeFlight.text()))
+      probes += 1
       for (const batch of [0, 1]) {
         await Promise.all(['/gach-op-lat', '/thiet-bi-ve-sinh', '/thiet-bi-ve-sinh/bon-cau', pdp, '/blog'].map(async path => {
           const t = Date.now()
@@ -122,5 +155,16 @@ try {
     console.log(`PUBLIC_BROWSER_NAVIGATION PASS width=${width} rounds=2 errors=0`)
     await context.close()
   }
+  await browser.close()
+ }
   console.log(`PUBLIC_NAVIGATION_ACCEPTANCE PASS probes=${probes} durationMs=${Date.now()-started} source=${sha}`)
-} finally { await browser.close() }
+} finally {
+  await browser?.close()
+  if (process.env.M1_NAVIGATION_DIAGNOSTICS) {
+    const path = process.env.M1_NAVIGATION_DIAGNOSTICS
+    mkdirSync(dirname(path), { recursive: true })
+    const json = JSON.stringify({ source: sha, evidence })
+    assert.ok(Buffer.byteLength(json) <= 2 * 1024 * 1024, 'diagnostic size limit')
+    writeFileSync(path, json + '\n', { mode: 0o600 })
+  }
+}

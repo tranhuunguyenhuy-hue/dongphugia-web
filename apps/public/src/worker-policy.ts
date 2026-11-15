@@ -147,6 +147,10 @@ export function isAnonymousCacheCandidate(request: Request) {
     CACHEABLE_METHODS.has(request.method) &&
     CACHEABLE_PATHS.has(url.pathname) &&
     url.search === '' &&
+    !request.headers.has('rsc') &&
+    !request.headers.has('next-router-prefetch') &&
+    !request.headers.has('next-router-segment-prefetch') &&
+    !request.headers.has('next-router-state-tree') &&
     !request.headers.has('authorization') &&
     !request.headers.has('cookie')
   )

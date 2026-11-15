@@ -100,6 +100,14 @@ describe('Public Worker fail-closed policy', () => {
     expect(PUBLIC_EDGE_CACHE_CONTROL).toBe('public, max-age=300, must-revalidate')
   })
 
+  it('bypasses the document cache for Flight and router prefetch requests without a query string', () => {
+    for (const name of ['RSC', 'Next-Router-Prefetch', 'Next-Router-Segment-Prefetch', 'Next-Router-State-Tree']) {
+      expect(isAnonymousCacheCandidate(new Request('https://www.dongphugia.vn/', {
+        headers: { [name]: '1' },
+      }))).toBe(false)
+    }
+  })
+
   it('will not cache responses with cookies or non-HTML payloads', () => {
     expect(isCacheableResponse(new Response('<html/>', { headers: { 'content-type': 'text/html' } }))).toBe(true)
     expect(isCacheableResponse(new Response('<html/>', { headers: { 'content-type': 'text/html', 'set-cookie': 'staff=synthetic' } }))).toBe(false)

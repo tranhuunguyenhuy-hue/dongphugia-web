@@ -61,7 +61,7 @@ describe('M1 read-only source contract', () => {
     expect(workflow).toContain('public-postgres-release-smoke.mjs')
     expect(workflow).toContain('upload-artifact@v4')
     expect(workflow).toContain('path: ${{ runner.temp }}/v1-public-smoke-diagnostics/diagnostics.json')
-    expect(workflow).toContain('retention-days: 1')
+    expect(workflow).toContain('retention-days: 7')
     expect(workflow).toContain("PUBLIC_DB_DIAGNOSTICS:'true'")
     expect(publicSmoke).toContain('buildSmokeResponseEvidence')
     expect(diagnostics).toContain("'worker_runtime_http_error'")
