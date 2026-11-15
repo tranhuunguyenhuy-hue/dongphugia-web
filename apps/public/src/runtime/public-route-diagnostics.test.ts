@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { publicRouteFailureSummary } from './public-route-diagnostics'
+import { isExpectedPublicNotFound, publicRouteFailureSummary } from './public-route-diagnostics'
 
 describe('safe Public route failure summary', () => {
   it('keeps only error class, allowlisted application code, and SQLSTATE', () => {
@@ -20,5 +20,10 @@ describe('safe Public route failure summary', () => {
   it('labels bounded PostgreSQL capacity failures without exposing query details', () => {
     const summary = publicRouteFailureSummary(new Error('PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED'))
     expect(summary).toEqual({ errorClass: 'Error', publicErrorCode: 'PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED' })
+  })
+
+  it('distinguishes intentional Next 404 routing from an application render failure', () => {
+    expect(isExpectedPublicNotFound(Object.assign(new Error('Not Found'), { digest: 'NEXT_HTTP_ERROR_FALLBACK;404' }))).toBe(true)
+    expect(isExpectedPublicNotFound(new Error('Query read timeout'))).toBe(false)
   })
 })

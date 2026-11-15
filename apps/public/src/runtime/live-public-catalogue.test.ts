@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ readPublicRows: vi.fn() }))
 vi.mock('./public-db', () => ({ readPublicRows: mocks.readPublicRows }))
 
-import { getLiveCategory, getLiveListing, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
+import { getLiveCategory, getLiveListing, getLiveListingPreview, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
 
 const product = {
   id: 42,
@@ -57,6 +57,18 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain('NOT $6::boolean OR p.is_featured=true')
     expect(statement).toContain('LIMIT $4 OFFSET $3')
     expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 12, 12, ['acme', 'other-brand'], true])
+  })
+
+  it('loads the same ordered category-root preview rows without an unneeded window count', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([{ ...product }])
+    const preview = await getLiveListingPreview('thiet-bi-bep', 'voi-rua-chen')
+    const [statement, values, label] = mocks.readPublicRows.mock.calls[0]
+    expect(preview).toHaveLength(1)
+    expect(statement).not.toContain('count(*) OVER()')
+    expect(statement).toContain('LIMIT $3')
+    expect(statement).toContain("p.listing_visibility IN ('default','low_priority')")
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 48])
+    expect(label).toBe('category-root-featured')
   })
 
   it('rejects unsafe or excessive listing filters before querying PostgreSQL', async () => {
@@ -122,7 +134,8 @@ describe('Live public catalogue projection', () => {
     expect(mocks.readPublicRows).toHaveBeenCalledTimes(3)
     expect(mocks.readPublicRows.mock.calls[0][1]).toEqual(['thiet-bi-bep'])
     expect(mocks.readPublicRows.mock.calls[1][1]).toEqual(['thiet-bi-bep'])
-    expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48, [], false])
+    expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 48])
+    expect(mocks.readPublicRows.mock.calls[2][2]).toBe('category-root-featured')
     expect(mocks.readPublicRows.mock.calls[0][0]).toContain('AND c.slug=$1 GROUP BY')
     expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND b.slug IS NOT NULL')
   })

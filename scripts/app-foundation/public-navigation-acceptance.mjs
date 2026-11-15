@@ -69,7 +69,10 @@ try {
       await page.goBack({ waitUntil: 'networkidle' })
       await page.getByRole('link', { name: /Đông Phú Gia - Trang chủ/i }).first().click()
       await page.waitForURL(origin + '/')
-      await page.locator('footer a[href="/blog"]').first().click()
+      const blogLink = width === 390
+        ? page.locator('footer a[href="/blog"]').first()
+        : page.getByRole('navigation', { name: 'Menu chính' }).getByRole('link', { name: 'Tin tức' })
+      await blogLink.click()
       await page.waitForURL('**/blog')
       await page.locator('#main-content h1').waitFor()
       await page.getByRole('button', { name: 'Mở tìm kiếm' }).first().click()

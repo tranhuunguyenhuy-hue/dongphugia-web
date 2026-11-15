@@ -6,7 +6,7 @@ import {notFound} from 'next/navigation'
 import {getPublicAppEnvironment} from '../../../src/config/env'
 import {publicPostgresEnabled} from '../../../src/runtime/public-db'
 import {getLiveListingRouteMetadata} from '../../../src/runtime/live-public-catalogue'
-import {publicRouteFailureSummary} from '../../../src/runtime/public-route-diagnostics'
+import {isExpectedPublicNotFound,publicRouteFailureSummary} from '../../../src/runtime/public-route-diagnostics'
 export const runtime='edge'
 export const dynamic='force-dynamic'
 const SAFE_SLUG=/^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -51,7 +51,7 @@ export default async function CanonicalRoute({params,searchParams}: {params:Prom
   default:notFound()
   }
  } catch(error) {
-  reportListingFailure(p.categorySlug,p.subcategorySlug,'render',error)
+  if(!isExpectedPublicNotFound(error))reportListingFailure(p.categorySlug,p.subcategorySlug,'render',error)
   throw error
  }
 }
