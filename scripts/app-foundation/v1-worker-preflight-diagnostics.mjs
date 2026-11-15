@@ -64,7 +64,7 @@ const SAFE_QUERY_LABELS = new Set([
 ])
 const SAFE_RUNTIME_EVENT_NAMES = new Set([
   'PUBLIC_DATABASE_READ_OK', 'PUBLIC_DATABASE_READ_FAILURE', 'PUBLIC_LISTING_ROUTE_FAILURE',
-  'PUBLIC_RENDER_HTTP_FAILURE', 'PUBLIC_RENDER_FAILURE',
+  'PUBLIC_RENDER_HTTP_FAILURE', 'PUBLIC_RENDER_FAILURE', 'PUBLIC_REQUEST_RENDER_ERROR',
 ])
 
 function readOptional(path) {
@@ -228,6 +228,14 @@ function parseSafeRuntimeEvent(value) {
     if (value.event === 'PUBLIC_DATABASE_READ_FAILURE' && typeof value.sqlState === 'string' && SAFE_SQL_STATES.test(value.sqlState)) {
       event.sqlState = value.sqlState
     }
+    return event
+  }
+
+  if (value.event === 'PUBLIC_REQUEST_RENDER_ERROR') {
+    if (typeof value.errorClass === 'string' && SAFE_ERROR_CLASSES.has(value.errorClass)) event.errorClass = value.errorClass
+    if (typeof value.publicErrorCode === 'string' && SAFE_PUBLIC_ERROR_CODES.has(value.publicErrorCode)) event.publicErrorCode = value.publicErrorCode
+    if (typeof value.sqlState === 'string' && SAFE_SQL_STATES.test(value.sqlState)) event.sqlState = value.sqlState
+    if (['/', '/[categorySlug]', '/[categorySlug]/[subcategorySlug]', '/[categorySlug]/[subcategorySlug]/[productSlug]', '/blog', '/blog/[categorySlug]', '/blog/[categorySlug]/[slug]', '/tim-kiem', 'other'].includes(value.route)) event.route = value.route
     return event
   }
 
