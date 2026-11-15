@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Intentional hard navigation for Home: avoid intermittent RSC Flight return failures on Production Workers. */
 "use client"
 
 import Link from "next/link"
