@@ -97,7 +97,7 @@ function validateOrigin(
     throw new Error('PUBLIC_LOCAL_PREVIEW_ORIGIN_REQUIRED')
   }
   if (environment === 'staging' && (parsed.protocol !== 'https:'
-    || parsed.hostname !== 'dpg-staging.tranhuunguyenhuy.workers.dev')) {
+    || parsed.origin !== 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev')) {
     throw new Error('PUBLIC_STAGING_ORIGIN_REQUIRED')
   }
 

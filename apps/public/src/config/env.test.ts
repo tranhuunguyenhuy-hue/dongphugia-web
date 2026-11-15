@@ -48,14 +48,23 @@ describe('Public application environment contract', () => {
   it('requires noindex and a non-Production origin for Staging', () => {
     expect(() => getPublicAppEnvironment({
       APP_ENV: 'staging',
-      APP_ORIGIN: 'https://dpg-staging.tranhuunguyenhuy.workers.dev',
+      APP_ORIGIN: 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev',
     })).toThrow('PUBLIC_STAGING_NOINDEX_REQUIRED')
 
     expect(getPublicAppEnvironment({
       APP_ENV: 'staging',
-      APP_ORIGIN: 'https://dpg-staging.tranhuunguyenhuy.workers.dev',
+      APP_ORIGIN: 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev',
       PREVIEW_NOINDEX: 'true',
     })).toMatchObject({ environment: 'staging', previewNoindex: true })
+  })
+
+  it.each([
+    'https://dpg-staging.tranhuunguyenhuy.workers.dev',
+    'https://other-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev',
+    'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev:8443',
+  ])('rejects an unapproved staging origin %s', (origin) => {
+    expect(() => getPublicAppEnvironment({ APP_ENV: 'staging', APP_ORIGIN: origin, PREVIEW_NOINDEX: 'true' }))
+      .toThrow('PUBLIC_STAGING_ORIGIN_REQUIRED')
   })
 
   it('fails closed on privileged or unknown browser environment variables', () => {
