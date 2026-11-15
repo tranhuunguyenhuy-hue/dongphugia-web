@@ -12,6 +12,9 @@ export async function validatePublicNavigationResponse(response, { origin, sha }
 
   assert.equal(response.status(), 200, `${url.pathname}: HTTP ${response.status()}`)
   assert.equal(response.headers()['x-dpg-source-sha'], sha, `${url.pathname}: SHA`)
+  if (!isNavigation) {
+    assert.match(response.headers()['content-type'] ?? '', /text\/x-component/, `${url.pathname}: Flight MIME`)
+  }
 
   // Chromium may discard an already-consumed streamed RSC body after the next
   // client navigation. Explicit context.request RSC probes below read and

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { validatePublicNavigationResponse } from './public-navigation-response.mjs'
 
-function response({ navigation = false, status = 200, source = 'a'.repeat(40), text = async () => '' } = {}) {
+function response({ navigation = false, status = 200, source = 'a'.repeat(40), mime = 'text/x-component', text = async () => '' } = {}) {
   return {
     url: () => 'https://public.example/thiet-bi-ve-sinh/bon-cau',
     request: () => ({ isNavigationRequest: () => navigation, headers: () => navigation ? {} : { rsc: '1' } }),
     status: () => status,
-    headers: () => ({ 'x-dpg-source-sha': source }),
+    headers: () => ({ 'x-dpg-source-sha': source, 'content-type': mime }),
     text,
   }
 }
@@ -27,6 +27,9 @@ describe('public browser navigation response checks', () => {
   })
 
   it('rejects bad RSC status or a response from another source SHA', async () => {
+    await expect(validatePublicNavigationResponse(response({ mime: 'text/html' }), {
+      origin: 'https://public.example', sha: 'a'.repeat(40),
+    })).rejects.toThrow('Flight MIME')
     await expect(validatePublicNavigationResponse(response({ status: 503 }), {
       origin: 'https://public.example', sha: 'a'.repeat(40),
     })).rejects.toThrow('HTTP 503')
