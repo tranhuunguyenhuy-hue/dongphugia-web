@@ -2,6 +2,7 @@
 // target and privilege attestation. No credential is copied into a Preview.
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { diagnoseM2CaptureFailure } from './m2-public-diagnostics.mjs'
 
 export async function verifyM2SnapshotReadAccess(client, production) {
   // pg_stat_ssl observes the PostgreSQL backend connection. A session pooler's
@@ -25,9 +26,9 @@ export async function verifyM2SnapshotReadAccess(client, production) {
       AND p.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'
       AND s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`
     const counts = (await client.query(`SELECT
-      (SELECT count(*) ${from} WHERE ${visible})::int AS products,
-      (SELECT count(*) ${from} WHERE ${visible} AND p.listing_visibility IN ('default','low_priority'))::int AS listings,
-      (SELECT count(*) FROM dpg_app.blog_posts p JOIN dpg_app.blog_categories c ON c.id=p.category_id
+      (SELECT count(p.id) ${from} WHERE ${visible})::int AS products,
+      (SELECT count(p.id) ${from} WHERE ${visible} AND p.listing_visibility IN ('default','low_priority'))::int AS listings,
+      (SELECT count(p.id) FROM dpg_app.blog_posts p JOIN dpg_app.blog_categories c ON c.id=p.category_id
         WHERE p.status='published' AND p.published_at IS NOT NULL AND c.is_active=true)::int AS blogs,
       EXISTS(SELECT 1 ${from} WHERE ${visible} AND p.sku=$1) AS sample_present`, ['A-LFV-402S-1'])).rows[0]
     if (counts?.products !== production.publicProducts || counts.listings !== production.listingProducts
@@ -56,9 +57,9 @@ async function main() {
   const production = await response.json()
   if (production.status !== 'ok' || production.catalogueMode !== 'postgresql'
     || ![production.publicProducts, production.listingProducts, production.publishedBlogs].every(n => Number.isSafeInteger(n) && n > 0)) throw new Error('PRODUCTION_HEALTH_REQUIRED')
-  const { connect, closeConnections } = await import('../catalogue-direct/run.mjs')
+  const { connectM2PublicRead, closeM2PublicReadConnections } = await import('./m2-public-read-connection.mjs')
   try {
-    const client = await connect('read')
+    const client = await connectM2PublicRead()
     const evidence = { ...await verifyM2SnapshotReadAccess(client, production), sourceSha: process.env.GITHUB_SHA,
       productionSourceSha: productionSource, verifiedAt: new Date().toISOString(), publicDataMutated: false }
     const output = resolve(process.env.RUNNER_TEMP, 'm2-read-access')
@@ -66,14 +67,14 @@ async function main() {
     await writeFile(resolve(output, 'read-access.json'), JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600 })
     console.log(JSON.stringify(evidence))
   } finally {
-    await closeConnections()
+    await closeM2PublicReadConnections()
   }
 }
 
 if (process.argv[1]?.endsWith('/verify-m2-snapshot-read-access.mjs')) {
-  main().catch(() => {
+  main().catch(error => {
     // pg errors may contain URLs, rows or credentials: emit no original error.
-    console.error(JSON.stringify({ status: 'STOP', stage: 'M2_READ_ACCESS', reason: 'PROTECTED_READ_ACCESS_FAILED', snapshotCreated: false }))
+    console.error(JSON.stringify({ status: 'STOP', stage: 'M2_READ_ACCESS', ...diagnoseM2CaptureFailure(error), snapshotCreated: false }))
     process.exitCode = 1
   })
 }

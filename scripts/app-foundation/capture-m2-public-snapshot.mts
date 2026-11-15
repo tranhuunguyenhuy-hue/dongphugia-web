@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
-import { connect, closeConnections } from '../catalogue-direct/run.mjs'
+import { connectM2PublicRead, closeM2PublicReadConnections } from './m2-public-read-connection.mjs'
 import { verifyM2SnapshotReadAccess } from './verify-m2-snapshot-read-access.mjs'
 import { diagnoseM2CaptureFailure } from './m2-public-diagnostics.mjs'
 import { buildM2PublicSnapshot, type CaptureEntry, type CaptureCategory } from './m2-public-snapshot.mjs'
@@ -31,9 +31,7 @@ async function main() {
     || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') || !process.env.RUNNER_TEMP) throw new Error('M2_PROTECTED_RUNNER_REQUIRED')
   const before = await productionHealth()
   phase = 'CONNECT_READ'
-  if (!process.env.DIRECT_TARGET_READ_DATABASE_URL?.trim()) throw new Error('M2_SELECT_SECRET_MISSING')
-  if (!process.env.DIRECT_TARGET_CA?.trim()) throw new Error('M2_SELECT_CA_MISSING')
-  const client = await connect('read')
+  const client = await connectM2PublicRead()
   phase = 'VERIFY_PUBLIC_READ_COUNTS'
   const access = await verifyM2SnapshotReadAccess(client, before.body)
   console.log(JSON.stringify({ status: 'PASS', phase: 'M2_READ_ACCESS', readOnly: access.readOnly,
@@ -93,4 +91,4 @@ async function main() {
 main().catch((error: unknown) => {
   console.error(JSON.stringify({ status: 'STOP', phase, ...diagnoseM2CaptureFailure(error) }))
   process.exitCode = 1
-}).finally(closeConnections)
+}).finally(closeM2PublicReadConnections)
