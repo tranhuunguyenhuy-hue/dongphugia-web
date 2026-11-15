@@ -15,10 +15,10 @@ on:
         options: [snapshot, postgresql]
         default: snapshot
       rollback_on_failure:
-        description: 'Automatically restore the verified snapshot if a published Worker fails Production smoke checks.'
+        description: 'Must remain false during M1 SEV-1; recovery requires a separate Owner decision.'
         required: true
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -51,6 +51,11 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Enforce M1 no automatic rollback directive
+        if: inputs.rollback_on_failure
+        run: |
+          echo 'M1 SEV-1 forbids automatic rollback. Run with rollback_on_failure=false.' >&2
+          exit 1
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
