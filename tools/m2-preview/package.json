@@ -1,0 +1,8 @@
+{
+  "name": "dpg-m2-preview-publisher-tools",
+  "private": true,
+  "version": "0.0.0",
+  "devDependencies": {
+    "wrangler": "4.135.0"
+  }
+}

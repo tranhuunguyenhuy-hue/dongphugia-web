@@ -116,6 +116,7 @@ jobs:
           const forbidden=/(SERVICE_ROLE|AUTH_ADMIN|ADMIN_SESSION|SECRET|PASSWORD|DATABASE_URL|DIRECT_URL|PRIVATE_KEY|CREDENTIAL|CLOUDFLARE_API_TOKEN|BUNNY_API_KEY)/i;
           if(Object.keys(x.vars||{}).some(name=>forbidden.test(name))) process.exit(1);
           if(x.main!=='worker/index.js' || !x.assets?.directory) process.exit(1);
+          if(x.preview_urls!==true) process.exit(1); // Preserve protected named staging URLs.
           if(process.env.PUBLIC_CATALOGUE_SOURCE==='postgresql'
             && (!/^[0-9a-f]{32}$/.test(process.env.V1_PUBLIC_HYPERDRIVE_ID||'')
               || x.hyperdrive?.length!==1
