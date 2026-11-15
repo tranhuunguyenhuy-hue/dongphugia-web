@@ -19,6 +19,7 @@ export const metadata: Metadata = {
   title: 'Đông Phú Gia - Vật liệu xây dựng cao cấp tại Đà Lạt',
   description: 'Đông Phú Gia - Nhà phân phối vật liệu xây dựng cao cấp tại Đà Lạt.',
   icons: { icon: '/images/logo-icon.svg' },
+  other: { 'facebook-domain-verification': 'gvf51p663wowwajs4hoc2gv2zfiuh7' },
   robots: appEnvironment.previewNoindex
     ? { index: false, follow: false }
     : { index: true, follow: true },
