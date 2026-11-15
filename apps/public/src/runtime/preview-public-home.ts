@@ -9,13 +9,21 @@ import {
   getPreviewCatalogueProducts,
   PUBLIC_CATALOGUE_FIXTURE_NOTICE,
 } from './preview-public-catalogue'
-import { usesPublicSnapshot } from './public-snapshot-mode'
+import { publicSnapshotCheckpoint, usesPublicSnapshot, usesProductionPublishedCatalogue } from './public-snapshot-mode'
 import { readSnapshotManifest } from './public-snapshot-catalogue'
 import { historicalBlogImage } from './legacy-blog'
 import { getPublicBlogPosts } from './live-public-blog'
 
+// Hosted M2 parity requires a pinned local Public snapshot, never fixtures or
+// a runtime fetch from Production. Production behavior remains unchanged.
+function publicHomeParityEnabled() {
+  return process.env.APP_ENV === 'production' || (process.env.APP_ENV === 'staging'
+    && publicSnapshotCheckpoint() !== null
+    && !publicPostgresEnabled() && !usesProductionPublishedCatalogue())
+}
+
 export async function getPublicHomeBanners(): Promise<PublicHomePageData['banners']> {
-  if (process.env.APP_ENV !== 'production') return []
+  if (!publicHomeParityEnabled()) return []
   // Owner-verified historical Production artwork, archived in the legacy Supabase Storage bucket.
   // These three objects correspond to inactive legacy DB rows (6, 4, 5); Owner confirmed
   // the artworks and order, independently of those historical is_active flags.
@@ -78,7 +86,7 @@ export async function getPublicHomeContent(): Promise<PublicHomeContent> {
 
   return {
     categories,
-    posts: process.env.APP_ENV === 'production' ? blogPosts.slice(0, 3).map((post) => ({
+    posts: publicHomeParityEnabled() ? blogPosts.slice(0, 3).map((post) => ({
           id: post.id,
           title: post.title,
           slug: post.slug,
@@ -87,7 +95,8 @@ export async function getPublicHomeContent(): Promise<PublicHomeContent> {
           publishedAt: post.published_at,
           category: { name: post.category.name, slug: post.category.slug },
         })) : [],
-    previewNotice: process.env.APP_ENV === 'production' ? undefined : catalogueManifest
+    previewNotice: process.env.APP_ENV === 'production' ? undefined : publicHomeParityEnabled()
+      ? `Preview — dữ liệu Public chỉ đọc tại checkpoint ${catalogueManifest?.checkpoint}.` : catalogueManifest
       ? `${PUBLIC_CATALOGUE_FIXTURE_NOTICE} Checkpoint: ${catalogueManifest.checkpoint}. Banner và Blog được ẩn vì chưa xác minh được tuyến nội dung công khai. Dữ liệu Admin riêng tư, xác thực, đơn hàng và mọi thao tác ghi không khả dụng trong môi trường này.`
       : PUBLIC_CATALOGUE_FIXTURE_NOTICE,
   }

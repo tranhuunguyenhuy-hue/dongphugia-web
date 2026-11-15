@@ -1,3 +1,4 @@
+import { FIXED_PREVIEW_ORIGIN } from './fixed-preview.mjs'
 const PUBLIC_PRODUCTION_ORIGIN = 'https://www.dongphugia.vn'
 const PUBLIC_BROWSER_ENV_KEYS = new Set([
   'NEXT_PUBLIC_SUPABASE_URL',
@@ -97,7 +98,7 @@ function validateOrigin(
     throw new Error('PUBLIC_LOCAL_PREVIEW_ORIGIN_REQUIRED')
   }
   if (environment === 'staging' && (parsed.protocol !== 'https:'
-    || parsed.hostname !== 'dpg-staging.tranhuunguyenhuy.workers.dev')) {
+    || parsed.origin !== FIXED_PREVIEW_ORIGIN)) {
     throw new Error('PUBLIC_STAGING_ORIGIN_REQUIRED')
   }
 

@@ -13,3 +13,7 @@ export function usesProductionPublishedCatalogue() {
     && process.env.PUBLIC_CATALOGUE_SOURCE === 'production-published-snapshot'
 }
 export function usesPublicSnapshot() { return publicPostgresEnabled() || publicSnapshotCheckpoint()!==null || usesProductionPublishedCatalogue() }
+
+export function usesStagingPublicSnapshot() {
+ return process.env.APP_ENV === 'staging' && process.env.PUBLIC_CATALOGUE_SOURCE === 'snapshot' && publicSnapshotCheckpoint() !== null
+}

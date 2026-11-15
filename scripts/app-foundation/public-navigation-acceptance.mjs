@@ -2,11 +2,13 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { chromium, webkit } from '@playwright/test'
+import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
 import { validatePublicNavigationResponse } from './public-navigation-response.mjs'
 const [base, sha] = process.argv.slice(2)
 assert.match(sha ?? '', /^[a-f0-9]{40}$/)
-const origin = new URL(base).origin
-assert.ok(origin === 'https://www.dongphugia.vn' || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin))
+const { origin, snapshotMode, hosted } = navigationTarget(base)
+const accessHeaders = readM2AccessHeaders(origin, process.env.M2_ACCESS_TOKEN_FILE)
+if (hosted) assert.ok(Object.keys(accessHeaders).length, 'M2_AUTHORIZED_ACCESS_REQUIRED')
 const proxyUrl = origin.startsWith('https:') && process.env.https_proxy ? new URL(process.env.https_proxy) : null
 let browser
 const browserTypes = [chromium, webkit]
@@ -27,13 +29,21 @@ try {
  for (const browserType of browserTypes) {
   browser = await launchBrowser(browserType)
   record({ event: "browser-start", engine: browserType.name() })
-  for (const width of browserType === webkit ? [390] : [390, 1440]) {
+  for (const width of browserType === webkit && !snapshotMode ? [390] : [390, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 1000 }, isMobile: width === 390 })
+    await applyM2BrowserAccess(context, origin, accessHeaders)
+    const requestGet = (url, options = {}) => {
+      assert.equal(new URL(url).origin, origin, 'M2_AUTH_ORIGIN_REQUIRED')
+      return context.request.get(url, { ...options, headers: { ...(options.headers || {}), ...accessHeaders }, ...(hosted ? { maxRedirects: 0 } : {}) })
+    }
     const page = await context.newPage()
     page.setDefaultTimeout(30000)
     const errors = []
     const responseChecks = []
     const listingShardRequests = []
+    if (snapshotMode) page.on('framenavigated', frame => {
+      if (frame === page.mainFrame() && /^https?:/.test(frame.url()) && new URL(frame.url()).origin !== origin) errors.push('m2-navigation-left-preview')
+    })
     page.on('pageerror', () => { errors.push('browser-pageerror'); record({ event: 'pageerror', width, route: routeClass(page.url()) }) })
     page.on('requestfailed', request => {
       if (new URL(request.url()).origin === origin) record({ event: 'requestfailed', width, route: routeClass(request.url()), kind: request.isNavigationRequest() ? 'document' : request.headers().rsc ? 'rsc' : 'other' })
@@ -54,7 +64,7 @@ try {
         .catch(e => { errors.push(e.message); record({ event: 'response-validation-failed', width, route: routeClass(r.url()) }) }))
     })
     await page.goto(origin, { waitUntil: 'networkidle' })
-    const api = await context.request.get(origin + '/api/search?q=A-LFV-402S-1&limit=8')
+    const api = await requestGet(origin + '/api/search?q=A-LFV-402S-1&limit=8')
     assert.equal(api.status(), 200)
     const pdp = (await api.json()).results.find(p => p.sku === 'A-LFV-402S-1')?.url
     assert.match(pdp ?? '', /^\/thiet-bi-ve-sinh\/[^/]+\/[^/]+$/)
@@ -127,7 +137,7 @@ try {
       await page.waitForURL('**/tim-kiem?q=A-LFV-402S-1')
       await page.locator('#main-content h1').waitFor()
       // Probe the warmed homepage separately; preserve the full route coverage.
-      const homeFlight = await context.request.get(origin + '/', { headers: {
+      const homeFlight = await requestGet(origin + '/', { headers: {
         RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
         'Next-URL': '/thiet-bi-ve-sinh/bon-cau.',
       }, timeout: 30000 })
@@ -146,7 +156,7 @@ try {
         for (let offset = 0; offset < burstPaths.length; offset += burstConcurrency) {
           await Promise.all(burstPaths.slice(offset, offset + burstConcurrency).map(async path => {
           const t = Date.now()
-          const r = await context.request.get(origin + path, { headers: {
+          const r = await requestGet(origin + path, { headers: {
             RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
             'Next-URL': path,
           }, timeout: 30000 })
@@ -160,7 +170,7 @@ try {
           }))
         }
       }
-      const dot = await context.request.get(origin + '/thiet-bi-ve-sinh/bon-cau.')
+      const dot = await requestGet(origin + '/thiet-bi-ve-sinh/bon-cau.')
       assert.equal(dot.status(), 404)
       assert.equal(dot.headers()['x-dpg-source-sha'], sha)
       await page.goto(origin, { waitUntil: 'networkidle' })

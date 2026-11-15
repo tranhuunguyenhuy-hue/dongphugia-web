@@ -29,7 +29,7 @@ export type SnapshotProduct={
 type SnapshotListing={slug:string;name:string;thumbnail_url?:string|null;totalCount:number}
 type SnapshotBrand={slug:string;name:string}
 export type SnapshotCategory={slug:string;name:string;listings:SnapshotListing[];homeProducts:SnapshotProduct[];totalCount:number;brands?:SnapshotBrand[];featuredProducts?:SnapshotProduct[];featuredProductsByBrand?:SnapshotProduct[]}
-type Manifest={contract:string;checkpoint:string;m3CodeSha:string;m3RunId:string;notice:string;categories:SnapshotCategory[];productBuckets:string[];products:number;listingProducts:number;variantGroups?:Record<string,SnapshotProduct[]>;searchShards?:string[];searchProducts?:number}
+type Manifest={contract:string;checkpoint:string;m3CodeSha?:string;m3RunId?:string;publishedBlogs?:number;capturedAt?:string;notice:string;categories:SnapshotCategory[];productBuckets:string[];products:number;listingProducts:number;routeBuckets?:string[];captureSource?:string;variantAssetGroups?:string[];variantGroups?:Record<string,SnapshotProduct[]>;searchShards?:string[];searchProducts?:number}
 type AssetEnvelope={contract:string;checkpoint:string;products?:SnapshotProduct[];totalCount?:number;page?:number}
 
 async function readAsset<T>(path:string):Promise<T> {
@@ -176,11 +176,46 @@ export async function getSnapshotSearchProducts(){
 export async function getSnapshotVariantSiblings(group:string,currentId:number){
  if(publicPostgresEnabled()) return getLiveVariantSiblings(group,currentId);
  if(!/^public-[1-9][0-9]*$/.test(group)||!Number.isSafeInteger(currentId))return []
- const members=(await readSnapshotManifest()).variantGroups?.[group]
+ const manifest=await readSnapshotManifest()
+ if(process.env.APP_ENV==='staging' && manifest.captureSource==='m1-public-read-model'
+   && manifest.variantAssetGroups?.includes(group)) {
+   const value=await readAsset<{memberIds:number[];products:SnapshotProduct[]}>(`variants/${group}.json`)
+   if(!Array.isArray(value.memberIds)||!value.memberIds.includes(currentId)||!Array.isArray(value.products)
+     ||value.products.length>9||value.products.some(p=>p.variant_group!==group))return []
+   return value.products.filter(p=>p.id!==currentId).slice(0,8)
+ }
+ const members=manifest.variantGroups?.[group]
  if(!Array.isArray(members)||members.length<2||members.length>8
    ||!members.some(p=>p.id===currentId)||members.some(p=>p.variant_group!==group))return []
  return members.filter(p=>p.id!==currentId)
 }
+export const getStagingListingIndex = cache(async (category:string, listing:string) => {
+ if(process.env.APP_ENV!=='staging'||!CATEGORY_FAMILIES.has(category)||!SLUG.test(listing))throw new Error('M2_STAGING_CAPTURE_REQUIRED')
+ const manifest=await readSnapshotManifest()
+ const expected=manifest.categories.find(c=>c.slug===category)?.listings.find(l=>l.slug===listing)
+ if(manifest.captureSource!=='m1-public-read-model'||!expected)return [] as SnapshotProduct[]
+ const value=await readAsset<{products:SnapshotProduct[]}>(`listing-index/${category}/${listing}.json`)
+ if(!Array.isArray(value.products)||value.products.length!==expected.totalCount)throw new Error('M2_STAGING_LISTING_REQUIRED')
+ return value.products
+})
+export async function getStagingProductByCategory(category:string, slug:string) {
+ if(!CATEGORY_FAMILIES.has(category)||!SLUG.test(slug))return null
+ const manifest=await readSnapshotManifest()
+ if(manifest.captureSource!=='m1-public-read-model')throw new Error('M2_STAGING_CAPTURE_REQUIRED')
+ const key=`${category}/${slug}`
+ const bucket=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key)))).slice(0,1).map(b=>b.toString(16).padStart(2,'0')).join('')
+ if(!manifest.routeBuckets?.includes(bucket))return null
+ const routes=await readAsset<{paths:Record<string,string>}>(`routes/${bucket}.json`)
+ const listing=routes.paths?.[key]
+ return typeof listing==='string'&&SLUG.test(listing)?getSnapshotProduct(category,listing,slug):null
+}
+
+export const readStagingSnapshotBlog = cache(async () => {
+ if(process.env.APP_ENV!=='staging'||publicPostgresEnabled()||(await readSnapshotManifest()).captureSource!=='m1-public-read-model')
+   throw new Error('M2_STAGING_CAPTURE_REQUIRED')
+ return readAsset<{posts:import('./legacy-blog').PublicLegacyBlogPost[];categories:import('./legacy-blog').LegacyBlogCategory[]}>('blog.json')
+})
+
 export async function getSnapshotCategories() { return publicPostgresEnabled()?getLiveCategories():(await readSnapshotManifest()).categories }
 async function getSnapshotCategory(categorySlug:string) {
  if(publicPostgresEnabled())return getLiveCategory(categorySlug)

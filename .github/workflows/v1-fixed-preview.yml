@@ -1,0 +1,191 @@
+name: M2 fixed Preview
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+      operation:
+        description: Public capture, preflight, or fixed staging publication
+        type: choice
+        options: [verify-read-access, capture-snapshot, prepare-preview, publish]
+        default: verify-read-access
+        required: true
+permissions:
+  contents: read
+  actions: read
+  checks: read
+concurrency:
+  group: m2-fixed-staging
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: catalogue-direct-migration
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - name: Install locked tools before scoped credentials
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+      - name: Check the M2 capture toolchain
+        run: npx --no-install tsc --noEmit --project scripts/app-foundation/tsconfig.m2.json
+      - name: Verify existing SELECT credential and actual Production counts
+        if: inputs.operation == 'verify-read-access'
+        env:
+          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
+        run: node scripts/app-foundation/verify-m2-snapshot-read-access.mjs
+      - name: Capture fresh Public-only immutable snapshot
+        if: inputs.operation != 'verify-read-access'
+        env:
+          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          ulimit -c 0
+          umask 077
+          npx --no-install tsx scripts/app-foundation/capture-m2-public-snapshot.mts
+          checkpoint="$(node -e 'process.stdout.write(require(process.env.RUNNER_TEMP+"/m2-public-snapshot/snapshot-lock.json").checkpoint)')"
+          [[ "$checkpoint" =~ ^[a-f0-9]{40}$ ]]
+          echo "PUBLIC_CATALOGUE_CHECKPOINT=$checkpoint" >> "$GITHUB_ENV"
+      - name: Install isolated Preview publisher and browser tools
+        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+        run: |
+          npm ci --prefix tools/m2-preview
+          npx playwright install --with-deps chromium webkit
+      - name: Build exact source with explicit staging configuration
+        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+        env:
+          APP_ENV: staging
+          APP_BUILD_TARGET: public
+          APP_ORIGIN: https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev
+          PREVIEW_NOINDEX: 'true'
+          PUBLIC_CATALOGUE_SOURCE: snapshot
+          BUILD_SOURCE_SHA: ${{ github.sha }}
+        run: |
+          cp apps/public/wrangler.fixed-preview.jsonc apps/public/wrangler.jsonc
+          npm run build:public-worker
+      - name: Assemble source-pinned fixed Preview artifact
+        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+        id: assemble
+        run: |
+          npx --no-install tsx scripts/app-foundation/assemble-m2-fixed-preview.mts \
+            --source-sha "$GITHUB_SHA" --snapshot-dir "$RUNNER_TEMP/m2-public-snapshot" \
+            --output "$RUNNER_TEMP/m2-preview-artifact"
+      - name: Preflight packaged staging with local ASSETS and full Public acceptance
+        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+        env:
+          M1_NAVIGATION_DIAGNOSTICS: ${{ runner.temp }}/m2-local-evidence/navigation.json
+          M2_EVIDENCE_DIR: ${{ runner.temp }}/m2-local-evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          export M2_PUBLIC_SNAPSHOT_CHECKPOINT="$PUBLIC_CATALOGUE_CHECKPOINT"
+          mkdir -p "$M2_EVIDENCE_DIR"
+          node tools/m2-preview/node_modules/wrangler/bin/wrangler.js dev --local \
+            --config "$RUNNER_TEMP/m2-preview-artifact/wrangler.fixed-preview.json" \
+            --ip 127.0.0.1 --port 8793 --show-interactive-dev-session=false \
+            > "$M2_EVIDENCE_DIR/workerd.log" 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in {1..60}; do
+            if curl --silent --fail --max-time 5 http://127.0.0.1:8793/api/health > "$M2_EVIDENCE_DIR/health.json"; then ready=1; break; fi
+            kill -0 "$worker_pid"
+            sleep 1
+          done
+          test "$ready" -eq 1
+          node scripts/app-foundation/public-navigation-acceptance.mjs http://127.0.0.1:8793 "$GITHUB_SHA"
+          node scripts/app-foundation/m2-public-acceptance.mjs "$RUNNER_TEMP/m2-preview-artifact" http://127.0.0.1:8793 "$GITHUB_SHA"
+          node --input-type=module - <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          writeFileSync(process.env.RUNNER_TEMP+'/m2-preview-artifact/m2-preflight.json', JSON.stringify({
+            status:'PASS',sourceSha:process.env.GITHUB_SHA,checkpoint:process.env.PUBLIC_CATALOGUE_CHECKPOINT
+          })+'\n',{mode:0o600});
+          NODE
+      - name: Upload sanitized access evidence
+        if: inputs.operation == 'verify-read-access'
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-read-access-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-read-access/read-access.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload immutable Public snapshot and checksums
+        if: inputs.operation == 'capture-snapshot'
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-public-snapshot-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-public-snapshot
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload exact preflighted Preview artifact
+        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-fixed-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-preview-artifact
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload local runtime evidence
+        if: always() && (inputs.operation == 'prepare-preview' || inputs.operation == 'publish')
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-local-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-local-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+  publish:
+    needs: prepare
+    if: inputs.operation == 'publish' && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Reuse the existing non-Production credential environment only. Its legacy
+    # label does not select a Worker: publisher code pins the parent and staging.
+    environment: cloudflare-staging
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - name: Install locked tools before publication credentials
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+          npm ci --prefix tools/m2-preview
+          npx playwright install --with-deps chromium webkit
+      - uses: actions/download-artifact@v4
+        with:
+          name: m2-fixed-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-preview-artifact
+      - name: Publish only named staging and run real hosted acceptance
+        env:
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: npx --no-install tsx scripts/app-foundation/publish-m2-fixed-preview.mjs "$RUNNER_TEMP/m2-preview-artifact" "$GITHUB_SHA"
+      - name: Upload sanitized hosted Preview evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-hosted-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-hosted-evidence
+          if-no-files-found: ignore
+          retention-days: 7

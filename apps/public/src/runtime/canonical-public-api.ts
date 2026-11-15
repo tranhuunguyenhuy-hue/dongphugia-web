@@ -3,7 +3,8 @@
 import {cache} from 'react'
 import type * as Original from '../../../../src/lib/public-api-products'
 export type {VariantSibling,ListingRuntimeConfig} from '../../../../src/lib/public-api-products'
-import {getSnapshotCategories,getSnapshotProducts,getSnapshotProduct,getSnapshotVariantSiblings} from './public-snapshot-catalogue'
+import {getSnapshotCategories,getSnapshotProducts,getSnapshotProduct,getSnapshotVariantSiblings,getStagingListingIndex,getStagingProductByCategory} from './public-snapshot-catalogue'
+import {usesStagingPublicSnapshot} from './public-snapshot-mode'
 import {publicPostgresEnabled} from './public-db'
 import {getLiveBrandsForListing,getLiveListing,getLiveListingLeaves,getLiveProductByCategory} from './live-public-catalogue'
 
@@ -19,15 +20,27 @@ export const getPublicListingLeaves:typeof Original.getPublicListingLeaves=async
  return (c?.listings??[]).map(l=>({id:null,name:l.name,slug:l.slug,description:null,thumbnail_url:null,source:'legacy' as const,_count:{products:l.totalCount}}))
 }
 export const getPublicListingLeaf:typeof Original.getPublicListingLeaf=async(category,sub)=>(await getPublicListingLeaves(category)).find(l=>l.slug===sub)??null
-export const getListingRuntimeConfig:typeof Original.getListingRuntimeConfig=()=>({snapshotMode:!publicPostgresEnabled(),hideUnverifiedCommercialFilters:publicPostgresEnabled(),profileKey:null,hideColorFilter:true,enableSpecFilters:false,enableProductTypeTabs:false,readyForRefactor:false,relationPriority:['brand']})
+export const getListingRuntimeConfig:typeof Original.getListingRuntimeConfig=()=>({snapshotMode:!publicPostgresEnabled()&&!usesStagingPublicSnapshot(),hideUnverifiedCommercialFilters:publicPostgresEnabled()||usesStagingPublicSnapshot(),profileKey:null,hideColorFilter:true,enableSpecFilters:false,enableProductTypeTabs:false,readyForRefactor:false,relationPriority:['brand']})
 export const getAvailableFiltersBySubcategory:typeof Original.getAvailableFiltersBySubcategory=async(sub,_type,category)=>{
  const categorySlug=category??'thiet-bi-ve-sinh'
  const brands=publicPostgresEnabled()
   ?await getLiveBrandsForListing(categorySlug,sub)
-  :Array.from(new Map((await allProducts(categorySlug,sub)).filter(p=>p.brands).map(p=>[p.brands!.slug,p.brands!])).values())
+  :Array.from(new Map((await (usesStagingPublicSnapshot()?getStagingListingIndex(categorySlug,sub):allProducts(categorySlug,sub))).filter(p=>p.brands).map(p=>[p.brands!.slug,p.brands!])).values())
+ if(usesStagingPublicSnapshot())brands.sort((a,b)=>a.slug.localeCompare(b.slug)).splice(32)
  return {brands:brands.map(b=>({...b,logo_url:null})),subcategories:(await getPublicListingLeaves(categorySlug)).map(l=>({...l,icon_name:null})),materials:[],origins:[],features:[],colors:[]}
 }
 export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
+ if(usesStagingPublicSnapshot()){
+  const category=f.category_slug??'thiet-bi-ve-sinh', size=f.pageSize??24, page=f.page??1
+  const leaf=typeof f.subcategory_slugs==='string'?f.subcategory_slugs:Array.isArray(f.subcategory_slugs)&&f.subcategory_slugs.length===1?f.subcategory_slugs[0]:f.subcategory_slug
+  if(typeof leaf!=='string'||!Number.isSafeInteger(page)||page<1||page>512||![5,12,24].includes(size))throw new Error('M2_STAGING_QUERY_UNSUPPORTED')
+  const brands=typeof f.brand_slug==='string'?f.brand_slug.split(','):f.brand_slug??[]
+  let products=await getStagingListingIndex(category,leaf)
+  if(brands.length>32||brands.some(slug=>!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))||f.price_min!==undefined||f.price_max!==undefined)products=[]
+  else products=products.filter(p=>(!brands.length||Boolean(p.brands&&brands.includes(p.brands.slug)))&&(!f.is_featured||p.is_featured))
+  const total=products.length,offset=(page-1)*(size===5?6:size)
+  return {products:products.slice(offset,offset+size),total,totalPages:Math.max(1,Math.ceil(total/size)),currentPage:page,page,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
+ }
  // PostgreSQL listing pages are server-paginated. Snapshot mode continues to
  // hydrate its immutable shards on the client; PDP related cards stay bounded.
  if(publicPostgresEnabled()){
@@ -80,8 +93,8 @@ function publicDescription(content:{summary:string|null;specifications:Record<st
  return rows.length?'<ul>'+rows.map(([key,value])=>'<li>'+escapePublicText(key)+': '+escapePublicText(value)+'</li>').join('')+'</ul>':null
 }
 export const getPublicProductBySlug:typeof Original.getPublicProductBySlug=async(category,slug)=>{
- if(publicPostgresEnabled()){
-  const p=await getLiveProductByCategory(category,slug)
+ if(publicPostgresEnabled()||usesStagingPublicSnapshot()){
+  const p=publicPostgresEnabled()?await getLiveProductByCategory(category,slug):await getStagingProductByCategory(category,slug)
   return p?{...p,description:publicDescription(p.publicContent),features:null,colors:p.colors??null,
    product_images:(p.publicContent?.gallery??[]).map(image_url=>({image_url,alt_text:p.name})),
    product_feature_values:p.product_feature_values??[],variant_group:p.variant_group??null,

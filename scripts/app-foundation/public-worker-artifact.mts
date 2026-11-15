@@ -31,7 +31,7 @@ async function listFiles(root: string, relative = ''): Promise<string[]> {
   return files.sort((left, right) => left.localeCompare(right))
 }
 
-async function digestDirectory(root: string, include: (relativePath: string) => boolean = () => true) {
+export async function digestDirectory(root: string, include: (relativePath: string) => boolean = () => true) {
   const hash = createHash('sha256')
   let totalBytes = 0
   let largestFile = { path: '', bytes: 0 }
@@ -47,8 +47,8 @@ async function digestDirectory(root: string, include: (relativePath: string) => 
   return { sha256: hash.digest('hex'), fileCount: files.length, totalBytes, largestFile }
 }
 
-async function runWranglerDryRun(repositoryRoot: string, artifactRoot: string, config = 'wrangler.json') {
-  const wrangler = path.join(repositoryRoot, 'apps', 'public', 'node_modules', 'wrangler', 'bin', 'wrangler.js')
+export async function runWranglerDryRun(repositoryRoot: string, artifactRoot: string, config = 'wrangler.json', publisherCli?: string) {
+  const wrangler = publisherCli || path.join(repositoryRoot, 'apps', 'public', 'node_modules', 'wrangler', 'bin', 'wrangler.js')
   const output = await new Promise<string>((resolve, reject) => {
     const child = spawn(process.execPath, [wrangler, 'deploy', '--dry-run', '--config', config], {
       cwd: artifactRoot,
@@ -157,7 +157,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify(evidence)}\n`)
 }
 
-main().catch((error) => {
+if (process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname) main().catch((error) => {
   console.error(`LEO563_PUBLIC_WORKER_ARTIFACT_FAILED: ${error.message}`)
   process.exitCode = 1
 })
