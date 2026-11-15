@@ -29,7 +29,7 @@ export function Footer() {
                                 </h3>
                             </div>
                             <div className="flex flex-wrap gap-3 text-sm font-medium">
-                                <a href="tel:0949349949" className="rounded-lg bg-brand-700 px-5 py-3 text-white hover:bg-brand-800">Gọi tư vấn</a>
+                                <a href="tel:0913865685" className="rounded-lg bg-brand-700 px-5 py-3 text-white hover:bg-brand-800">Gọi tư vấn</a>
                                 <a href="https://zalo.me/0855528688" target="_blank" rel="noopener noreferrer" className="rounded-lg border border-brand-700 px-5 py-3 text-brand-700 hover:bg-white">Nhắn Zalo</a>
                             </div>
                             <p className="text-stone-500 text-[13px] leading-relaxed max-w-[360px]">
@@ -81,7 +81,7 @@ export function Footer() {
                                     <div className="flex flex-col gap-1.5 mt-1">
                                         <div className="text-stone-600 text-body-sm">
                                             <span className="font-medium">Hotline:</span>{" "}
-                                            <a href={`tel:0949349949`} className="hover:text-brand-600 font-medium transition-colors">
+                                            <a href={`tel:${siteConfig.contact.hotline}`} className="hover:text-brand-600 font-medium transition-colors">
                                                 {siteConfig.contact.hotlineLabel}
                                             </a>
                                         </div>
@@ -97,6 +97,13 @@ export function Footer() {
                             </ul>
                         </div>
                     </div>
+                </div>
+
+                {/* Registered legal identity; showroom address above remains unchanged. */}
+                <div className="border-t border-stone-200 pt-6 pb-2">
+                    <p className="text-stone-600 text-[13px] leading-relaxed text-center lg:text-left">
+                        {siteConfig.legal.name} · MSDN {siteConfig.legal.registrationNumber} · {siteConfig.legal.registeredAddress}
+                    </p>
                 </div>
 
                 {/* Bottom Bar */}
