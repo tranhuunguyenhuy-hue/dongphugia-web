@@ -95,12 +95,12 @@ async function ensureProductionUnchanged() {
 async function run(command, args, env) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, { env, stdio: ['ignore','pipe','pipe'] })
-    let stdout = '', stderr = ''
-    child.stdout.on('data', chunk => { stdout += chunk; if (stdout.length > 64 * 1024 * 1024) child.kill() })
+    let stderr = ''
+    child.stdout.resume() // Structured output is read from a dedicated JSONL file, never from raw API/module logs.
     child.stderr.on('data', chunk => { if (stderr.length < 100_000) stderr += chunk })
     child.on('error', reject)
     child.on('close', async code => {
-      if (code === 0) return accept(stdout)
+      if (code === 0) return accept()
       if (evidencePath) await writeFile(join(resolve(evidencePath, '..'), 'command-failure.txt'), sanitizeM2CommandFailure(stderr, [...maskedValues, process.env.CLOUDFLARE_API_TOKEN]), { mode: 0o600 }).catch(() => {})
       reject(new Error('M2_CHILD_COMMAND_FAILED'))
     })
@@ -183,7 +183,7 @@ async function main() {
   console.log(`::add-mask::${service.client_id}`); console.log(`::add-mask::${service.client_secret}`)
   tokenFile = resolve(process.env.RUNNER_TEMP, 'm2-ci-access.json')
   await writeFile(tokenFile, JSON.stringify({ client_id: service.client_id, client_secret: service.client_secret }), { mode: 0o600, flag: 'wx' })
-  const policy = await cf(`/access/apps/${APP}/policies`, 'POST', { name: `M2 CI ${process.env.GITHUB_RUN_ID}`, decision: 'non_identity', precedence: 2,
+  const policy = await cf(`/access/apps/${APP}/policies`, 'POST', { name: `M2 CI ${process.env.GITHUB_RUN_ID}`, decision: 'non_identity', precedence: 2, session_duration: '1h',
     include: [{ service_token: { token_id: tokenId } }], exclude: [], require: [] })
   assert.notEqual(policy.id, '516d7773-ba00-4f6e-b6ef-c5d4f545d544', 'M2_OWNER_POLICY_IMMUTABLE')
   assert.equal(policy.decision, 'non_identity')
@@ -192,10 +192,18 @@ async function main() {
   await assertNoProductionRelease()
   await ensureProductionUnchanged()
   const wrangler = resolve('tools/m2-preview/node_modules/wrangler/bin/wrangler.js')
-  const raw = await run(process.execPath, [wrangler, 'preview', '--worker-name', FIXED_PREVIEW_WORKER, '--name', FIXED_PREVIEW_NAME,
+  const cliOutput = resolve(process.env.RUNNER_TEMP, 'm2-wrangler-output.jsonl')
+  await run(process.execPath, [wrangler, 'preview', '--worker-name', FIXED_PREVIEW_WORKER, '--name', FIXED_PREVIEW_NAME,
     '--config', join(root, 'wrangler.fixed-preview.json'), '--ignore-base-config', '--tag', sourceSha, '--message', `M2 Public ${sourceSha}`, '--json'],
-    { ...process.env, WRANGLER_SEND_METRICS: 'false' })
-  const result = JSON.parse(raw)
+    { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_OUTPUT_FILE_PATH: cliOutput })
+  const records = (await readFile(cliOutput, 'utf8')).trim().split('\n').map(line => JSON.parse(line))
+  const published = records.filter(record => record.type === 'preview').at(-1)
+  assert.equal(published?.preview_name, FIXED_PREVIEW_NAME, 'M2_CLI_PREVIEW_OUTPUT_REQUIRED')
+  assert.match(published.preview_id || '', /^[a-f0-9]{32}$/)
+  assert.match(published.deployment_id || '', /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/)
+  const preview = await cf(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}`)
+  const deployment = await cf(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}/deployments/${published.deployment_id}`)
+  const result = { preview, deployment }
   assert.equal(result.preview.name, FIXED_PREVIEW_NAME)
   assert.match(result.deployment.id, /^[a-f0-9-]{36}$/)
   assert.ok(result.preview.urls.map(url => new URL(url).origin).includes(FIXED_PREVIEW_ORIGIN))
