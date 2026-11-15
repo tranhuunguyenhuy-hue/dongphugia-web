@@ -36,6 +36,9 @@ async function main() {
   const client = await connect('read')
   phase = 'VERIFY_PUBLIC_READ_COUNTS'
   const access = await verifyM2SnapshotReadAccess(client, before.body)
+  console.log(JSON.stringify({ status: 'PASS', phase: 'M2_READ_ACCESS', readOnly: access.readOnly,
+    tls: access.tls, tlsVerification: access.tlsVerification, backendTls: access.backendTls,
+    products: access.products, listingProducts: access.listingProducts, publishedBlogs: access.publishedBlogs }))
   phase = 'CAPTURE_PUBLIC_ONLY'
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY')
   const entries: CaptureEntry[] = []
