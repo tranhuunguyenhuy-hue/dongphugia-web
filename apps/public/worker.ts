@@ -12,6 +12,7 @@ import {
   isAnonymousCacheCandidate,
   isCacheableResponse,
   isForbiddenInternalControlRequest,
+  isMalformedCataloguePagePath,
   PRIVATE_CACHE_CONTROL,
   PUBLIC_BROWSER_CACHE_CONTROL,
   PUBLIC_EDGE_CACHE_CONTROL,
@@ -76,6 +77,19 @@ export default {
         headers: {
           'Cache-Control': PRIVATE_CACHE_CONTROL,
           ...robotHeaders,
+        },
+      })
+    }
+
+    // Reject invalid catalogue slugs before passing them into vinext/Next.
+    // A trailing-dot PLP consumed the packaged Worker CPU quota in release #29.
+    if (isMalformedCataloguePagePath(request)) {
+      return new Response('Not found.', {
+        status: 404,
+        headers: {
+          'Cache-Control': PRIVATE_CACHE_CONTROL,
+          ...robotHeaders,
+          ...sourceIdentityHeader,
         },
       })
     }

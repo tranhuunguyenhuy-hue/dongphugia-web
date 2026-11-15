@@ -8,6 +8,7 @@ import {
   isAnonymousCacheCandidate,
   isCacheableResponse,
   isForbiddenInternalControlRequest,
+  isMalformedCataloguePagePath,
   publicRuntimeRejectionDiagnostics,
   publicRuntimeRejectionReason,
   PUBLIC_EDGE_CACHE_CONTROL,
@@ -119,6 +120,31 @@ describe('Public Worker fail-closed policy', () => {
     expect(isForbiddenInternalControlRequest(new Request('https://preview.invalid/', { headers: { 'x-prerender-revalidate': 'synthetic' } }))).toBe(true)
     expect(isForbiddenInternalControlRequest(new Request('https://preview.invalid/', { headers: { cookie: '__prerender_bypass=synthetic' } }))).toBe(true)
     expect(isForbiddenInternalControlRequest(new Request('https://preview.invalid/'))).toBe(false)
+  })
+
+  it('rejects malformed trailing-dot catalogue routes before rendering without blocking valid pages or assets', () => {
+    for (const path of [
+      '/thiet-bi-ve-sinh/bon-cau.',
+      '/thiet-bi-ve-sinh/bon-cau./sku-example',
+      '/thiet-bi-ve-sinh/bon-cau/sku-example.',
+      '/gach-op-lat/gach-van-da.',
+      '/thiet-bi-bep/voi-rua-chen.',
+      '/vat-lieu-nuoc/phu-kien.',
+    ]) {
+      expect(isMalformedCataloguePagePath(new Request('https://www.dongphugia.vn' + path))).toBe(true)
+    }
+    for (const path of [
+      '/',
+      '/thiet-bi-ve-sinh',
+      '/thiet-bi-ve-sinh/bon-cau',
+      '/thiet-bi-ve-sinh/bon-cau/sku-example',
+      '/blog/huong-dan-chon',
+      '/images/Logo.png',
+      '/_next/static/chunks/app.js',
+      '/api/catalogue/listings/thiet-bi-ve-sinh/bon-cau.',
+    ]) {
+      expect(isMalformedCataloguePagePath(new Request('https://www.dongphugia.vn' + path))).toBe(false)
+    }
   })
 
   it('allows only owned public GET/HEAD APIs and blocks arbitrary or mutating routes', () => {

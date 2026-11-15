@@ -27,6 +27,19 @@ const PRIVILEGED_RUNTIME_BINDING_PATTERN =
 const LISTING_API_FAMILIES = new Set(['thiet-bi-ve-sinh', 'thiet-bi-bep', 'vat-lieu-nuoc', 'gach-op-lat'])
 const LISTING_API_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+const CATALOGUE_PAGE_FAMILIES = new Set(['thiet-bi-ve-sinh', 'thiet-bi-bep', 'vat-lieu-nuoc', 'gach-op-lat'])
+
+// Invalid trailing-dot catalogue slugs are not real pages. Reject them before
+// routing through vinext/Next: a dot-suffixed PLP triggered costly repeated
+// rendering and CPU exhaustion during the packaged Worker release #29 check.
+// Leave static assets, APIs, legitimate SEO slugs and other routes untouched.
+export function isMalformedCataloguePagePath(request: Request) {
+  const segments = new URL(request.url).pathname.split('/').filter(Boolean)
+  return (segments.length === 2 || segments.length === 3)
+    && CATALOGUE_PAGE_FAMILIES.has(segments[0])
+    && segments.slice(1).some(segment => segment.endsWith('.'))
+}
+
 export const PRIVATE_CACHE_CONTROL = 'private, no-store'
 export const PUBLIC_BROWSER_CACHE_CONTROL = 'public, max-age=0, must-revalidate'
 export const PUBLIC_EDGE_CACHE_CONTROL = `public, max-age=${PUBLIC_EDGE_CACHE_SECONDS}, must-revalidate`
