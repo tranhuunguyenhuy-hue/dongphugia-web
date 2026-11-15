@@ -133,6 +133,14 @@ describe('V1 packaged Worker preflight diagnostics', () => {
     expect(JSON.stringify(result)).not.toContain('TLS secret details')
   })
 
+  it('preserves render-hook classification while discarding private context', () => {
+    const events = parseSafeRuntimeEvents(JSON.stringify({ event: 'PUBLIC_REQUEST_RENDER_ERROR',
+      errorClass: 'TypeError', sqlState: '42501', route: '/', headers: { cookie: 'private' },
+      message: 'private SQL', stack: 'private stack' }))
+    expect(events).toEqual([{ event: 'PUBLIC_REQUEST_RENDER_ERROR', errorClass: 'TypeError', sqlState: '42501', route: '/' }])
+    expect(JSON.stringify(events)).not.toContain('private')
+  })
+
   it('retains only allowlisted Worker database and PLP events in the artifact', () => {
     const rawEvents = [
       JSON.stringify({

@@ -386,6 +386,9 @@ jobs:
           test "$CLOUDFLARE_ACCOUNT_ID" = 'd54f3402b9d112ab64d6135e0e3f1fb1'
           cd "$RUNNER_TEMP/v1-release"
           node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" deploy --config wrangler.json
+      - name: Wait for exact Production identity before acceptance
+        if: inputs.publish
+        run: node scripts/app-foundation/wait-public-production-identity.mjs "$GITHUB_SHA"
       - name: Smoke real Production domain
         if: inputs.publish
         shell: bash
