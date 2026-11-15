@@ -70,7 +70,7 @@ jobs:
       - name: Verify request ownership and install browser acceptance runtime
         run: |
           node scripts/app-foundation/public-db-workerd-regression.mjs
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Build actual Cloudflare Public Worker
         shell: bash
         env:
@@ -280,6 +280,7 @@ jobs:
           fi
           cat "$diagnostic_dir/smoke.log"
           set +e
+          M1_NAVIGATION_DIAGNOSTICS="$RUNNER_TEMP/v1-navigation-packaged.json" \
           node "$GITHUB_WORKSPACE/scripts/app-foundation/public-navigation-acceptance.mjs" \
             http://127.0.0.1:8793 "$GITHUB_SHA"
           navigation_exit_code=$?
@@ -315,7 +316,7 @@ jobs:
           name: v1-public-preflight-diagnostics-${{ github.run_id }}
           path: ${{ runner.temp }}/v1-public-smoke-diagnostics/diagnostics.json
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
       - name: Verify previous Production rollback target and record active version
         id: rollback
         if: inputs.publish && inputs.rollback_on_failure
@@ -394,7 +395,17 @@ jobs:
             https://www.dongphugia.vn "$GITHUB_SHA" production
       - name: Repeat mobile and desktop navigation on Production
         if: inputs.publish
+        env:
+          M1_NAVIGATION_DIAGNOSTICS: ${{ runner.temp }}/v1-navigation-production.json
         run: node scripts/app-foundation/public-navigation-acceptance.mjs https://www.dongphugia.vn "$GITHUB_SHA"
+      - name: Preserve sanitized navigation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-navigation-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/v1-navigation-*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Verify deployed Worker version and Hyperdrive binding
         if: inputs.publish
         shell: bash
