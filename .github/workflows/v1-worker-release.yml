@@ -311,13 +311,14 @@ jobs:
           path: ${{ runner.temp }}/v1-public-smoke-diagnostics/diagnostics.json
           if-no-files-found: error
           retention-days: 1
-      - name: Verify live snapshot rollback and record active version
+      - name: Verify previous Production rollback target and record active version
         id: rollback
         if: inputs.publish && inputs.rollback_on_failure
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
           wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
@@ -334,32 +335,28 @@ jobs:
           NODE
           rollback_version="$(sed -n 's/^version_id=//p' "$GITHUB_OUTPUT" | tail -n1)"
           node "$wrangler" versions view "$rollback_version" --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/v1-before-version.json"
-          node - "$RUNNER_TEMP/v1-before-version.json" <<'NODE'
-          const fs=require('fs');
-          const raw=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
-          const v=raw.version??raw.result??raw;
-          const bindings=v.resources?.bindings??[];
-          if(bindings.some(b=>b.name==='PUBLIC_DB'||b.type==='hyperdrive')) process.exit(1);
-          if(!bindings.some(b=>b.name==='APP_ENV'&&b.text==='production')
-            ||!bindings.some(b=>b.name==='APP_ORIGIN'&&b.text==='https://www.dongphugia.vn')) process.exit(1);
-          NODE
           curl --fail --silent --show-error --max-time 20 \
-            --dump-header "$RUNNER_TEMP/v1-snapshot-health.headers" \
-            --output "$RUNNER_TEMP/v1-snapshot-health.json" \
+            --dump-header "$RUNNER_TEMP/v1-previous-health.headers" \
+            --output "$RUNNER_TEMP/v1-previous-health.json" \
             https://www.dongphugia.vn/api/health
-          node - "$RUNNER_TEMP/v1-snapshot-health.headers" "$RUNNER_TEMP/v1-snapshot-health.json" "$GITHUB_OUTPUT" <<'NODE'
-          const fs=require('fs');
-          const headers=fs.readFileSync(process.argv[2],'utf8');
-          const body=JSON.parse(fs.readFileSync(process.argv[3],'utf8'));
-          const sha=headers.match(/^x-dpg-source-sha:\s*([a-f0-9]{40})\s*$/im)?.[1];
-          if(!sha||body.status!=='ok'||body.catalogueMode!=='verified-snapshot'||body.publicProducts!==5223
-            ||body.listingProducts!==4853||!/^[a-f0-9]{40}$/.test(body.catalogueCheckpoint||'')) process.exit(1);
-          fs.appendFileSync(process.argv[4],`snapshot_sha=${sha}\nsnapshot_checkpoint=${body.catalogueCheckpoint}\n`);
-          NODE
-          snapshot_sha="$(sed -n 's/^snapshot_sha=//p' "$GITHUB_OUTPUT" | tail -n1)"
-          snapshot_checkpoint="$(sed -n 's/^snapshot_checkpoint=//p' "$GITHUB_OUTPUT" | tail -n1)"
-          node "$GITHUB_WORKSPACE/scripts/catalogue-direct/public-production-smoke.mjs" \
-            https://www.dongphugia.vn "$snapshot_sha" production "$snapshot_checkpoint"
+          node "$GITHUB_WORKSPACE/scripts/app-foundation/verify-public-rollback-candidate.mjs" \
+            "$RUNNER_TEMP/v1-before-deployments.json" \
+            "$RUNNER_TEMP/v1-before-version.json" \
+            "$RUNNER_TEMP/v1-previous-health.headers" \
+            "$RUNNER_TEMP/v1-previous-health.json"
+          rollback_mode="$(sed -n 's/^mode=//p' "$GITHUB_OUTPUT" | tail -n1)"
+          rollback_sha="$(sed -n 's/^source_sha=//p' "$GITHUB_OUTPUT" | tail -n1)"
+          rollback_checkpoint="$(sed -n 's/^checkpoint=//p' "$GITHUB_OUTPUT" | tail -n1)"
+          if [ "$rollback_mode" = 'postgresql' ]; then
+            node "$GITHUB_WORKSPACE/scripts/app-foundation/public-postgres-release-smoke.mjs" \
+              https://www.dongphugia.vn "$rollback_sha" production
+          elif [ "$rollback_mode" = 'verified-snapshot' ]; then
+            node "$GITHUB_WORKSPACE/scripts/catalogue-direct/public-production-smoke.mjs" \
+              https://www.dongphugia.vn "$rollback_sha" production "$rollback_checkpoint"
+          else
+            echo 'Unsupported previous Production rollback mode.' >&2
+            exit 1
+          fi
       - name: Require verified PostgreSQL source for publication
         if: inputs.publish && inputs.data_source != 'postgresql'
         shell: bash
@@ -429,23 +426,32 @@ jobs:
           NODE
           echo "DEPLOYED_WORKER_VERSION=$deployed_version" >> "$GITHUB_STEP_SUMMARY"
           echo "DEPLOYED_WORKER_BINDING=PUBLIC_DB:Hyperdrive" >> "$GITHUB_STEP_SUMMARY"
-      - name: Restore verified snapshot and smoke it after a failed Production release
+      - name: Restore verified previous Production version and smoke it after a failed release
         if: failure() && inputs.publish && inputs.rollback_on_failure && steps.deploy.outcome != 'skipped' && steps.rollback.outputs.version_id != ''
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PREVIOUS_VERSION_ID: ${{ steps.rollback.outputs.version_id }}
-          SNAPSHOT_SOURCE_SHA: ${{ steps.rollback.outputs.snapshot_sha }}
-          SNAPSHOT_CHECKPOINT: ${{ steps.rollback.outputs.snapshot_checkpoint }}
+          PREVIOUS_MODE: ${{ steps.rollback.outputs.mode }}
+          PREVIOUS_SOURCE_SHA: ${{ steps.rollback.outputs.source_sha }}
+          PREVIOUS_CHECKPOINT: ${{ steps.rollback.outputs.checkpoint }}
         run: |
           set -euo pipefail
           wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
           node "$wrangler" rollback "$PREVIOUS_VERSION_ID" \
             --name dongphugia-v1-public-production --yes \
-            --message 'V1 PostgreSQL M1 smoke failed; restore verified snapshot'
-          node "$GITHUB_WORKSPACE/scripts/catalogue-direct/public-production-smoke.mjs" \
-            https://www.dongphugia.vn "$SNAPSHOT_SOURCE_SHA" production "$SNAPSHOT_CHECKPOINT"
+            --message 'V1 PostgreSQL M1 smoke failed; restore previous verified Production version'
+          if [ "$PREVIOUS_MODE" = 'postgresql' ]; then
+            node "$GITHUB_WORKSPACE/scripts/app-foundation/public-postgres-release-smoke.mjs" \
+              https://www.dongphugia.vn "$PREVIOUS_SOURCE_SHA" production
+          elif [ "$PREVIOUS_MODE" = 'verified-snapshot' ]; then
+            node "$GITHUB_WORKSPACE/scripts/catalogue-direct/public-production-smoke.mjs" \
+              https://www.dongphugia.vn "$PREVIOUS_SOURCE_SHA" production "$PREVIOUS_CHECKPOINT"
+          else
+            echo 'Unsupported previous Production rollback mode.' >&2
+            exit 1
+          fi
       - name: Log immutable source and deployment decision
         if: always()
         shell: bash
@@ -461,8 +467,7 @@ jobs:
             echo "- Automatic rollback on failure requested: ${{ inputs.rollback_on_failure }}"
             echo "- PostgreSQL permission/TLS/read smoke: ${{ steps.db_preflight.outcome }}"
             echo "- Live Public Worker PostgreSQL preflight: ${{ steps.public_preflight.outcome }}"
-            echo "- Snapshot rollback version: ${{ steps.rollback.outputs.version_id }}"
-            echo "- Snapshot source/checkpoint: ${{ steps.rollback.outputs.snapshot_sha }} / ${{ steps.rollback.outputs.snapshot_checkpoint }}"
+            echo "- Previous Production rollback mode/version/source/checkpoint: ${{ steps.rollback.outputs.mode }} / ${{ steps.rollback.outputs.version_id }} / ${{ steps.rollback.outputs.source_sha }} / ${{ steps.rollback.outputs.checkpoint }}"
             echo "- Production deployment version: ${{ steps.deploy.outcome }}"
             echo "- Deployment verification: ${{ job.status }}"
             echo "- Before M1 acceptance: no claim of complete hosted Products/Blog."
