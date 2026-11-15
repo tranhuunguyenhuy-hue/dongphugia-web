@@ -119,8 +119,18 @@ try {
       await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().press('Enter')
       await page.waitForURL('**/tim-kiem?q=A-LFV-402S-1')
       await page.locator('#main-content h1').waitFor()
+      // Probe the warmed homepage separately; preserve the original burst size.
+      const homeFlight = await context.request.get(origin + '/', { headers: {
+        RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
+        'Next-URL': '/thiet-bi-ve-sinh/bon-cau.',
+      }, timeout: 30000 })
+      assert.equal(homeFlight.status(), 200)
+      assert.match(homeFlight.headers()['content-type'], /text\/x-component/)
+      assert.equal(homeFlight.headers()['x-dpg-source-sha'], sha)
+      assert.ok(!/(?:^|\n)[0-9a-f]+:E\{|"digest":|This page couldn.t load/.test(await homeFlight.text()))
+      probes += 1
       for (const batch of [0, 1]) {
-        await Promise.all(['/', '/gach-op-lat', '/thiet-bi-ve-sinh', '/thiet-bi-ve-sinh/bon-cau', pdp, '/blog'].map(async path => {
+        await Promise.all(['/gach-op-lat', '/thiet-bi-ve-sinh', '/thiet-bi-ve-sinh/bon-cau', pdp, '/blog'].map(async path => {
           const t = Date.now()
           const r = await context.request.get(origin + path, { headers: {
             RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
