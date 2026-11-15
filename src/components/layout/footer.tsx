@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Intentional hard navigation for Home: avoid intermittent RSC Flight return failures on Production Workers. */
 import Link from "next/link";
 import { siteConfig, NAV_PRODUCT_CATEGORIES, NAV_FOOTER_ABOUT_LINKS, NAV_FOOTER_LEGAL_LINKS } from "@/config/site";
 import { DeferredResponsiveMedia } from "@/components/media/deferred-responsive-media";
@@ -9,7 +10,7 @@ export function Footer() {
                 <div className="flex flex-col lg:flex-row gap-12 lg:gap-24 mb-16">
                     {/* Left Column: Logo & contact */}
                     <div className="w-full lg:w-[380px] shrink-0 flex flex-col gap-8">
-                        <Link prefetch={false} href="/" className="inline-flex items-center" aria-label="Đông Phú Gia - Trang chủ">
+                        <a href="/" className="inline-flex items-center" aria-label="Đông Phú Gia - Trang chủ">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src="/images/Logo.png"
@@ -19,7 +20,7 @@ export function Footer() {
                                 loading="lazy"
                                 className="h-auto w-[164px] object-contain lg:w-[184px]"
                             />
-                        </Link>
+                        </a>
 
                         <div className="flex flex-col gap-4">
                             <div className="flex flex-col gap-2">

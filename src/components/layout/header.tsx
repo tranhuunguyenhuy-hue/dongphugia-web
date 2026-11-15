@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Intentional hard navigation for Home: avoid intermittent RSC Flight return failures on Production Workers. */
 "use client"
 
 import Link from "next/link"
@@ -121,7 +122,8 @@ export function Header() {
                     <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
                         <div className="h-[72px] lg:h-[88px] flex items-center justify-between transition-all duration-300 w-full">
                             {/* Logo */}
-                            <Link prefetch={false} href="/" className="flex items-center shrink-0" aria-label="Đông Phú Gia - Trang chủ">
+                            {/* Use a full document navigation for Home: the client RSC return transition can fail under Production load. */}
+                        <a href="/" className="flex items-center shrink-0" aria-label="Đông Phú Gia - Trang chủ">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src="/images/Logo.png"
@@ -130,7 +132,7 @@ export function Header() {
                                     height={48}
                                     className="w-[204px] lg:w-[245px] h-auto object-contain"
                                 />
-                            </Link>
+                            </a>
 
                             {/* Desktop Nav */}
                             <nav className="hidden lg:flex items-center gap-1 h-full" aria-label="Menu chính">
