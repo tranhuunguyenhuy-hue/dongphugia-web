@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ readPublicRows: vi.fn() }))
 vi.mock('./public-db', () => ({ readPublicRows: mocks.readPublicRows }))
 
-import { getLiveCategory, getLiveListing, getLiveListingPreview, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
+import { getLiveCategories, getLiveCategory, getLiveListing, getLiveListingPreview, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
 
 const product = {
   id: 42,
@@ -138,6 +138,21 @@ describe('Live public catalogue projection', () => {
     expect(mocks.readPublicRows.mock.calls[2][2]).toBe('category-root-featured')
     expect(mocks.readPublicRows.mock.calls[0][0]).toContain('AND c.slug=$1 GROUP BY')
     expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND b.slug IS NOT NULL')
+  })
+
+  it('does not scan all Public products for global homepage brand facets', async () => {
+    mocks.readPublicRows
+      .mockResolvedValueOnce([{
+        category_slug: 'thiet-bi-bep', category_name: 'Thiết bị bếp',
+        listing_slug: 'voi-rua-chen', listing_name: 'Vòi rửa chén', total_count: '12',
+      }])
+      .mockResolvedValueOnce([{ ...product }])
+    const categories = await getLiveCategories()
+    expect(categories).toHaveLength(1)
+    expect(mocks.readPublicRows).toHaveBeenCalledTimes(2)
+    expect(mocks.readPublicRows.mock.calls.map(call => call[2])).toEqual([
+      'category-listing-counts', 'category-root-featured',
+    ])
   })
 
   it('returns no route metadata for unsupported categories or missing eligible listings', async () => {
