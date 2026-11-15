@@ -9,7 +9,7 @@ export function Footer() {
                 <div className="flex flex-col lg:flex-row gap-12 lg:gap-24 mb-16">
                     {/* Left Column: Logo & contact */}
                     <div className="w-full lg:w-[380px] shrink-0 flex flex-col gap-8">
-                        <Link href="/" className="inline-flex items-center" aria-label="Đông Phú Gia - Trang chủ">
+                        <Link prefetch={false} href="/" className="inline-flex items-center" aria-label="Đông Phú Gia - Trang chủ">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                                 src="/images/Logo.png"
@@ -48,7 +48,7 @@ export function Footer() {
                             </div>
                             <ul className="flex flex-col gap-3">
                                 {NAV_PRODUCT_CATEGORIES.map(link => (
-                                    <li key={link.href}><Link href={link.href} className="text-stone-600 text-body-sm hover:text-brand-600 transition-colors">{link.label}</Link></li>
+                                    <li key={link.href}><Link prefetch={false} href={link.href} className="text-stone-600 text-body-sm hover:text-brand-600 transition-colors">{link.label}</Link></li>
                                 ))}
                             </ul>
                         </div>
@@ -61,7 +61,7 @@ export function Footer() {
                             </div>
                             <ul className="flex flex-col gap-3">
                                 {NAV_FOOTER_ABOUT_LINKS.map(link => (
-                                    <li key={link.href}><Link href={link.href} className="text-stone-600 text-body-sm hover:text-brand-600 transition-colors">{link.label}</Link></li>
+                                    <li key={link.href}><Link prefetch={false} href={link.href} className="text-stone-600 text-body-sm hover:text-brand-600 transition-colors">{link.label}</Link></li>
                                 ))}
                             </ul>
                         </div>
@@ -106,7 +106,7 @@ export function Footer() {
                     </p>
                     <div className="flex flex-wrap items-center justify-center lg:justify-end gap-4 lg:gap-6">
                         {NAV_FOOTER_LEGAL_LINKS.map(link => (
-                            <Link key={link.href} href={link.href} className="text-stone-500 text-[13px] hover:text-brand-600 transition-colors whitespace-nowrap">{link.label}</Link>
+                            <Link prefetch={false} key={link.href} href={link.href} className="text-stone-500 text-[13px] hover:text-brand-600 transition-colors whitespace-nowrap">{link.label}</Link>
                         ))}
                     </div>
                 </div>

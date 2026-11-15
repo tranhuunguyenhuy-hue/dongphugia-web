@@ -1,10 +1,12 @@
 declare const __DPG_BUILD_SOURCE_SHA__: string
 import { getSnapshotProducts, readSnapshotManifest } from './public-snapshot-catalogue'
+import { publicListingCache } from './public-listing-cache'
 import { publicPostgresEnabled } from './public-db'
 import { getLiveListing } from './live-public-catalogue'
 import { publicSnapshotCheckpoint } from './public-snapshot-mode'
 import {
     isPublicSnapshotListingProduct,
+    isPublicSnapshotListingShard,
     PUBLIC_SNAPSHOT_LISTING_CONTRACT,
     PUBLIC_SNAPSHOT_LISTING_MAX_PAGES,
     PUBLIC_SNAPSHOT_LISTING_PAGE_SIZE,
@@ -22,6 +24,17 @@ export async function getPublicSnapshotListingShard(
     if (!SAFE_SLUG.test(category) || !SAFE_SLUG.test(listing) || !Number.isSafeInteger(page) || page < 1) return null
 
     if (publicPostgresEnabled()) {
+        const source = publicSnapshotCheckpoint()
+            ?? (typeof __DPG_BUILD_SOURCE_SHA__ === 'undefined' ? '' : __DPG_BUILD_SOURCE_SHA__)
+        const cacheKey = `${source}/${category}/${listing}/${page}`
+        if (/^[a-f0-9]{40}$/.test(source)) {
+            const json = publicListingCache.get(cacheKey)
+            if (json) {
+                const cached: unknown = JSON.parse(json)
+                if (isPublicSnapshotListingShard(cached, { categorySlug: category, listingSlug: listing, page, checkpoint: source })) return cached
+                publicListingCache.delete(cacheKey)
+            }
+        }
         const live = await getLiveListing(category, listing, page)
         if (live.totalCount === 0) return null
         const totalPages = Math.ceil(live.totalCount / PUBLIC_SNAPSHOT_LISTING_PAGE_SIZE)
@@ -29,8 +42,7 @@ export async function getPublicSnapshotListingShard(
             throw new Error('PUBLIC_DATABASE_LISTING_TOO_LARGE')
         }
         if (page > totalPages) return null
-        const checkpoint = publicSnapshotCheckpoint()
-            ?? (typeof __DPG_BUILD_SOURCE_SHA__ === 'undefined' ? '' : __DPG_BUILD_SOURCE_SHA__)
+        const checkpoint = source
         if (!/^[a-f0-9]{40}$/.test(checkpoint)) {
             throw new Error('PUBLIC_DATABASE_SOURCE_ID_REQUIRED')
         }
@@ -49,12 +61,15 @@ export async function getPublicSnapshotListingShard(
         if (products.some(p => !isPublicSnapshotListingProduct(p, category, listing))) {
             throw new Error('PUBLIC_DATABASE_LISTING_INVALID')
         }
-        return {
+        const shard: PublicSnapshotListingShard = {
             contract: PUBLIC_SNAPSHOT_LISTING_CONTRACT,
             checkpoint, categorySlug: category, listingSlug: listing,
             page, pageSize: PUBLIC_SNAPSHOT_LISTING_PAGE_SIZE,
             totalCount: live.totalCount, totalPages, products,
         }
+        // Cache the validated narrow card projection, never rich content or I/O.
+        publicListingCache.set(cacheKey, JSON.stringify(shard))
+        return shard
     }
     const manifest = await readSnapshotManifest()
     if (!Array.isArray(manifest.categories)) throw new Error('PUBLIC_CATALOGUE_UNAVAILABLE')

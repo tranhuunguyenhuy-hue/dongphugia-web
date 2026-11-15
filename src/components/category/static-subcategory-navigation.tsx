@@ -40,6 +40,7 @@ export function StaticSubcategoryNavigation({
 
                         return (
                             <Link
+          prefetch={false}
                                 key={subcategory.id}
                                 href={`${basePath}/${subcategory.slug}`}
                                 aria-label={subcategory.name}
