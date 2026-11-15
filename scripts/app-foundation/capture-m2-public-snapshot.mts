@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
 import { connect, closeConnections } from '../catalogue-direct/run.mjs'
 import { verifyM2SnapshotReadAccess } from './verify-m2-snapshot-read-access.mjs'
 import { buildM2PublicSnapshot, type CaptureEntry, type CaptureCategory } from './m2-public-snapshot.mjs'
-import { M1_PUBLIC_CAPTURE_SQL, M1_PUBLIC_CATEGORY_CAPTURE_SQL, mapLiveProduct, mapLiveProductDetail, type PublicProductRow } from '../../apps/public/src/runtime/live-public-catalogue'
-import { LIVE_BLOG, PUBLIC_BLOG_CATEGORIES_SQL, mapPublicBlogRecords } from '../../apps/public/src/runtime/live-public-blog'
+import type { PublicProductRow } from '../../apps/public/src/runtime/live-public-catalogue'
+// Reuse tsx's CommonJS loader for root TS aliases, matching the existing
+// protected projection runner. Native ESM cannot name-import the root CJS sanitizer.
+const require = createRequire(import.meta.url)
+const { M1_PUBLIC_CAPTURE_SQL, M1_PUBLIC_CATEGORY_CAPTURE_SQL, mapLiveProduct, mapLiveProductDetail } = require('../../apps/public/src/runtime/live-public-catalogue.ts') as typeof import('../../apps/public/src/runtime/live-public-catalogue')
+const { LIVE_BLOG, PUBLIC_BLOG_CATEGORIES_SQL, mapPublicBlogRecords } = require('../../apps/public/src/runtime/live-public-blog.ts') as typeof import('../../apps/public/src/runtime/live-public-blog')
 import type { LegacyBlogCategory } from '../../apps/public/src/runtime/legacy-blog'
 
 type CaptureRow = PublicProductRow & { listing_eligible: boolean; search_eligible: boolean; capture_priority: number | null; capture_sort_order: number | null }

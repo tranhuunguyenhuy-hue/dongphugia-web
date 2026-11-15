@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ assets: vi.fn(), sql: vi.fn() }))
 vi.mock('cloudflare:workers', () => ({ env: { ASSETS: { fetch: mocks.assets } } }))
 vi.mock('./public-db', () => ({ publicPostgresEnabled: () => false, readPublicRows: mocks.sql }))
 import { getPublicBlogCategories, getPublicBlogPosts, mapPublicBlogRecords } from './live-public-blog'
-import { getPublicProducts, getListingRuntimeConfig } from './canonical-public-api'
+import { getPublicProducts, getListingRuntimeConfig, getPublicProductBySlug } from './canonical-public-api'
 import { getPublicSnapshotListingShard } from './public-snapshot-listing'
 import { getSnapshotProduct, getSnapshotVariantSiblings } from './public-snapshot-catalogue'
 
@@ -50,6 +50,9 @@ it('serves all ten Blog posts and rich PDPs from the pinned ASSETS binding with 
   expect(serverPage.products).toHaveLength(1)
   expect(mocks.assets.mock.calls.some(([url]) => String(url).includes('/listing-index/'))).toBe(true)
   expect(mocks.assets.mock.calls.some(([url]) => String(url).includes('/listings/'))).toBe(false)
+  const pdp = await getPublicProductBySlug('thiet-bi-ve-sinh', 'public-0')
+  expect(pdp?.description).toContain('Fresh captured PDP')
+  expect(mocks.assets.mock.calls.some(([url]) => String(url).includes('/routes/'))).toBe(true)
   expect(network).not.toHaveBeenCalled()
   expect(mocks.sql).not.toHaveBeenCalled()
   files.delete('blog.json')

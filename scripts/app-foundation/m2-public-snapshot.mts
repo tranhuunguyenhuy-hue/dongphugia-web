@@ -50,6 +50,13 @@ export function buildM2PublicSnapshot(capture: PublicCapture) {
     buckets.get(key)!.push(product)
   }
   for (const [key, products] of buckets) assets.set(`products/${key}.json`, envelope({ products }))
+  const routeBuckets = new Map<string, Record<string, string>>()
+  for (const [key, listing] of Object.entries(productPathsBySlug)) {
+    const bucket = createHash('sha256').update(key).digest('hex').slice(0,2)
+    if (!routeBuckets.has(bucket)) routeBuckets.set(bucket, {})
+    routeBuckets.get(bucket)![key] = listing
+  }
+  for (const [bucket, paths] of routeBuckets) assets.set(`routes/${bucket}.json`, envelope({ paths }))
   const categories: SnapshotCategory[] = ROOTS.map(slug => {
     const metadata = capture.categories.filter(c => c.category_slug === slug)
     if (!metadata.length) throw new Error('M2_CAPTURE_CATEGORY_MISSING')
@@ -84,7 +91,7 @@ export function buildM2PublicSnapshot(capture: PublicCapture) {
     productionSourceSha: capture.productionSourceSha, capturedAt: capture.capturedAt,
     products: entries.length, listingProducts: entries.filter(e => e.listed).length, publishedBlogs: capture.posts.length,
     notice: 'Snapshot Public chỉ đọc; giá và tồn kho cần xác nhận với Đông Phú Gia.', categories,
-    productPathsBySlug, productBuckets: [...buckets.keys()].sort(), searchShards: ['0', '1', '2', '3'],
+    routeBuckets: [...routeBuckets.keys()].sort(), productBuckets: [...buckets.keys()].sort(), searchShards: ['0', '1', '2', '3'],
     searchProducts: search.reduce((n, s) => n + s.length, 0), variantAssetGroups: [...variants.keys()] })
   assets.set('manifest.json', manifest)
   const files = [...assets].map(([name, value]) => {

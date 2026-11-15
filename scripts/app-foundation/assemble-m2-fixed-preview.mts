@@ -25,7 +25,7 @@ export async function verifyM2SnapshotLock(snapshotRoot: string, sourceSha: stri
   const seen = new Set<string>()
   let bytes = 0
   for (const file of lock.files) {
-    if (typeof file.name !== 'string' || !/^(?:manifest|blog)\.json$|^(?:products\/[a-f0-9]{2}|search\/[0-3]|variants\/public-[1-9][0-9]*|listing-index\/[a-z0-9-]+\/[a-z0-9-]+|listings\/[a-z0-9-]+\/[a-z0-9-]+\/[1-9][0-9]*)\.json$/.test(file.name)
+    if (typeof file.name !== 'string' || !/^(?:manifest|blog)\.json$|^(?:(?:products|routes)\/[a-f0-9]{2}|search\/[0-3]|variants\/public-[1-9][0-9]*|listing-index\/[a-z0-9-]+\/[a-z0-9-]+|listings\/[a-z0-9-]+\/[a-z0-9-]+\/[1-9][0-9]*)\.json$/.test(file.name)
       || seen.has(file.name) || !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error('M2_SNAPSHOT_FILE_INVALID')
     const path = join(snapshotRoot, 'catalogue/v1', file.name)
     if (!(await lstat(path)).isFile()) throw new Error('M2_SNAPSHOT_FILE_INVALID')

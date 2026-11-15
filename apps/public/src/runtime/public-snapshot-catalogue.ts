@@ -29,7 +29,7 @@ export type SnapshotProduct={
 type SnapshotListing={slug:string;name:string;thumbnail_url?:string|null;totalCount:number}
 type SnapshotBrand={slug:string;name:string}
 export type SnapshotCategory={slug:string;name:string;listings:SnapshotListing[];homeProducts:SnapshotProduct[];totalCount:number;brands?:SnapshotBrand[];featuredProducts?:SnapshotProduct[];featuredProductsByBrand?:SnapshotProduct[]}
-type Manifest={contract:string;checkpoint:string;m3CodeSha?:string;m3RunId?:string;publishedBlogs?:number;capturedAt?:string;notice:string;categories:SnapshotCategory[];productBuckets:string[];products:number;listingProducts:number;productPathsBySlug?:Record<string,string>;captureSource?:string;variantAssetGroups?:string[];variantGroups?:Record<string,SnapshotProduct[]>;searchShards?:string[];searchProducts?:number}
+type Manifest={contract:string;checkpoint:string;m3CodeSha?:string;m3RunId?:string;publishedBlogs?:number;capturedAt?:string;notice:string;categories:SnapshotCategory[];productBuckets:string[];products:number;listingProducts:number;routeBuckets?:string[];captureSource?:string;variantAssetGroups?:string[];variantGroups?:Record<string,SnapshotProduct[]>;searchShards?:string[];searchProducts?:number}
 type AssetEnvelope={contract:string;checkpoint:string;products?:SnapshotProduct[];totalCount?:number;page?:number}
 
 async function readAsset<T>(path:string):Promise<T> {
@@ -202,8 +202,12 @@ export async function getStagingProductByCategory(category:string, slug:string) 
  if(!CATEGORY_FAMILIES.has(category)||!SLUG.test(slug))return null
  const manifest=await readSnapshotManifest()
  if(manifest.captureSource!=='m1-public-read-model')throw new Error('M2_STAGING_CAPTURE_REQUIRED')
- const listing=manifest.productPathsBySlug?.[`${category}/${slug}`]
- return listing?getSnapshotProduct(category,listing,slug):null
+ const key=`${category}/${slug}`
+ const bucket=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key)))).slice(0,1).map(b=>b.toString(16).padStart(2,'0')).join('')
+ if(!manifest.routeBuckets?.includes(bucket))return null
+ const routes=await readAsset<{paths:Record<string,string>}>(`routes/${bucket}.json`)
+ const listing=routes.paths?.[key]
+ return typeof listing==='string'&&SLUG.test(listing)?getSnapshotProduct(category,listing,slug):null
 }
 
 export const readStagingSnapshotBlog = cache(async () => {

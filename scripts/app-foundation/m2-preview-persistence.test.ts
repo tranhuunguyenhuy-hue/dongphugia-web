@@ -5,6 +5,12 @@ import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 describe('fixed staging survives source-driven Production publication', () => {
+  it('fails the existing Production identity gate if a packaged artifact would disable staging', async () => {
+    const release = await readFile('.github/workflows/v1-worker-release.yml', 'utf8')
+    expect(release).toContain('if(x.preview_urls!==true) process.exit(1)')
+    expect(release).toContain('src.preview_urls=false;') // Only the temporary local/remote smoke config.
+    expect(release).toContain('wrangler.public-preflight.json')
+  })
   it.each(['postgresql', 'snapshot'])('keeps Preview URLs enabled through the existing %s configuration step', async (mode) => {
     const directory = await mkdtemp(join(tmpdir(), 'm2-preview-persistence-'))
     try {
