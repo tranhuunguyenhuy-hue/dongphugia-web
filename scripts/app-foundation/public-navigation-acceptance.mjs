@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { chromium } from '@playwright/test'
+import { validatePublicNavigationResponse } from './public-navigation-response.mjs'
 const [base, sha] = process.argv.slice(2)
 assert.match(sha ?? '', /^[a-f0-9]{40}$/)
 const origin = new URL(base).origin
@@ -19,16 +20,9 @@ try {
     const responseChecks = []
     page.on('pageerror', () => errors.push('browser-pageerror'))
     page.on('response', r => {
-      const url = new URL(r.url())
-      if (url.origin !== origin || !r.request().isNavigationRequest() && !r.request().headers().rsc) return
-      if (r.status() >= 300 && r.status() < 400) return
-      responseChecks.push((async () => {
-        assert.equal(r.status(), 200, `${url.pathname}: HTTP ${r.status()}`)
-        assert.equal(r.headers()['x-dpg-source-sha'], sha, `${url.pathname}: SHA`)
-        const text = await r.text()
-        assert.ok(!/This page couldn.t load|Worker exceeded resource|Catalogue temporarily unavailable|\n[0-9a-f]+:E\{/.test(text), `${url.pathname}: error body`)
-        probes += 1
-      })().catch(e => errors.push(e.message)))
+      responseChecks.push(validatePublicNavigationResponse(r, { origin, sha })
+        .then(checked => { if (checked) probes += 1 })
+        .catch(e => errors.push(e.message)))
     })
     await page.goto(origin, { waitUntil: 'networkidle' })
     const api = await context.request.get(origin + '/api/search?q=A-LFV-402S-1&limit=8')
@@ -79,7 +73,7 @@ try {
           const t = Date.now()
           const r = await context.request.get(origin + path, { headers: {
             RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1',
-            'Next-URL': '/thiet-bi-ve-sinh/bon-cau.',
+            'Next-URL': path,
           }, timeout: 30000 })
           assert.equal(r.status(), 200, path)
           assert.match(r.headers()['content-type'], /text\/x-component/)
