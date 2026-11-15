@@ -18,7 +18,14 @@ try {
     page.setDefaultTimeout(30000)
     const errors = []
     const responseChecks = []
+    const listingShardRequests = []
     page.on('pageerror', () => errors.push('browser-pageerror'))
+    page.on('request', request => {
+      const url = new URL(request.url())
+      if (url.origin === origin && url.pathname.startsWith('/api/catalogue/listings/')) {
+        listingShardRequests.push(url.pathname)
+      }
+    })
     page.on('response', r => {
       responseChecks.push(validatePublicNavigationResponse(r, { origin, sha })
         .then(checked => { if (checked) probes += 1 })
@@ -31,6 +38,7 @@ try {
     assert.match(pdp ?? '', /^\/thiet-bi-ve-sinh\/[^/]+\/[^/]+$/)
     // Actual link clicks exercise client navigation and hydration, including back.
     for (let round = 0; round < 2; round++) {
+      const shardRequestCount = listingShardRequests.length
       console.log(`PUBLIC_BROWSER_ROUND width=${width} round=${round} start=home`)
       if (width === 390) {
         await page.getByRole('button', { name: 'Mở menu điều hướng' }).click()
@@ -51,6 +59,7 @@ try {
       await page.reload({ waitUntil: 'networkidle' })
       await visibleProduct.waitFor({ state: 'visible' })
       assert.ok(!(await page.locator('#main-content').innerText()).includes('Chưa tải được danh sách sản phẩm'))
+      assert.equal(listingShardRequests.length, shardRequestCount, 'PostgreSQL PLP must server-render the selected page without fetching every listing shard')
       // Choose the real DB-only product via its search result link.
       await page.goto(origin + '/tim-kiem?q=A-LFV-402S-1', { waitUntil: 'networkidle' })
       await page.locator(`#main-content a[href="${pdp}"]`).first().click()

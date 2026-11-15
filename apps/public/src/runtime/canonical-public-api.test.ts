@@ -10,7 +10,7 @@ vi.mock('./public-snapshot-catalogue',()=>({
  getSnapshotProduct:async(_category:string,_listing:string,slug:string)=>slug==='public-content'?{id:1,slug,name:'Public product',price:null,stock_status:'contact',publicContent:{summary:'Public summary',descriptionBlocks:[{kind:'heading',text:'Công nghệ'},{kind:'paragraph',text:'Nội dung thực.'}],specifications:{'Công nghệ':'Public technology specification'},gallery:[],referencePrice:{amountVnd:1200000,recordedUpdateDate:'2026-07-02',provenance:'legacy-manual-public-display'}}}:null,
  getSnapshotVariantSiblings:async(group:string,id:number)=>group==='public-17'&&id===1?[{id:2,sku:'SKU-2',slug:'variant-2',name:'Variant 2',url:'/thiet-bi-bep/voi-rua-chen/variant-2',price:null,price_display:'Liên hệ báo giá',stock_status:'contact',is_active:true,image_main_url:null,variant_options:[],variant_group:'public-17',variant_type:'size',variant_label:'Size 2',categories:{slug:'thiet-bi-bep'},subcategories:{slug:'voi-rua-chen'},canonical_category_slug:'thiet-bi-bep',canonical_subcategory_slug:'voi-rua-chen'}]:[],
 }))
-import {getPublicProducts,getPublicListingLeaves,getAvailableFiltersBySubcategory,getPublicProductBySlug,getPdpSpecifications,getPdpDescriptionBlocks,getPdpHistoricalReferencePrice,getVariantSiblings} from './canonical-public-api'
+import {getPublicProducts,getPublicListingLeaves,getAvailableFiltersBySubcategory,getPublicProductBySlug,getPdpSpecifications,getPdpDescriptionBlocks,getPdpHistoricalReferencePrice,getVariantSiblings,getListingRuntimeConfig} from './canonical-public-api'
 describe('canonical Preview public snapshot seam',()=>{
  beforeEach(()=>{
   dbMocks.enabled=false
@@ -51,23 +51,45 @@ describe('canonical Preview public snapshot seam',()=>{
    {slug:'voi-rua-chen',name:'Vòi rửa chén',totalCount:60},
    {slug:'voi-sen',name:'Vòi sen',totalCount:30},
   ])
+  dbMocks.getListing.mockResolvedValueOnce({products:products.slice(12,24),totalCount:60,page:2})
   const leaves=await getPublicListingLeaves('thiet-bi-bep')
   const result=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',pageSize:12,page:2})
   expect(leaves).toEqual([
    {id:null,name:'Vòi rửa chén',slug:'voi-rua-chen',description:null,thumbnail_url:null,source:'legacy',_count:{products:60}},
    {id:null,name:'Vòi sen',slug:'voi-sen',description:null,thumbnail_url:null,source:'legacy',_count:{products:30}},
   ])
-  expect(result).toMatchObject({products:[],total:60,totalPages:5,page:2,pageSize:12})
+  expect(result).toMatchObject({products:products.slice(12,24),total:60,totalPages:5,page:2,pageSize:12})
   expect(dbMocks.getListingLeaves).toHaveBeenCalledWith('thiet-bi-bep')
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:[],featured:false})
   dbMocks.enabled=false
+ })
+
+ it('server-paginates PostgreSQL pages and binds public brand/featured filters',async()=>{
+  dbMocks.enabled=true
+  const pageProducts=products.slice(12,24)
+  dbMocks.getListing.mockResolvedValueOnce({products:pageProducts,totalCount:18,page:2})
+  const result=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',pageSize:12,page:2,brand_slug:'a,b',is_featured:true})
+  expect(result).toMatchObject({products:pageProducts,total:18,totalPages:2,page:2,pageSize:12})
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:['a','b'],featured:true})
+  dbMocks.enabled=false
+ })
+
+ it('does not query PostgreSQL for withheld-price filters and keeps snapshot paging mode isolated',async()=>{
+  dbMocks.enabled=true
+  const noPriceResults=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',pageSize:12,page:1,price_min:1000})
+  expect(noPriceResults).toMatchObject({products:[],total:0,totalPages:1})
+  expect(dbMocks.getListing).not.toHaveBeenCalled()
+  expect(getListingRuntimeConfig('thiet-bi-bep','voi-rua-chen')).toMatchObject({snapshotMode:false,hideUnverifiedCommercialFilters:true})
+  dbMocks.enabled=false
+  expect(getListingRuntimeConfig('thiet-bi-bep','voi-rua-chen').snapshotMode).toBe(true)
  })
 
  it('keeps default-size PostgreSQL RSC listing requests on the bounded listing path',async()=>{
   dbMocks.enabled=true
-  dbMocks.getListingLeaves.mockResolvedValueOnce([{slug:'voi-rua-chen',name:'Vòi rửa chén',totalCount:60}])
+  dbMocks.getListing.mockResolvedValueOnce({products:products.slice(24,48),totalCount:60,page:2})
   const result=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',page:2})
-  expect(result).toMatchObject({products:[],total:60,totalPages:3,page:2,pageSize:24})
-  expect(dbMocks.getListingLeaves).toHaveBeenCalledWith('thiet-bi-bep')
+  expect(result).toMatchObject({products:products.slice(24,48),total:60,totalPages:3,page:2,pageSize:24})
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,24,{brandSlugs:[],featured:false})
   expect(snapshotMocks.getCategories).not.toHaveBeenCalled()
   expect(snapshotMocks.getProducts).not.toHaveBeenCalled()
   dbMocks.enabled=false

@@ -39,7 +39,7 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain("c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'")
     expect(statement).toContain("s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'")
     expect(statement).toContain("p.listing_visibility IN ('default','low_priority')")
-    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48])
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48, [], false])
     expect(listing.totalCount).toBe(1)
     expect(listing.products[0]).toMatchObject({
       id: 42,
@@ -47,6 +47,24 @@ describe('Live public catalogue projection', () => {
       price_display: 'Liên hệ báo giá',
       stock_status: 'contact',
     })
+  })
+
+  it('uses bound brand and featured filters in the one-page PostgreSQL query', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([{ ...product, total_count: '2' }])
+    await getLiveListing('thiet-bi-bep', 'voi-rua-chen', 2, 12, { brandSlugs: ['acme', 'other-brand'], featured: true })
+    const [statement, values] = mocks.readPublicRows.mock.calls[0]
+    expect(statement).toContain('cardinality($5::text[])=0 OR b.slug=ANY($5::text[])')
+    expect(statement).toContain('NOT $6::boolean OR p.is_featured=true')
+    expect(statement).toContain('LIMIT $4 OFFSET $3')
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 12, 12, ['acme', 'other-brand'], true])
+  })
+
+  it('rejects unsafe or excessive listing filters before querying PostgreSQL', async () => {
+    await expect(getLiveListing('thiet-bi-bep', 'voi-rua-chen', 1, 12, { brandSlugs: ['bad/slug'] }))
+      .resolves.toMatchObject({ products: [], totalCount: 0 })
+    await expect(getLiveListing('thiet-bi-bep', 'voi-rua-chen', 1, 12, { brandSlugs: Array(33).fill('brand') }))
+      .resolves.toMatchObject({ products: [], totalCount: 0 })
+    expect(mocks.readPublicRows).not.toHaveBeenCalled()
   })
 
   it('resolves PLP route metadata with one parameterized listing-scoped existence query', async () => {
@@ -104,7 +122,7 @@ describe('Live public catalogue projection', () => {
     expect(mocks.readPublicRows).toHaveBeenCalledTimes(3)
     expect(mocks.readPublicRows.mock.calls[0][1]).toEqual(['thiet-bi-bep'])
     expect(mocks.readPublicRows.mock.calls[1][1]).toEqual(['thiet-bi-bep'])
-    expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48])
+    expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48, [], false])
     expect(mocks.readPublicRows.mock.calls[0][0]).toContain('AND c.slug=$1 GROUP BY')
     expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND b.slug IS NOT NULL')
   })

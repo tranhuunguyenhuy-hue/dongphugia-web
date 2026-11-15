@@ -2,6 +2,7 @@ import { acquirePublicReadSlot, publicReadScope, withPublicReadScope } from './p
 // M1: read-only connection to V1 Supabase through a scoped Cloudflare Hyperdrive.
 // Disabled by default; never insert connection strings or service keys in source.
 export type PublicHyperdrive = { connectionString: string }
+export type PublicQueryValue = string | number | boolean | readonly string[]
 export function publicPostgresEnabled() {
   return process.env.PUBLIC_CATALOGUE_SOURCE === 'postgresql'
 }
@@ -50,7 +51,7 @@ async function getHyperdrive() {
 /** Fixed SELECT only; all dynamic parameters are bound, no Postgres writes allowed. */
 export async function readPublicRows<T>(
   statement: string,
-  values: readonly (string | number | boolean)[] = [],
+  values: readonly PublicQueryValue[] = [],
 ): Promise<T[]> {
   if (!publicPostgresEnabled()) throw new Error('PUBLIC_DATABASE_MODE_DISABLED')
   if (!/^\s*SELECT\b/i.test(statement) || statement.includes(';')

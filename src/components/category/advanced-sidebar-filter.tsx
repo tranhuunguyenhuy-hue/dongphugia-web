@@ -540,7 +540,7 @@ export function AdvancedSidebarFilter({
                 {relationSections}
 
                 {/* ── Price — dual range slider ── */}
-                {!runtimeConfig?.snapshotMode && <div className="space-y-2">
+                {!runtimeConfig?.snapshotMode && !runtimeConfig?.hideUnverifiedCommercialFilters && <div className="space-y-2">
                     <div className="flex items-center justify-between">
                         <p className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
                             Khoảng giá
@@ -624,7 +624,7 @@ export function AdvancedSidebarFilter({
                         Tùy chọn khác
                     </p>
                     <div className="flex flex-wrap gap-1.5">
-                        {!runtimeConfig?.snapshotMode && <TagChip
+                        {!runtimeConfig?.snapshotMode && !runtimeConfig?.hideUnverifiedCommercialFilters && <TagChip
                             label="Khuyến mãi"
                             active={isPromotion}
                             onClick={() => {

@@ -64,13 +64,18 @@ export function mapLiveProduct(row:Row):SnapshotProduct{
   ...(row.variant_label?{variant_label:row.variant_label}:{}),
  }
 }
-export const getLiveListing=cache(async(category:string,listing:string,page=1,pageSize=48)=>{
- if(![category,listing].every(s=>SLUG.test(s))||!Number.isSafeInteger(page)||page<1||page>64||!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>48)
+export type LiveListingFilters={brandSlugs?:readonly string[];featured?:boolean}
+export const getLiveListing=cache(async(category:string,listing:string,page=1,pageSize=48,filters:LiveListingFilters={})=>{
+ const brandSlugs=[...(filters.brandSlugs??[])]
+ if(![category,listing].every(s=>SLUG.test(s))||!Number.isSafeInteger(page)||page<1||page>512||!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>48)
   return {products:[] as SnapshotProduct[],totalCount:0,page}
+ if(brandSlugs.length>32||brandSlugs.some(slug=>!SLUG.test(slug)))return {products:[] as SnapshotProduct[],totalCount:0,page}
  const rows=await readPublicRows<Row>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
+   ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
+   ' AND (NOT $6::boolean OR p.is_featured=true)'+
    ' ORDER BY p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3',
-   [category,listing,(page-1)*pageSize,pageSize])
+   [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true])
  return {products:rows.map(mapLiveProduct),totalCount:Number(rows[0]?.total_count??0),page}
 })
 type ListingLeaf={slug:string;name:string;totalCount:number}

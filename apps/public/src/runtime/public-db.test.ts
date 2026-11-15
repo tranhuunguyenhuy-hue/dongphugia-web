@@ -35,6 +35,15 @@ describe('Public PostgreSQL read boundary', () => {
     expect(mocks.end).toHaveBeenCalledOnce()
   })
 
+  it('binds text-array filters without interpolating filter values into SQL', async () => {
+    const brands = ['brand-one', "brand' OR true --"]
+    await readPublicRows('SELECT id FROM dpg_app.products WHERE brand_slug = ANY($1::text[])', [brands])
+    expect(mocks.query).toHaveBeenCalledWith(
+      'SELECT id FROM dpg_app.products WHERE brand_slug = ANY($1::text[])',
+      [brands],
+    )
+  })
+
   it('caps concurrent read clients and queue within one request', async () => {
     let active = 0
     let peak = 0

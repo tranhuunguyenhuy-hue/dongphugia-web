@@ -19,7 +19,7 @@ export const getPublicListingLeaves:typeof Original.getPublicListingLeaves=async
  return (c?.listings??[]).map(l=>({id:null,name:l.name,slug:l.slug,description:null,thumbnail_url:null,source:'legacy' as const,_count:{products:l.totalCount}}))
 }
 export const getPublicListingLeaf:typeof Original.getPublicListingLeaf=async(category,sub)=>(await getPublicListingLeaves(category)).find(l=>l.slug===sub)??null
-export const getListingRuntimeConfig:typeof Original.getListingRuntimeConfig=()=>({snapshotMode:true,profileKey:null,hideColorFilter:true,enableSpecFilters:false,enableProductTypeTabs:false,readyForRefactor:false,relationPriority:['brand']})
+export const getListingRuntimeConfig:typeof Original.getListingRuntimeConfig=()=>({snapshotMode:!publicPostgresEnabled(),hideUnverifiedCommercialFilters:publicPostgresEnabled(),profileKey:null,hideColorFilter:true,enableSpecFilters:false,enableProductTypeTabs:false,readyForRefactor:false,relationPriority:['brand']})
 export const getAvailableFiltersBySubcategory:typeof Original.getAvailableFiltersBySubcategory=async(sub,_type,category)=>{
  const categorySlug=category??'thiet-bi-ve-sinh'
  const brands=publicPostgresEnabled()
@@ -28,8 +28,8 @@ export const getAvailableFiltersBySubcategory:typeof Original.getAvailableFilter
  return {brands:brands.map(b=>({...b,logo_url:null})),subcategories:(await getPublicListingLeaves(categorySlug)).map(l=>({...l,icon_name:null})),materials:[],origins:[],features:[],colors:[]}
 }
 export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
- // Listing HTML and Flight share a neutral shell. The browser loads the exact
- // immutable shards and applies URL filters; PDP related cards keep their data.
+ // PostgreSQL listing pages are server-paginated. Snapshot mode continues to
+ // hydrate its immutable shards on the client; PDP related cards stay bounded.
  if(publicPostgresEnabled()){
   const category=f.category_slug??'thiet-bi-ve-sinh'
   const page=f.page??1
@@ -42,13 +42,20 @@ export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
   }
   const listingSlug=typeof f.subcategory_slugs==='string'
    ?f.subcategory_slugs:Array.isArray(f.subcategory_slugs)&&f.subcategory_slugs.length===1?f.subcategory_slugs[0]:undefined
-  // PostgreSQL mode must never enumerate every page of a listing into Worker
-  // memory. RSC Listing renders need only the bounded total; the browser loads
-  // one page at a time from the read-only listing endpoint.
   if((size===12||size===24)&&typeof listingSlug==='string'){
-   const listing=(await getLiveListingLeaves(category)).find(l=>l.slug===listingSlug)
-   const total=listing?.totalCount??0
-   return {products:[],total,totalPages:Math.max(1,Math.ceil(total/size)),currentPage:page,page,pageSize:size} as Awaited<ReturnType<typeof Original.getPublicProducts>>
+   const rawBrands=typeof f.brand_slug==='string'?f.brand_slug.split(',')
+    :Array.isArray(f.brand_slug)?f.brand_slug:[]
+   const brandSlugs=[...new Set(rawBrands.filter(Boolean))]
+   if(brandSlugs.length>32||brandSlugs.some(slug=>!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug))){
+    return {products:[],total:0,totalPages:1,currentPage:page,page,pageSize:size} as Awaited<ReturnType<typeof Original.getPublicProducts>>
+   }
+   // Public prices are deliberately withheld until verified. A range cannot
+   // match any Public item; return an empty result without reading the DB.
+   if(f.price_min!==undefined||f.price_max!==undefined){
+    return {products:[],total:0,totalPages:1,currentPage:page,page,pageSize:size} as Awaited<ReturnType<typeof Original.getPublicProducts>>
+   }
+   const live=await getLiveListing(category,listingSlug,page,size,{brandSlugs,featured:f.is_featured===true})
+   return {products:live.products,total:live.totalCount,totalPages:Math.max(1,Math.ceil(live.totalCount/size)),currentPage:page,page,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
   }
   throw new Error('PUBLIC_DATABASE_PRODUCT_QUERY_UNSUPPORTED')
  }
