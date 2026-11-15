@@ -89,7 +89,14 @@ try {
       await page.locator('#main-content h1').waitFor()
       assert.ok((await page.locator('#main-content').innerText()).includes('A-LFV-402S-1'))
       await page.goBack({ waitUntil: 'networkidle' })
+      // Returning to Home must issue a fresh HTML document request, not a
+      // fragile client-side RSC Flight transition under sustained navigation.
+      const homeDocumentRequest = page.waitForRequest(request =>
+        request.isNavigationRequest() && new URL(request.url()).origin === origin
+        && new URL(request.url()).pathname === '/' && request.method() === 'GET'
+      )
       await page.getByRole('link', { name: /Đông Phú Gia - Trang chủ/i }).first().click()
+      await homeDocumentRequest
       await page.waitForURL(origin + '/')
       const homeChrome = await page.evaluate(() => ({
         headerCount: document.querySelectorAll('header').length,
