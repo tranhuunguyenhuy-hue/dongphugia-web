@@ -13,9 +13,9 @@ type PublicBlogPostRow = Pick<LegacyBlogPost,
   | 'thumbnail_url' | 'cover_image_url' | 'seo_title' | 'seo_description'
   | 'reading_time' | 'status' | 'published_at' | 'author_name' | 'updated_at'
 >
-type BlogRecord = { post: PublicBlogPostRow; category: LegacyBlogCategory }
+export type BlogRecord = { post: PublicBlogPostRow; category: LegacyBlogCategory }
 
-const LIVE_BLOG = `
+export const LIVE_BLOG = `
  SELECT jsonb_build_object(
    'id',p.id,'title',p.title,'slug',p.slug,'excerpt',p.excerpt,'content',p.content,
    'category_id',p.category_id,'thumbnail_url',p.thumbnail_url,'cover_image_url',p.cover_image_url,
@@ -57,8 +57,18 @@ function projectPublicBlogPost(post: PublicBlogPostRow, category: LegacyBlogCate
 }
 
 export const getPublicBlogPosts = cache(async (): Promise<readonly PublicLegacyBlogPost[]> => {
+  if (process.env.APP_ENV === 'staging') {
+    const { readStagingSnapshotBlog } = await import('./public-snapshot-catalogue')
+    const frozen = await readStagingSnapshotBlog()
+    if (!Array.isArray(frozen.posts)) throw new Error('M2_STAGING_BLOG_REQUIRED')
+    return mapPublicBlogRecords(frozen.posts.map(post => ({ post, category: post.category })))
+  }
   if (!publicPostgresEnabled()) return snapshotPosts.map(({category, ...post}) => projectPublicBlogPost(post, category))
   const rows = await readPublicRows<BlogRecord>(LIVE_BLOG)
+  return mapPublicBlogRecords(rows)
+})
+
+export function mapPublicBlogRecords(rows: BlogRecord[]) {
   // Fail closed on malformed source data; do not silently display an obsolete snapshot.
   return rows.map(({post, category}) => {
     if (!Number.isSafeInteger(post.id) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(post.slug)
@@ -70,16 +80,24 @@ export const getPublicBlogPosts = cache(async (): Promise<readonly PublicLegacyB
     }
     return projectPublicBlogPost(post, category)
   })
-})
+}
 
-export const getPublicBlogCategories = cache(async (): Promise<readonly LegacyBlogCategory[]> => {
-  if (!publicPostgresEnabled()) return snapshotCategories
-  // Empty categories are intentional on old website; read those from DB too.
-  const rows = await readPublicRows<LegacyBlogCategory>(`
+export const PUBLIC_BLOG_CATEGORIES_SQL = `
     SELECT id,name,slug,description,thumbnail_url,is_active,sort_order,seo_title,seo_description
     FROM dpg_app.blog_categories WHERE is_active = true ORDER BY sort_order,id
     LIMIT 100
-  `)
+  `
+
+export const getPublicBlogCategories = cache(async (): Promise<readonly LegacyBlogCategory[]> => {
+  if (process.env.APP_ENV === 'staging') {
+    const { readStagingSnapshotBlog } = await import('./public-snapshot-catalogue')
+    const frozen = await readStagingSnapshotBlog()
+    if (!Array.isArray(frozen.categories)) throw new Error('M2_STAGING_BLOG_REQUIRED')
+    return frozen.categories
+  }
+  if (!publicPostgresEnabled()) return snapshotCategories
+  // Empty categories are intentional on old website; read those from DB too.
+  const rows = await readPublicRows<LegacyBlogCategory>(PUBLIC_BLOG_CATEGORIES_SQL)
   return rows
 })
 

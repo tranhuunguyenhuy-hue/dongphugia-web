@@ -1,0 +1,30 @@
+{
+  "$schema": "../../tools/m2-preview/node_modules/wrangler/config-schema.json",
+  "name": "dongphugia-v1-public-production",
+  "compatibility_date": "2026-08-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "worker.ts",
+  "workers_dev": true,
+  "preview_urls": true,
+  "assets": {"directory": "dist/client", "not_found_handling": "none", "binding": "ASSETS"},
+  "vars": {
+    "APP_ENV": "staging",
+    "APP_BUILD_TARGET": "public",
+    "APP_ORIGIN": "https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev",
+    "PREVIEW_NOINDEX": "true",
+    "PUBLIC_CATALOGUE_SOURCE": "snapshot"
+  },
+  "previews": {
+    "vars": {
+      "APP_ENV": "staging",
+      "APP_BUILD_TARGET": "public",
+      "APP_ORIGIN": "https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev",
+      "PREVIEW_NOINDEX": "true",
+      "PUBLIC_CATALOGUE_SOURCE": "snapshot"
+    },
+    "secrets": {"required": []},
+    "hyperdrive": [],
+    "services": [],
+    "durable_objects": {"bindings": []}
+  }
+}

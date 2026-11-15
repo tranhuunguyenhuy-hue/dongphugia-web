@@ -3,9 +3,15 @@ on:
   workflow_dispatch:
     inputs:
       approved_source_sha:
-        description: Exact reviewed main SHA (read-access verification only)
+        description: Exact reviewed main SHA
         required: true
         type: string
+      operation:
+        description: Protected read-only operation
+        type: choice
+        options: [verify-read-access, capture-snapshot]
+        default: verify-read-access
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -28,8 +34,13 @@ jobs:
           node-version: 24.13.0
           cache: npm
       - name: Install locked tools before scoped credentials
-        run: npm ci
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+      - name: Check the M2 capture toolchain
+        run: npx --no-install tsc --noEmit --project scripts/app-foundation/tsconfig.m2.json
       - name: Verify existing SELECT credential and actual Production data counts
+        if: inputs.operation == 'verify-read-access'
         env:
           DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
           DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
@@ -39,10 +50,31 @@ jobs:
           set +x
           umask 077
           node scripts/app-foundation/verify-m2-snapshot-read-access.mjs
+      - name: Capture a fresh Public-only snapshot using existing SELECT access
+        if: inputs.operation == 'capture-snapshot'
+        env:
+          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          ulimit -c 0
+          umask 077
+          npx --no-install tsx scripts/app-foundation/capture-m2-public-snapshot.mts
       - name: Upload sanitized access evidence
+        if: inputs.operation == 'verify-read-access'
         uses: actions/upload-artifact@v4
         with:
           name: m2-read-access-${{ github.sha }}
           path: ${{ runner.temp }}/m2-read-access/read-access.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload immutable Public snapshot and checksums
+        if: inputs.operation == 'capture-snapshot'
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-public-snapshot-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-public-snapshot
           if-no-files-found: error
           retention-days: 7

@@ -41,6 +41,8 @@ describe('Public Worker fail-closed policy', () => {
     const staging = { ...previewEnvironment, APP_ENV: 'staging', APP_ORIGIN: 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev' }
     expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), staging)).not.toThrow()
     expect(robotsHeader(new Request(`${staging.APP_ORIGIN}/`), staging)).toBe('noindex, nofollow')
+    expect(() => assertPreviewRuntime(new Request('https://9387e76d-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev/'), staging)).not.toThrow()
+    expect(() => assertPreviewRuntime(new Request('https://feature-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev/'), staging)).toThrow('PUBLIC_WORKER_PREVIEW_ORIGIN_INVALID')
     expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), { ...staging, PUBLIC_DB: {} }))
       .toThrow('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
     expect(() => assertPreviewRuntime(new Request('https://dpg-staging.tranhuunguyenhuy.workers.dev/'), staging))

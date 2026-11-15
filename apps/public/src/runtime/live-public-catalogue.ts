@@ -5,7 +5,7 @@ import { sanitizeRichHtml } from '@/lib/html-sanitizer'
 import { readPublicRows } from './public-db'
 import type { SnapshotCategory, SnapshotProduct, SnapshotSearchProduct } from './public-snapshot-catalogue'
 
-type Row = {
+export type PublicProductRow = {
   id:number; sku:string; name:string; display_name:string|null; slug:string
   description:string|null; image_main_url:string|null; is_featured:boolean
   variant_group:string|null; variant_type:string|null; variant_label:string|null
@@ -45,7 +45,7 @@ function normalizeProductHtmlImages(html:string){
   return normalized?`${prefix}${quote}${normalized}${quote}`:whole
  })
 }
-export function mapLiveProduct(row:Row):SnapshotProduct{
+export function mapLiveProduct(row:PublicProductRow):SnapshotProduct{
  if(!Number.isSafeInteger(row.id)||row.id<=0||![row.category_slug,row.listing_slug,row.slug].every(s=>SLUG.test(s))
    ||!row.name||row.name.length>240||!row.sku||row.sku.length>120)throw Error('PUBLIC_PRODUCT_DB_ROW_INVALID')
  const image=safeImage(row.image_main_url)
@@ -70,7 +70,7 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
  if(![category,listing].every(s=>SLUG.test(s))||!Number.isSafeInteger(page)||page<1||page>512||!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>48)
   return {products:[] as SnapshotProduct[],totalCount:0,page}
  if(brandSlugs.length>32||brandSlugs.some(slug=>!SLUG.test(slug)))return {products:[] as SnapshotProduct[],totalCount:0,page}
- const rows=await readPublicRows<Row>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
+ const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
    ' AND (NOT $6::boolean OR p.is_featured=true)'+
@@ -83,7 +83,7 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
 // while avoiding a full-listing window count that the root never uses.
 export const getLiveListingPreview=cache(async(category:string,listing:string)=>{
  if(![category,listing].every(s=>SLUG.test(s)))return [] as SnapshotProduct[]
- const rows=await readPublicRows<Row>('SELECT '+COLS+FROM+
+ const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' ORDER BY p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $3',
    [category,listing,48], 'category-root-featured')
@@ -169,8 +169,7 @@ export const getLiveBrandsForListing=cache(async(category:string,listing:string)
   ' AND c.slug=$1 AND s.slug=$2 AND b.slug IS NOT NULL ORDER BY b.slug LIMIT 32',
   [category,listing], 'listing-brand-facets')
 })
-const loadLiveProduct=async(where:string,values:readonly string[])=>{
- const detailSelect=`
+const detailSelect=`
   (SELECT COALESCE(jsonb_agg(jsonb_build_object('image_url',i.image_url) ORDER BY i.sort_order,i.id),'[]'::jsonb)
    FROM (SELECT id,image_url,sort_order FROM dpg_app.product_images WHERE product_id=p.id ORDER BY sort_order,id LIMIT 12) i) AS gallery_images,
   (SELECT pd.clean_html FROM dpg_app.product_descriptions pd WHERE pd.product_id=p.id ORDER BY pd.updated_at DESC,pd.id DESC LIMIT 1) AS description_html,
@@ -186,22 +185,36 @@ const loadLiveProduct=async(where:string,values:readonly string[])=>{
    FROM (SELECT id,name,url,document_type,file_size,sort_order FROM dpg_app.product_documents WHERE product_id=p.id ORDER BY sort_order,id LIMIT 24) d) AS documents,
   (SELECT COALESCE(jsonb_agg(jsonb_build_object('product_features',jsonb_build_object('name',f.name)) ORDER BY f.sort_order,f.id),'[]'::jsonb)
    FROM (SELECT f.name,f.sort_order,f.id FROM dpg_app.product_feature_values fv JOIN dpg_app.product_features f ON f.id=fv.feature_id WHERE fv.product_id=p.id ORDER BY f.sort_order,f.id LIMIT 3) f) AS product_feature_values`
- const rows=await readPublicRows<Row>('SELECT '+COLS+','+detailSelect+FROM+' WHERE '+PUBLIC+' '+where+' LIMIT 1',values)
- if(!rows.length)return null
- const product=mapLiveProduct(rows[0])
- const gallery=[...new Set([product.image_main_url,...(rows[0].gallery_images??[]).map(i=>safeImage(i.image_url))]
+
+// Protected M2 exporter reuses exactly the Public SELECT projection and mapper.
+// The query is never called from the browser or from staging.
+export const M1_PUBLIC_CAPTURE_SQL = 'SELECT '+COLS+','+detailSelect+
+  ",p.listing_visibility IN ('default','low_priority') AS listing_eligible,p.search_visibility='visible' AS search_eligible,p.listing_priority AS capture_priority,p.sort_order AS capture_sort_order"+
+  FROM+' WHERE '+PUBLIC+' AND p.id>$1 ORDER BY p.id LIMIT $2'
+export const M1_PUBLIC_CATEGORY_CAPTURE_SQL = 'SELECT c.slug AS category_slug,c.name AS category_name,s.slug AS listing_slug,'+
+  's.name AS listing_name,count(p.id)::integer AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+
+  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100'
+
+export function mapLiveProductDetail(row: PublicProductRow) {
+ const product=mapLiveProduct(row)
+ const gallery=[...new Set([product.image_main_url,...(row.gallery_images??[]).map(i=>safeImage(i.image_url))]
   .filter((s):s is string=>Boolean(s)))]
- const specifications=Object.fromEntries(Object.entries(rows[0].specifications??{}).filter(([key,value])=>key.trim()&&value.trim()).slice(0,60))
- const documents=(rows[0].documents??[]).flatMap(doc=>{
+ const specifications=Object.fromEntries(Object.entries(row.specifications??{}).filter(([key,value])=>key.trim()&&value.trim()).slice(0,60))
+ const documents=(row.documents??[]).flatMap(doc=>{
   const url=safeImage(doc.url)
   return url&&doc.name&&doc.name.length<=240? [{name:doc.name.slice(0,240),url,type:doc.type.slice(0,80),size:doc.size===null||doc.size===undefined?'':String(doc.size)}]:[]
  })
- const descriptionHtml=rows[0].description_html
-  ?sanitizeRichHtml(normalizeProductHtmlImages(rows[0].description_html)):undefined
- return {...product,product_feature_values:rows[0].product_feature_values??[],publicContent:{...product.publicContent!,gallery,
+ const descriptionHtml=row.description_html
+  ?sanitizeRichHtml(normalizeProductHtmlImages(row.description_html)):undefined
+ return {...product,product_feature_values:row.product_feature_values??[],publicContent:{...product.publicContent!,gallery,
   specifications,...(descriptionHtml?{descriptionHtml}:{}),documents},imageUrl:product.image_main_url,
   brand:product.brands??{name:'',slug:''},categoryName:product.categories.name,listingName:product.subcategories.name,
   categoryPath:'/'+product.categories.slug,listingPath:'/'+product.categories.slug+'/'+product.subcategories.slug,productPath:product.url,priceDisplay:product.price_display}
+}
+
+const loadLiveProduct=async(where:string,values:readonly string[])=>{
+ const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+','+detailSelect+FROM+' WHERE '+PUBLIC+' '+where+' LIMIT 1',values)
+ return rows.length?mapLiveProductDetail(rows[0]):null
 }
 export const getLiveProduct=cache(async(category:string,listing:string,slug:string)=>{
  if(![category,listing,slug].every(s=>SLUG.test(s)))return null
@@ -215,7 +228,7 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
  const query=raw.trim().slice(0,120)
  if(query.length<2||!Number.isSafeInteger(page)||page<1||page>100||!Number.isSafeInteger(limit)||limit<1||limit>48)
   return {results:[] as SnapshotSearchProduct[],total:0,page,limit,query}
- const rows=await readPublicRows<Row>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
+ const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
   ' WHERE '+PUBLIC+" AND p.search_visibility='visible' AND (p.sku ILIKE $1 OR p.name ILIKE $1)"+
   " ORDER BY CASE WHEN lower(p.sku)=lower($2) THEN 0 WHEN lower(p.sku) LIKE lower($2)||'%' THEN 1 ELSE 2 END,p.name,p.id"+
   ' LIMIT $3 OFFSET $4',['%'+query+'%',query,limit,(page-1)*limit], 'public-search')
@@ -231,7 +244,7 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
 }
 export async function getLiveVariantSiblings(group:string,currentId:number){
  if(!group||group.length>100||!Number.isSafeInteger(currentId))return [] as SnapshotProduct[]
- const rows=await readPublicRows<Row>('SELECT '+COLS+FROM+' WHERE '+PUBLIC+
+ const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+FROM+' WHERE '+PUBLIC+
   ' AND p.variant_group=$1 AND p.id<>$2 ORDER BY p.id LIMIT 8',[group,currentId])
  return rows.map(mapLiveProduct)
 }

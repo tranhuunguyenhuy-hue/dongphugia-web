@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   const appEnvironment = getPublicAppEnvironment()
   const productionPublishedCatalogue = usesProductionPublishedCatalogue()
-  let snapshot: { checkpoint: string; products: number; listingProducts: number; m3RunId: string } | null = null
+  let snapshot: { checkpoint: string; products: number; listingProducts: number; m3RunId?: string; publishedBlogs?: number; capturedAt?: string } | null = null
   if (publicPostgresEnabled()) {
     try {
       const [row] = await readPublicRows<{public_products:string;listing_products:string;blog_posts:string}>(
@@ -59,6 +59,7 @@ export async function GET() {
         publicProducts:snapshot.products,
         listingProducts:snapshot.listingProducts,
         m3RunId:snapshot.m3RunId,
+        ...(appEnvironment.environment === 'staging' ? { publishedBlogs: snapshot.publishedBlogs, snapshotCapturedAt: snapshot.capturedAt } : {}),
       } : {}),
     },
     {

@@ -1,3 +1,4 @@
+import { FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from './config/fixed-preview.mjs'
 // next.config.ts loads this module while Next compiles the config itself, before
 // TypeScript path aliases are available. Keep this boundary runtime-resolvable
 // without changing the public app's package alias contract elsewhere.
@@ -134,10 +135,11 @@ export function assertPreviewRuntime(request: Request, environment: PublicWorker
     && ['localhost','127.0.0.1'].includes(configuredOrigin.hostname)
   const stagingOrigin = environment.APP_ENV === 'staging'
     && configuredOrigin.protocol === 'https:'
-    && configuredOrigin.origin === 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
+    && configuredOrigin.origin === FIXED_PREVIEW_ORIGIN
   const localRequest = requestUrl.protocol === 'http:'
     && ['localhost', '127.0.0.1'].includes(requestUrl.hostname)
-  const stagingRequest = stagingOrigin && requestUrl.origin === configuredOrigin.origin
+  const stagingRequest = stagingOrigin && requestUrl.protocol === 'https:' && !requestUrl.port
+    && (requestUrl.origin === configuredOrigin.origin || isFixedPreviewDeploymentHost(requestUrl.hostname))
   if (
     !(localPreview || stagingOrigin) ||
     configuredOrigin.username ||
