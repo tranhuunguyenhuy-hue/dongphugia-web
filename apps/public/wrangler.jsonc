@@ -9,7 +9,8 @@
   "assets": {
     "directory": "dist/client",
     "not_found_handling": "none",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": ["/uudaicuoinam2026", "/uudaicuoinam2026/*"]
   },
   "vars": {
     "APP_ENV": "preview",

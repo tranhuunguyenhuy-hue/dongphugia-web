@@ -4,6 +4,7 @@ import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnost
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
 import {readBoundedPublicAssetText} from './src/runtime/bounded-public-asset'
+import {serveCampaignLanding} from './src/runtime/campaign-landing'
 
 import {
   assertPublicRuntime,
@@ -104,6 +105,14 @@ export default {
           ...(publicApiDecision === 'method-not-allowed' ? { Allow: 'GET, HEAD' } : {}),
           ...sourceIdentityHeader,
         },
+      })
+    }
+
+    const campaignResponse = await serveCampaignLanding(request, environment)
+    if (campaignResponse) {
+      return withHeaders(campaignResponse, {
+        ...sourceIdentityHeader,
+        ...robotHeaders,
       })
     }
 
