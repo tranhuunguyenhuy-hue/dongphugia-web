@@ -94,6 +94,7 @@ export type PublicListingLeaf = {
 
 export type ListingRuntimeConfig = {
     snapshotMode?: boolean
+    hideUnverifiedCommercialFilters?: boolean
     profileKey: string | null
     hideColorFilter: boolean
     enableSpecFilters: boolean
