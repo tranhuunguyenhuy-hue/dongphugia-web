@@ -25,6 +25,24 @@ beforeAll(async () => {
 beforeEach(() => mocks.vinextFetch.mockClear())
 
 describe('public Worker API route ownership', () => {
+    it('serves the campaign landing from static assets before the Vinext fallback', async () => {
+        const assetFetch = vi.fn(async (request: Request) => {
+            expect(new URL(request.url).pathname).toBe('/uudaicuoinam2026/index.html')
+            return new Response('<html>campaign</html>', { headers: { 'Content-Type': 'text/html' } })
+        })
+        const response = await worker.fetch(
+            new Request('http://127.0.0.1:8787/uudaicuoinam2026/'),
+            { ...environment, ASSETS: { fetch: assetFetch } },
+            {} as ExecutionContext,
+        )
+
+        expect(response.status).toBe(200)
+        expect(response.headers.get('content-type')).toContain('text/html')
+        expect(response.headers.get('x-dpg-source-sha')).toBe('a'.repeat(40))
+        expect(assetFetch).toHaveBeenCalledTimes(1)
+        expect(mocks.vinextFetch).not.toHaveBeenCalled()
+    })
+
     it('routes only the owned listing read endpoint through to the public app', async () => {
         const request = new Request('http://127.0.0.1:8787/api/catalogue/listings/thiet-bi-bep/voi-rua-chen?page=1')
         const response = await worker.fetch(request, environment, {} as ExecutionContext)
