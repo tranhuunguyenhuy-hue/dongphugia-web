@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildProductSchema } from "./schema"
+import { buildBreadcrumbSchema, buildProductSchema } from "./schema"
 
 const product = {
   name: "Sản phẩm thử nghiệm",
@@ -49,5 +49,18 @@ describe("buildProductSchema", () => {
       sale_price: null,
       price: null,
     })).toBeNull()
+  })
+})
+
+describe("buildBreadcrumbSchema", () => {
+  it("pins breadcrumbs to the production domain even when given a localhost URL", () => {
+    const schema = buildBreadcrumbSchema([
+      { name: "Trang chủ", url: "/" },
+      { name: "Sản phẩm", url: "http://localhost:3000/thiet-bi-ve-sinh/bon-cau" },
+    ])
+    expect(schema.itemListElement.map((item) => item.item)).toEqual([
+      "https://www.dongphugia.vn/",
+      "https://www.dongphugia.vn/thiet-bi-ve-sinh/bon-cau",
+    ])
   })
 })
