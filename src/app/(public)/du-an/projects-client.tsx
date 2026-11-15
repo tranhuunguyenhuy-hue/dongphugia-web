@@ -170,7 +170,7 @@ export function ProjectsClient({ projects }: { projects: ProjectItem[] }) {
                             <p className="text-xl text-gray-400 font-medium mb-12 max-w-lg leading-relaxed">
                                 Kết hợp cùng Đông Phú Gia để mang những giải pháp vật liệu xây dựng hàng đầu thế giới vào bản vẽ kiến trúc của bạn.
                             </p>
-                            <a href="tel:02633520316" className="inline-flex items-center justify-between w-full max-w-sm px-8 py-5 bg-white text-[#192125] rounded-full text-lg font-bold hover:bg-[#4ade80] hover:text-[#192125] transition-all duration-300 group">
+                            <a href="tel:0913865685" className="inline-flex items-center justify-between w-full max-w-sm px-8 py-5 bg-white text-[#192125] rounded-full text-lg font-bold hover:bg-[#4ade80] hover:text-[#192125] transition-all duration-300 group">
                                 Bắt đầu dự án ngay
                                 <div className="w-10 h-10 rounded-full bg-[#192125] text-white flex items-center justify-center group-hover:bg-white group-hover:text-[#192125] transition-colors">
                                     <ArrowRight className="w-5 h-5 -rotate-45 group-hover:rotate-0 transition-transform duration-300" />
