@@ -1,0 +1,48 @@
+name: M2 fixed Preview
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA (read-access verification only)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: m2-fixed-staging
+  cancel-in-progress: false
+jobs:
+  verify-read-access:
+    if: >-
+      github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: catalogue-direct-migration
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - name: Install locked tools before scoped credentials
+        run: npm ci
+      - name: Verify existing SELECT credential and actual Production data counts
+        env:
+          DIRECT_TARGET_READ_DATABASE_URL: ${{ secrets.DIRECT_TARGET_READ_DATABASE_URL }}
+          DIRECT_TARGET_CA: ${{ secrets.DIRECT_TARGET_CA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          umask 077
+          node scripts/app-foundation/verify-m2-snapshot-read-access.mjs
+      - name: Upload sanitized access evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-read-access-${{ github.sha }}
+          path: ${{ runner.temp }}/m2-read-access/read-access.json
+          if-no-files-found: error
+          retention-days: 7
