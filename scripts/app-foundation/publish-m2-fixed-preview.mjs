@@ -3,7 +3,7 @@ import { readFile, writeFile, rm } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
+import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { digestDirectory } from './public-worker-artifact.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
 
@@ -51,7 +51,10 @@ async function cf(path, method = 'GET', body) {
     ...(body ? { body: JSON.stringify(body) } : {}) })
   if (method === 'DELETE' && response.status === 204) return null
   const value = await response.json()
-  if (!response.ok || value.success !== true) throw new Error(`M2_CF_API_${response.status}_${Number(value.errors?.[0]?.code) || 0}`)
+  if (!response.ok || value.success !== true) {
+    evidence.cloudflareApiFailure = sanitizeM2CloudflareApiFailure(method, path, response.status, value.errors)
+    throw new Error(`M2_CF_API_${response.status}_${Number(value.errors?.[0]?.code) || 0}`)
+  }
   return value.result
 }
 async function gh(path) {
