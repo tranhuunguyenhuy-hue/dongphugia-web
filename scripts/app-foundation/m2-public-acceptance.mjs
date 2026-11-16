@@ -3,9 +3,11 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { chromium } from '@playwright/test'
 import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
+import { sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
+import { isM2PublicImageTarget } from './m2-public-media.mjs'
 
 const [artifact, base, sourceSha, ...immutable] = process.argv.slice(2)
-const { origin, hosted } = navigationTarget(base)
+const { origin } = navigationTarget(base)
 const folder = process.env.M2_EVIDENCE_DIR
 assert.ok(folder, 'M2_EVIDENCE_DIR_REQUIRED')
 await mkdir(folder, { recursive: true, mode: 0o700 })
@@ -16,9 +18,10 @@ assert.equal(manifest.checkpoint, process.env.M2_PUBLIC_SNAPSHOT_CHECKPOINT)
 assert.equal(manifest.sourceSha, sourceSha)
 assert.equal(blog.posts.length, 10)
 const images = new Map(), results = [], report = { sourceSha, checkpoint: manifest.checkpoint, status: 'UNKNOWN', results }
-const allowedImageHosts = new Set(['cdn.dongphugia.com.vn','dpg-products.b-cdn.net','cdn.hita.com.vn','hita.com.vn','vietceramics.com','tygjmrhandbffjllxveu.supabase.co'])
-const proxyUrl = hosted && process.env.https_proxy ? new URL(process.env.https_proxy) : null
-const browser = await chromium.launch({ headless: true, ...(proxyUrl ? { proxy: { server: proxyUrl.origin, username: proxyUrl.username, password: proxyUrl.password } } : {}) })
+const sensitiveValues = [process.env.CLOUDFLARE_API_TOKEN, process.env.GH_TOKEN]
+const proxyUrl = process.env.https_proxy ? new URL(process.env.https_proxy) : null
+sensitiveValues.push(proxyUrl?.password, proxyUrl?.username)
+const browser = await chromium.launch({ headless: true, ...(proxyUrl ? { proxy: { server: proxyUrl.origin, username: proxyUrl.username, password: proxyUrl.password, bypass: '127.0.0.1,localhost' } } : {}) })
 const errorBody = /This page couldn.t load|Worker exceeded resource|Catalogue temporarily unavailable|Internal Server Error|(?:^|\n)[0-9a-f]+:E\{/
 async function anonymousProbe(url, headers = {}) {
   const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(20000) })
@@ -30,6 +33,7 @@ try {
  for (const target of [origin, ...immutable]) {
   const validated = navigationTarget(target)
   const headers = readM2AccessHeaders(validated.origin, process.env.M2_ACCESS_TOKEN_FILE)
+  sensitiveValues.push(...Object.values(headers))
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
   await applyM2BrowserAccess(context, validated.origin, headers)
   const page = await context.newPage()
@@ -86,7 +90,7 @@ try {
         report.active = { host: url.hostname, path: url.pathname, kind: 'image' }
         if (images.has(url.href)) continue
         for (let hop = 0; hop < 4; hop++) {
-          assert.ok(url.origin === validated.origin || (url.protocol === 'https:' && allowedImageHosts.has(url.hostname)), 'M2_PUBLIC_IMAGE_HOST_REQUIRED')
+          assert.ok(isM2PublicImageTarget(url, validated.origin), 'M2_PUBLIC_IMAGE_HOST_REQUIRED')
           assert.ok(!url.username && !url.password)
           const image = await context.request.get(url.href, { headers: url.origin === validated.origin ? headers : {}, maxRedirects: 0, timeout: 30000 })
           if ([301,302,303,307,308].includes(image.status())) { url = new URL(image.headers().location, url); continue }
@@ -105,7 +109,9 @@ try {
       await page.goto(validated.origin, { waitUntil: 'networkidle' })
       for (const index of [1, 2, 3]) {
         await page.getByRole('button', { name: `Xem banner ${index}`, exact: true }).click()
-        await page.getByRole('group', { name: `${index} trên 3`, exact: true }).getByRole('img').waitFor()
+        const heroImage = page.getByRole('group', { name: `${index} trên 3`, exact: true }).getByRole('img')
+        await heroImage.waitFor()
+        assert.ok(await heroImage.evaluate(async img => { await img.decode(); return img.naturalWidth > 0 }), 'M2_RENDERED_HERO_IMAGE_REQUIRED')
         await collectImages()
       }
       assert.equal(await page.locator('header').count(), 1)
@@ -123,7 +129,11 @@ try {
         report.active = { kind: 'responsive-catalogue', width, category: category.slug }
         const listing = category.listings[0].slug
         await page.goto(validated.origin + '/' + category.slug, { waitUntil: 'networkidle' })
-        await page.locator(`#main-content a[href="/${category.slug}/${listing}"]`).first().click()
+        const listingLink = page.locator(`#main-content a[href="/${category.slug}/${listing}"]`).first()
+        await listingLink.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'center' }))
+        // The horizontal grid's back arrow overlaps the first card's image
+        // center. Reuse the existing navigation test's real label click.
+        await listingLink.locator('span').click()
         await page.waitForURL(validated.origin + '/' + category.slug + '/' + listing)
         const product = page.locator(`#main-content a[href^="/${category.slug}/${listing}/"]`).first()
         await product.waitFor({ state: 'visible' })
@@ -154,6 +164,7 @@ try {
  report.status = 'FAIL'
  const message = error instanceof Error ? error.message : ''
  report.reason = /^M2_[A-Z0-9_]+$/.test(message) ? message : 'PUBLIC_ACCEPTANCE_FAILED'
+ report.diagnostic = sanitizeM2CommandFailure(message, sensitiveValues).slice(-3000)
  throw new Error(report.reason)
 } finally {
  await browser.close()

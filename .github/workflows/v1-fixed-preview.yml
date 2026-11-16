@@ -153,7 +153,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: m2-fixed-preview-${{ github.sha }}
-          path: ${{ runner.temp }}/m2-preview-artifact
+          # .vite manifests and .assetsignore are part of the recorded digests.
+          # Upload only the closed candidate paths, excluding local CLI state.
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/m2-preview-artifact/worker
+            ${{ runner.temp }}/m2-preview-artifact/assets
+            ${{ runner.temp }}/m2-preview-artifact/wrangler.fixed-preview.json
+            ${{ runner.temp }}/m2-preview-artifact/m2-artifact.json
+            ${{ runner.temp }}/m2-preview-artifact/snapshot-lock.json
+            ${{ runner.temp }}/m2-preview-artifact/m2-preflight.json
           if-no-files-found: error
           retention-days: 7
       - name: Upload local runtime evidence
