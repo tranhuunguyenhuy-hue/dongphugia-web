@@ -3,10 +3,12 @@ import type { NextRequest } from 'next/server'
 
 import { getPublicAppEnvironment } from './src/config/env'
 import { PUBLIC_PREVIEW_ROBOTS_HEADER } from './src/worker-policy'
+import { usesStagingPublicSnapshot } from './src/runtime/public-snapshot-mode'
 
 export function proxy(request: NextRequest) {
   const appEnvironment = getPublicAppEnvironment()
   if (['preview', 'staging'].includes(appEnvironment.environment)
+    && !usesStagingPublicSnapshot()
     && (request.nextUrl.pathname === '/blog' || request.nextUrl.pathname.startsWith('/blog/'))) {
     return new NextResponse('Blog content is unavailable in this environment.', {
       status: 503,

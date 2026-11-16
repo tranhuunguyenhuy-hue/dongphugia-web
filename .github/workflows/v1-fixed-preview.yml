@@ -146,8 +146,10 @@ jobs:
           path: ${{ runner.temp }}/m2-public-snapshot
           if-no-files-found: error
           retention-days: 7
-      - name: Upload exact preflighted Preview artifact
-        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+      - name: Upload isolated Preview candidate and preflight evidence
+        # Preserve the isolated candidate for local reproduction if preflight
+        # fails. Publication still requires prepare success and a PASS record.
+        if: always() && steps.assemble.outcome == 'success' && (inputs.operation == 'prepare-preview' || inputs.operation == 'publish')
         uses: actions/upload-artifact@v4
         with:
           name: m2-fixed-preview-${{ github.sha }}

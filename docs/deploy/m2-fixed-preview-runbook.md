@@ -16,6 +16,8 @@ Production config keeps `preview_urls:true`; the existing Production identity ga
 
 Retain the successful run's `m2-fixed-preview-<sha>` artifact plus its GitHub artifact digest/run ID, `m2-artifact.json`, `snapshot-lock.json`, `m2-preflight.json`, local evidence and hosted evidence. The artifact includes the exact Worker modules, Public assets, explicit config and hashes. Gate B requires actual deployment IDs/URLs, UAT and Owner + ChatGPT acceptance; neither an empty Preview record nor a 200 health response is acceptance.
 
+If local preflight fails after assembly, retain the same isolated candidate for local reproduction against its captured data. It has no PASS preflight record and cannot be published: the publish job still requires successful preparation and validates the PASS record itself.
+
 For a failed first candidate with no previously accepted staging version, leave Access protection in place, report recovery **UNKNOWN/not rehearsed**, and preserve evidence. Do not claim rollback PASS or restore Production.
 
 After a previously accepted staging artifact exists, the recovery path is re-uploading that artifact to the same named Preview:
