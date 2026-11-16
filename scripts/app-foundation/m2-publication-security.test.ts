@@ -2,7 +2,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
+import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
 import { diagnoseM2CaptureFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { validateM2PreviewConfig } from './publish-m2-fixed-preview.mjs'
 import { readFile } from 'node:fs/promises'
@@ -10,6 +10,23 @@ const origin = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy
 const checkpoint = 'a'.repeat(40)
 
 describe('M2 publisher safety boundaries', () => {
+  it('follows the observed same-path RSC cache-key redirect with scoped credentials', async () => {
+    const final = { status: () => 200, headers: () => ({}) }
+    const request = { get: vi.fn().mockResolvedValueOnce({ status: () => 307, headers: () => ({ location: '/blog?_rsc=synthetic-cache-key' }) }).mockResolvedValueOnce(final) }
+    const headers = { 'CF-Access-Client-Secret': 'synthetic-secret', RSC: '1' }
+    expect(await getM2PublicResponse(request, origin, origin + '/blog', { headers })).toBe(final)
+    expect(request.get.mock.calls[1]).toEqual([origin + '/blog?_rsc=synthetic-cache-key', { headers, maxRedirects: 0 }])
+  })
+  it.each(['https://cold-mode-bd20.cloudflareaccess.com/login', 'https://www.dongphugia.vn/blog', origin + '/api/health'])('never follows a credential-bearing redirect to %s', async location => {
+    const request = { get: vi.fn().mockResolvedValue({ status: () => 302, headers: () => ({ location }) }) }
+    await expect(getM2PublicResponse(request, origin, origin + '/blog', { headers: { 'CF-Access-Client-Secret': 'synthetic-secret' } })).rejects.toThrow('M2_RESPONSE_REDIRECT_TARGET_FORBIDDEN')
+    expect(request.get).toHaveBeenCalledTimes(1)
+  })
+  it('bounds redirect loops instead of hiding a broken endpoint', async () => {
+    const request = { get: vi.fn().mockResolvedValue({ status: () => 307, headers: () => ({ location: '/blog?_rsc=loop' }) }) }
+    await expect(getM2PublicResponse(request, origin, origin + '/blog')).rejects.toThrow('M2_RESPONSE_REDIRECT_LIMIT')
+    expect(request.get).toHaveBeenCalledTimes(3)
+  })
   it('reports only closed database diagnostic codes, never arbitrary connection details', () => {
     const privateError = Object.assign(new Error('postgresql://private-user:private-password@private-host/postgres'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' })
     expect(diagnoseM2CaptureFailure(privateError)).toEqual({ reason: 'M2_PROTECTED_CAPTURE_FAILED', connectionCode: 'SELF_SIGNED_CERT_IN_CHAIN' })

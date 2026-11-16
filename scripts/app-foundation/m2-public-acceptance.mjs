@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { chromium } from '@playwright/test'
-import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
+import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
 
 const [artifact, base, sourceSha, ...immutable] = process.argv.slice(2)
 const { origin, hosted } = navigationTarget(base)
@@ -35,7 +35,7 @@ try {
   const page = await context.newPage()
   const get = async (url, extra = {}) => {
     assert.equal(new URL(url).origin, validated.origin)
-    return context.request.get(url, { headers: { ...extra, ...headers }, maxRedirects: 0, timeout: 30000 })
+    return getM2PublicResponse(context.request, validated.origin, url, { headers: { ...extra, ...headers }, timeout: 30000 })
   }
   if (validated.hosted) {
     for (const path of ['/', '/api/health', '/images/logo-icon.svg', '/_next/static/probe.js']) await anonymousProbe(validated.origin + path)

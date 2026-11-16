@@ -34,3 +34,24 @@ export async function applyM2BrowserAccess(context, origin, accessHeaders) {
     await route.continue({ headers })
   })
 }
+
+// Vinext redirects a raw Flight request to the same path with its _rsc cache
+// key. Follow only a bounded same-origin/path chain; Access credentials must
+// never follow a login/CDN/Production redirect. Anonymous probes stay manual.
+export async function getM2PublicResponse(request, origin, rawUrl, options = {}) {
+  let url = new URL(rawUrl)
+  assert.equal(url.origin, origin, 'M2_AUTH_ORIGIN_REQUIRED')
+  assert.ok(!url.username && !url.password, 'M2_REQUEST_CREDENTIAL_URL_FORBIDDEN')
+  const pathname = url.pathname
+  for (let redirects = 0; ; redirects++) {
+    const response = await request.get(url.href, { ...options, maxRedirects: 0 })
+    if (![301, 302, 303, 307, 308].includes(response.status())) return response
+    assert.ok(redirects < 2, 'M2_RESPONSE_REDIRECT_LIMIT')
+    const location = response.headers().location
+    assert.ok(location, 'M2_RESPONSE_REDIRECT_LOCATION_REQUIRED')
+    const next = new URL(location, url)
+    assert.ok(next.origin === origin && next.pathname === pathname && !next.username && !next.password,
+      'M2_RESPONSE_REDIRECT_TARGET_FORBIDDEN')
+    url = next
+  }
+}
