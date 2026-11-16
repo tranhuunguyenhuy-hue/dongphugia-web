@@ -122,7 +122,10 @@ export default {
         'Cache-Control':PRIVATE_CACHE_CONTROL,...robotHeaders,...sourceIdentityHeader,
       }})
     }
-    if (!databaseMode) {
+    // M2's pinned staging snapshot uses dynamic SSR over local ASSETS. Only
+    // legacy snapshot releases carry the __render prerender proof and pages.
+    const stagingSnapshot = environment.APP_ENV === 'staging' && environment.PUBLIC_CATALOGUE_SOURCE === 'snapshot'
+    if (!databaseMode && !stagingSnapshot) {
       const prerendered=await servePrerenderedCatalogue(request,environment,__DPG_BUILD_SOURCE_SHA__)
       if(prerendered)return prerendered
     }
