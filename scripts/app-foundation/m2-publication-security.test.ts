@@ -50,7 +50,7 @@ describe('M2 publisher safety boundaries', () => {
       expect(() => readM2AccessHeaders('https://www.dongphugia.vn', file)).toThrow()
       let handler: (route: unknown) => Promise<void> = async () => {}
       await applyM2BrowserAccess({ route: async (_pattern: string, callback: typeof handler) => { handler = callback } }, origin, headers)
-      for (const target of [origin + '/api/search', 'https://dpg-products.b-cdn.net/image.jpg', 'https://www.dongphugia.vn/']) {
+      for (const target of [origin + '/api/search', 'https://dpg-products.b-cdn.net/image.jpg', 'https://media.dongphugia.vn/publishing/image.webp', 'https://www.dongphugia.vn/']) {
         const next = vi.fn()
         await handler({ request: () => ({ url: () => target, headers: () => ({ 'cf-access-client-secret': 'previous' }) }), continue: next })
         const actual = next.mock.calls[0][0].headers
