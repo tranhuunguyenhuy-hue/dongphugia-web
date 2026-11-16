@@ -4,7 +4,7 @@ import { M2_PUBLIC_TABLES, attestM2PublicRole, connectM2PublicRead } from './m2-
 
 function metadata() {
   return {
-    identity: { role: 'dpg_public_catalogue', read_only: 'on', row_security: 'on', rolsuper: false,
+    identity: { role: 'dpg_m2_snapshot_read', read_only: 'on', row_security: 'on', rolsuper: false,
       rolcreatedb: false, rolcreaterole: false, rolreplication: false, rolbypassrls: false },
     rights: M2_PUBLIC_TABLES.map((name: string) => ({ schema: 'dpg_app', name, read: true, write: false, rls: true, platform_statistics: false })),
     authority: { membership: false, ddl: false, dbcreate: false, sequence_write: false },
@@ -16,15 +16,15 @@ function client(data = metadata()) {
 }
 afterEach(() => vi.unstubAllEnvs())
 
-describe('M2 existing Public reader authority', () => {
-  it('accepts the existing RLS-protected Public identity including both Blog tables', async () => {
+describe('M2 dedicated snapshot reader authority', () => {
+  it('accepts only the dedicated RLS-protected M2 identity including both Blog tables', async () => {
     const data = metadata()
     data.rights.push({ schema: 'extensions', name: 'pg_stat_statements', read: true, write: false, rls: false, platform_statistics: true })
     await expect(attestM2PublicRole(client(data))).resolves.toBeUndefined()
     expect(M2_PUBLIC_TABLES).toHaveLength(14)
   })
-  it('rejects the legacy catalogue role and BYPASSRLS identities', async () => {
-    for (const change of [{ role: 'dpg_direct_read' }, { rolbypassrls: true }, { rolsuper: true }]) {
+  it('rejects the Production Public role and BYPASSRLS identities', async () => {
+    for (const change of [{ role: 'dpg_public_catalogue' }, { role: 'dpg_direct_read' }, { rolbypassrls: true }, { rolsuper: true }]) {
       const data = metadata(); Object.assign(data.identity, change)
       await expect(attestM2PublicRole(client(data))).rejects.toThrow('M2_PUBLIC_ROLE_IDENTITY_REQUIRED')
     }
