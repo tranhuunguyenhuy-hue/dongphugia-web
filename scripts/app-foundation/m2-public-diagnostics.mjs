@@ -22,6 +22,40 @@ export function diagnoseM2CaptureFailure(error) {
   }
 }
 
+const m2CloudflareEndpointTemplates = [
+  [/^\/workers\/workers\/[^/]+\/previews\/[^/]+\/deployments\/[^/]+$/, '/accounts/{account_id}/workers/workers/{worker_id}/previews/{preview_id}/deployments/{deployment_id}'],
+  [/^\/workers\/workers\/[^/]+\/previews\/[^/]+$/, '/accounts/{account_id}/workers/workers/{worker_id}/previews/{preview_id}'],
+  [/^\/workers\/workers\/[^/]+$/, '/accounts/{account_id}/workers/workers/{worker_id}'],
+  [/^\/workers\/scripts\/[^/]+\/deployments$/, '/accounts/{account_id}/workers/scripts/{script_name}/deployments'],
+  [/^\/workers\/scripts\/[^/]+\/settings$/, '/accounts/{account_id}/workers/scripts/{script_name}/settings'],
+  [/^\/workers\/scripts\/[^/]+\/subdomain$/, '/accounts/{account_id}/workers/scripts/{script_name}/subdomain'],
+  [/^\/access\/apps\/[^/]+\/policies\/[^/]+$/, '/accounts/{account_id}/access/apps/{app_id}/policies/{policy_id}'],
+  [/^\/access\/apps\/[^/]+\/policies$/, '/accounts/{account_id}/access/apps/{app_id}/policies'],
+  [/^\/access\/apps\/[^/]+$/, '/accounts/{account_id}/access/apps/{app_id}'],
+  [/^\/access\/service_tokens\/[^/]+$/, '/accounts/{account_id}/access/service_tokens/{service_token_id}'],
+  [/^\/access\/service_tokens$/, '/accounts/{account_id}/access/service_tokens'],
+]
+
+/**
+ * Record enough Cloudflare API failure context to identify a denied permission,
+ * while excluding account, Worker, app, policy, preview, and token identifiers.
+ */
+export function sanitizeM2CloudflareApiFailure(method, path, status, errors) {
+  const endpoint = m2CloudflareEndpointTemplates.find(([pattern]) => pattern.test(String(path)))?.[1]
+    || '/accounts/{account_id}/{unclassified_endpoint}'
+  const allowedMethods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+  const verb = String(method || '').toUpperCase()
+  const cloudflareErrorCodes = Array.isArray(errors)
+    ? errors.slice(0, 10).flatMap(error => Number.isInteger(error?.code) ? [error.code] : [])
+    : []
+  return {
+    method: allowedMethods.has(verb) ? verb : 'UNKNOWN',
+    endpoint,
+    status: Number.isInteger(status) ? status : null,
+    cloudflareErrorCodes,
+  }
+}
+
 /** Keep useful assertion/route failures without credential headers, JWTs or query strings. */
 export function sanitizeM2CommandFailure(text, secrets = []) {
   let safe = String(text)

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
-import { diagnoseM2CaptureFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
+import { diagnoseM2CaptureFailure, sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { validateM2PreviewConfig } from './publish-m2-fixed-preview.mjs'
 import { readFile } from 'node:fs/promises'
 const origin = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
@@ -76,5 +76,28 @@ describe('M2 publisher safety boundaries', () => {
     expect(safe).not.toContain('private-key')
     expect(safe).not.toContain('signature=')
     expect(safe).not.toContain('Bearer')
+  })
+  it.each([
+    ['/workers/workers/worker-private-id', '/accounts/{account_id}/workers/workers/{worker_id}'],
+    ['/access/apps/app-private-id', '/accounts/{account_id}/access/apps/{app_id}'],
+    ['/workers/scripts/worker-private-name/settings', '/accounts/{account_id}/workers/scripts/{script_name}/settings'],
+    ['/workers/scripts/worker-private-name/deployments', '/accounts/{account_id}/workers/scripts/{script_name}/deployments'],
+    ['/workers/scripts/worker-private-name/subdomain', '/accounts/{account_id}/workers/scripts/{script_name}/subdomain'],
+    ['/access/apps/app-private-id/policies/policy-private-id', '/accounts/{account_id}/access/apps/{app_id}/policies/{policy_id}'],
+    ['/access/service_tokens/token-private-id', '/accounts/{account_id}/access/service_tokens/{service_token_id}'],
+    ['/workers/workers/worker-private-id/previews/preview-private-id/deployments/deployment-private-id', '/accounts/{account_id}/workers/workers/{worker_id}/previews/{preview_id}/deployments/{deployment_id}'],
+  ])('records Cloudflare denial for %s without identifiers or response text', (path, endpoint) => {
+    const diagnostic = sanitizeM2CloudflareApiFailure('GET', path, 403, [
+      { code: 9109, message: 'private response detail' },
+    ])
+    expect(diagnostic).toEqual({ method: 'GET', endpoint, status: 403, cloudflareErrorCodes: [9109] })
+    const serialized = JSON.stringify(diagnostic)
+    for (const privateValue of ['worker-private-id', 'worker-private-name', 'app-private-id', 'policy-private-id', 'token-private-id', 'preview-private-id', 'deployment-private-id', 'private response detail']) {
+      expect(serialized).not.toContain(privateValue)
+    }
+  })
+  it('uses a closed fallback when a Cloudflare route has no known endpoint template', () => {
+    expect(sanitizeM2CloudflareApiFailure('GET', '/private-resource/private-id', 403, [{ message: 'private' }]))
+      .toEqual({ method: 'GET', endpoint: '/accounts/{account_id}/{unclassified_endpoint}', status: 403, cloudflareErrorCodes: [] })
   })
 })
