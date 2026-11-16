@@ -13,7 +13,7 @@ export async function attestM2PublicRole(client) {
     current_setting('transaction_read_only') AS read_only, current_setting('row_security') AS row_security,
     r.rolsuper, r.rolcreatedb, r.rolcreaterole, r.rolreplication, r.rolbypassrls
     FROM pg_roles r WHERE r.rolname=current_user`)).rows[0]
-  requireRead(identity?.role === 'dpg_public_catalogue' && !identity.rolsuper && !identity.rolcreatedb
+  requireRead(identity?.role === 'dpg_m2_snapshot_read' && !identity.rolsuper && !identity.rolcreatedb
     && !identity.rolcreaterole && !identity.rolreplication && identity.rolbypassrls === false,
   'M2_PUBLIC_ROLE_IDENTITY_REQUIRED')
   requireRead(identity.read_only === 'on' && identity.row_security === 'on', 'M2_PUBLIC_READ_ONLY_RLS_REQUIRED')
