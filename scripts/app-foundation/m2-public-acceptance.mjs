@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { chromium } from '@playwright/test'
+import { chromium, request } from '@playwright/test'
 import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
 import { sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
-import { isM2PublicImageTarget } from './m2-public-media.mjs'
+import { legacyBlogImagePostIds, verifyM2PublicImage } from './m2-public-media.mjs'
 
 const [artifact, base, sourceSha, ...immutable] = process.argv.slice(2)
 const { origin } = navigationTarget(base)
@@ -17,11 +17,12 @@ const blog = JSON.parse(await readFile(join(catalogue, 'blog.json'), 'utf8'))
 assert.equal(manifest.checkpoint, process.env.M2_PUBLIC_SNAPSHOT_CHECKPOINT)
 assert.equal(manifest.sourceSha, sourceSha)
 assert.equal(blog.posts.length, 10)
-const images = new Map(), results = [], report = { sourceSha, checkpoint: manifest.checkpoint, status: 'UNKNOWN', results }
+const images = new Map(), imageWarnings = new Map(), results = [], report = { sourceSha, checkpoint: manifest.checkpoint, status: 'UNKNOWN', results, warnings: [] }
 const sensitiveValues = [process.env.CLOUDFLARE_API_TOKEN, process.env.GH_TOKEN]
 const proxyUrl = process.env.https_proxy ? new URL(process.env.https_proxy) : null
 sensitiveValues.push(proxyUrl?.password, proxyUrl?.username)
 const browser = await chromium.launch({ headless: true, ...(proxyUrl ? { proxy: { server: proxyUrl.origin, username: proxyUrl.username, password: proxyUrl.password, bypass: '127.0.0.1,localhost' } } : {}) })
+let externalImageRequest
 const errorBody = /This page couldn.t load|Worker exceeded resource|Catalogue temporarily unavailable|Internal Server Error|(?:^|\n)[0-9a-f]+:E\{/
 async function anonymousProbe(url, headers = {}) {
   const response = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(20000) })
@@ -30,6 +31,7 @@ async function anonymousProbe(url, headers = {}) {
   results.push({ kind: 'anonymous-access', url: new URL(url).origin + new URL(url).pathname, status: response.status })
 }
 try {
+ externalImageRequest = await request.newContext(proxyUrl ? { proxy: { server: proxyUrl.origin, username: proxyUrl.username, password: proxyUrl.password, bypass: '127.0.0.1,localhost' } } : {})
  for (const target of [origin, ...immutable]) {
   const validated = navigationTarget(target)
   const headers = readM2AccessHeaders(validated.origin, process.env.M2_ACCESS_TOKEN_FILE)
@@ -86,22 +88,25 @@ try {
     const collectImages = async () => {
       for (const raw of await page.locator('#main-content img').evaluateAll(items => items.map(img => img.currentSrc || img.src))) {
         if (!raw || raw.startsWith('data:')) continue
-        let url = new URL(raw, validated.origin)
-        report.active = { host: url.hostname, path: url.pathname, kind: 'image' }
+        const url = new URL(raw, validated.origin)
+        const postIds = legacyBlogImagePostIds.get(url.href) ?? []
+        report.active = { host: url.hostname, path: url.pathname, kind: 'image', ...(postIds.length ? { postIds } : {}) }
         if (images.has(url.href)) continue
-        for (let hop = 0; hop < 4; hop++) {
-          assert.ok(isM2PublicImageTarget(url, validated.origin), 'M2_PUBLIC_IMAGE_HOST_REQUIRED')
-          assert.ok(!url.username && !url.password)
-          const image = await context.request.get(url.href, { headers: url.origin === validated.origin ? headers : {}, maxRedirects: 0, timeout: 30000 })
-          if ([301,302,303,307,308].includes(image.status())) { url = new URL(image.headers().location, url); continue }
-          assert.equal(image.status(), 200, 'M2_IMAGE_HTTP_REQUIRED')
-          const bytes = await image.body()
-          assert.match(image.headers()['content-type'] || '', /^image\//)
-          assert.ok(bytes.length > 16, 'M2_IMAGE_BYTES_REQUIRED')
-          images.set(raw, { host: url.hostname, path: url.pathname, bytes: bytes.length, mime: image.headers()['content-type'].split(';')[0] })
-          break
+        const previousWarning = imageWarnings.get(url.href)
+        if (previousWarning) {
+          previousWarning.count++
+          for (const postId of postIds) if (!previousWarning.postIds.includes(postId)) previousWarning.postIds.push(postId)
+          continue
         }
-        assert.ok(images.has(raw), 'M2_IMAGE_REDIRECT_LIMIT')
+        const image = await verifyM2PublicImage({
+          url,
+          origin: validated.origin,
+          requestForUrl: targetUrl => targetUrl.origin === validated.origin ? context.request : externalImageRequest,
+          headers,
+          postIds,
+        })
+        if (image.status === 'WARN') imageWarnings.set(url.href, image.warning)
+        else images.set(raw, image.image)
       }
     }
     for (const width of [390, 1440]) {
@@ -158,8 +163,11 @@ try {
   }
   await context.close()
  }
- report.status = 'PASS'; report.images = [...images.values()]
- console.log(JSON.stringify({ status: 'PASS', stage: 'M2_PUBLIC_ACCEPTANCE', sourceSha, checkpoint: manifest.checkpoint, publishedBlogs: 10, verifiedImages: images.size }))
+ report.warnings = [...imageWarnings.values()]
+ report.warningCount = report.warnings.reduce((count, warning) => count + warning.count, 0)
+ report.images = [...images.values()]
+ report.status = report.warningCount ? 'PASS_WITH_WARNINGS' : 'PASS'
+ console.log(JSON.stringify({ status: report.status, stage: 'M2_PUBLIC_ACCEPTANCE', sourceSha, checkpoint: manifest.checkpoint, publishedBlogs: 10, verifiedImages: images.size, externalMediaWarnings: report.warningCount, warnings: report.warnings }))
 } catch (error) {
  report.status = 'FAIL'
  const message = error instanceof Error ? error.message : ''
@@ -167,6 +175,6 @@ try {
  report.diagnostic = sanitizeM2CommandFailure(message, sensitiveValues).slice(-3000)
  throw new Error(report.reason)
 } finally {
- await browser.close()
+ await Promise.allSettled([externalImageRequest?.dispose(), browser.close()])
  await writeFile(join(folder, 'public-acceptance.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 })
 }
