@@ -98,8 +98,16 @@ async function cleanup() {
   if (results.some(value => value.endsWith('-failed'))) { evidence.status = 'FAIL'; process.exitCode = 1 }
 }
 async function accessFetch(path, token, init = {}) {
-  return fetch(FIXED_PREVIEW_ORIGIN + path, { redirect: 'manual', signal: AbortSignal.timeout(20000), ...init,
-    headers: { 'CF-Access-Client-Id': token.client_id, 'CF-Access-Client-Secret': token.client_secret, ...(init.headers || {}) } })
+  // A freshly published Preview can answer 503 while the first isolated-database connection warms; retry
+  // (bounded) and still assert the final status, so a permanent failure is never masked.
+  let response
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetch(FIXED_PREVIEW_ORIGIN + path, { redirect: 'manual', signal: AbortSignal.timeout(20000), ...init,
+      headers: { 'CF-Access-Client-Id': token.client_id, 'CF-Access-Client-Secret': token.client_secret, ...(init.headers || {}) } })
+    if (response.status !== 503) break
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  }
+  return response
 }
 async function adminSmoke(token, sourceSha) {
   const out = {}
