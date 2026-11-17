@@ -1,5 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@prisma/client/edge'
 import { Pool } from 'pg'
 import { requireWritesAllowed } from '../../src/lib/write-freeze'
 import { withRequestPrismaContext, type ProtectedPrismaClient } from '../../src/lib/prisma'
