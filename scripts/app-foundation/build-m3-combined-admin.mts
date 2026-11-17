@@ -12,7 +12,12 @@ const FIXED_PREVIEW_WORKER = 'dongphugia-v1-public-production'
 const FIXED_PREVIEW_NAME = 'staging'
 const FIXED_PREVIEW_ORIGIN = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
 const ENTRYPOINT_IMPORT = "import { createCombinedM3Worker } from './m3-combined-dispatch.mjs'\n"
+// Lazy dynamic imports (see the template): server bundles must not be evaluated at Worker startup.
 const ENTRYPOINT_IMPORTS = [
+  "import('./public/server/index.js')",
+  "import('./admin/server/index.mjs')",
+]
+const FORBIDDEN_STATIC_SERVER_IMPORTS = [
   "import publicWorker from './public/server/index.js'",
   "import adminWorker from './admin/server/index.mjs'",
 ]
@@ -197,7 +202,8 @@ async function main() {
   if (adminRscNamespace.namespace !== 'dpg-rsc0') throw new Error('COMBINED_ADMIN_RSC_NAMESPACE_INVALID')
 
   const sourceEntrypoint = await readFile(path.join(repositoryRoot, 'apps/public/worker.m3-combined.template.mjs'), 'utf8')
-  if (!ENTRYPOINT_IMPORTS.every((statement) => sourceEntrypoint.includes(`${statement}\n`))
+  if (!ENTRYPOINT_IMPORTS.every((statement) => sourceEntrypoint.includes(statement))
+    || FORBIDDEN_STATIC_SERVER_IMPORTS.some((statement) => sourceEntrypoint.includes(statement))
     || !sourceEntrypoint.includes(ENTRYPOINT_IMPORT) || !sourceEntrypoint.includes(ENTRYPOINT_DEFAULT)) {
     throw new Error('COMBINED_ADMIN_WORKER_TEMPLATE_INVALID')
   }
@@ -207,7 +213,8 @@ async function main() {
     .replace(ENTRYPOINT_DEFAULT, '')
   const workerPath = path.join(combinedRoot, 'worker.mjs')
   const combinedWorkerSource = `${workerSource.trim()}\n\n${dispatchSource.trim()}\n\n${ENTRYPOINT_DEFAULT}\n`
-  if (!ENTRYPOINT_IMPORTS.every((statement) => combinedWorkerSource.includes(`${statement}\n`))) {
+  if (!ENTRYPOINT_IMPORTS.every((statement) => combinedWorkerSource.includes(statement))
+    || FORBIDDEN_STATIC_SERVER_IMPORTS.some((statement) => combinedWorkerSource.includes(statement))) {
     throw new Error('COMBINED_ADMIN_WORKER_SERVER_IMPORTS_MISSING')
   }
   await writeFile(workerPath, combinedWorkerSource, 'utf8')
