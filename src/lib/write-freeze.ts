@@ -1,5 +1,12 @@
 import { isProductionRuntime } from './runtime-role'
 
+function isIsolatedAdminPreviewWriteTarget() {
+    return process.env.APP_ENV === 'preview'
+        && process.env.RUNTIME_ROLE === 'staging'
+        && process.env.ALLOW_ISOLATED_TEST_WRITES === 'true'
+        && process.env.ADMIN_TEST_DB_ROLE === 'dpg_admin_m3_test'
+}
+
 /**
  * Server-side write-freeze guard for database cutover windows.
  *
@@ -25,7 +32,7 @@ export class WriteFreezeError extends Error {
 export function isWriteFreezeEnabled() {
     const configured = process.env[WRITE_FREEZE_ENV]
     if (configured === 'true') return true
-    if (configured === 'false') return !isProductionRuntime()
+    if (configured === 'false') return !isProductionRuntime() && !isIsolatedAdminPreviewWriteTarget()
 
     // Treat every production server runtime as frozen unless the explicit
     // Production role above thaws it. This also protects a legacy Staging

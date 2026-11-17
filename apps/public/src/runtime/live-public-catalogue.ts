@@ -28,10 +28,11 @@ const ROUTE_CATEGORIES=new Set(['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc
 const HOSTS=new Set(['cdn.dongphugia.com.vn','dpg-products.b-cdn.net','cdn.hita.com.vn','hita.com.vn','vietceramics.com','tygjmrhandbffjllxveu.supabase.co'])
 const LEGACY_PRODUCT_CDN='cdn.dongphugia.com.vn'
 const PRODUCT_PULL_ZONE_CDN='dpg-products.b-cdn.net'
+import { isStagingMediaHost } from './staging-media-host'
 function safeImage(s:string|null){
  if(!s||s.length>2048)return null
  if(s.startsWith('/images/')&&!s.includes('..'))return s
- try{const u=new URL(s);if(u.protocol!=='https:'||u.search||u.hash||u.username||u.password||!HOSTS.has(u.hostname)
+ try{const u=new URL(s);if(u.protocol!=='https:'||u.search||u.hash||u.username||u.password||!(HOSTS.has(u.hostname)||isStagingMediaHost(u.hostname))
    ||(u.hostname.endsWith('.supabase.co')&&!u.pathname.startsWith('/storage/v1/object/public/')))return null
   // The legacy custom hostname is a documented alias for this Bunny Pull Zone,
   // but its TLS endpoint rejects modern clients. Match snapshot-mode delivery.

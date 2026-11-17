@@ -1,28 +1,15 @@
-# Đông Phú Gia V1 — restoration project
+# Đông Phú Gia V1
 
-**Owner-approved roadmap since 2026-11-13: five milestones only.** This is V1 (`tranhuunguyenhuy-hue/dongphugia.com.vn`), **not V2**.
+Restoration and operation of https://www.dongphugia.vn. **Start:** [AGENTS.md](AGENTS.md) · [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) · [current checkpoint](docs/ops/project-current-state.md) · [technical handbook](docs/PROJECT.md). Codex and Claude Code use the same policy.
 
-**Start here:** [AGENTS.md](AGENTS.md) (agent policy) · [Current milestone M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) · [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) · [Project handbook](docs/PROJECT.md) · [Verified status](docs/ops/project-current-state.md).
+One milestone at a time: M1 Public Production → M2 fixed Public Preview → M3 legacy Admin on that Preview → M4 Admin Production → M5 audit. Read the current milestone issue, not archived tickets.
 
-## Approved sequence
+Production and Staging run within the existing Cloudflare Worker `dongphugia-v1-public-production`; the named Preview is `staging`. Supabase `dongphugia-production` (`bonxyxluzlxfkdetryoo`) and `dongphugia-staging` (`uybumsnyqpwcidjxmfsv`) are distinct projects. Bunny is the media provider. GitHub Actions is the release authority. Infrastructure budget: $0 incremental.
 
-**M1** DB-backed Production Public + Products/Blog → **M2** one fixed Worker Preview named `staging` inside Production Worker (Public snapshot allowed) → **M3** full legacy Admin, Hyperdrive and real Auth on that Preview with isolated TEST DB → **M4** accepted Admin to Production → **M5** audit.
+- `apps/public/`: canonical Worker runtime; `src/app/(public)/` and `src/components/`: UI.
+- `src/app/admin/`: canonical legacy Admin; `apps/admin/` is not the target.
+- M3 combined build: `npm run build:m3-combined-worker`, after verifying Node 24.13.0/npm 11.6.2 and installing locked dependencies according to current source.
+- `prisma/`, `db/`, `supabase/`: schema/migration source; do not apply blindly.
+- [Deployment](docs/deploy/cloudflare-fixed-preview-production.md), [DB security](docs/deploy/supabase-runtime-security-boundary.md), [backup/recovery](docs/deploy/runtime-backup-recovery.md).
 
-**Environments:** localhost (development) → **fixed Preview `staging` INSIDE existing `dongphugia-v1-public-production` Worker** (M2/M3) → same Worker's Production deployment (`www.dongphugia.vn`). No new Worker, no automatic per-PR Preview. The old separate `dpg-staging` Worker is no longer used. Preview secrets/Hyperdrive/test database are isolated. Code rollback is not database rollback.
-
-## Repo pointers
-
-- `apps/public/`: deployed Cloudflare Public-oriented runtime.
-- `src/app/admin/`: restored legacy Admin source of truth; not yet proved as hosted Cloudflare Admin.
-- `apps/admin/`: historic separate Admin shell, **not** the target of M3/M4.
-- `prisma/`, `supabase/`, `db/`: data schema, migrations and evidentiary contracts.
-- `scripts/`, `.github/workflows/`: supporting implementation/tests; avoid activating irrelevant legacy pipelines.
-- `docs/deploy/`: **technical evidence and rollback scripts**, not independent priority or authorization.
-
-## Agent execution
-
-Open only the **active milestone** and required code/runbook; localhost + focused tests + one named Preview for M2/M3 + runtime evidence. Do not revive Phase 2, checkout, per-branch Previews, the old `dpg-staging` Worker, parallel agents or V2. No source-committed secrets; backup and rollback before Production writes.
-
-## Fast delivery pipeline (2026-11-13)
-
-**PR → required `quality` → merge main → [V1 Worker release](.github/workflows/v1-worker-release.yml) (`publish=false` verify, `publish=true` release).** The release workflow builds the **actual `apps/public` Cloudflare Worker**, not the legacy root Next.js app. Cloudflare Builds direct auto deployment was found misconfigured and must not be treated as evidence of a Production update. Only one named Worker Preview `staging` for M2/M3, no automatic PR previews. See [Release runbook](docs/ops/v1-fast-release.md).
+The current checkpoint and Issue #309 contain the next step. Do not deploy Production from an unrelated push or restart completed work.

@@ -6,19 +6,21 @@ const getDoc = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf
 const agents = getDoc('AGENTS.md')
 const handbook = getDoc('docs/PROJECT.md')
 const current = getDoc('docs/ops/project-current-state.md')
+const claude = getDoc('CLAUDE.md')
 const prodDb = getDoc('docs/deploy/postgresql-production-adoption-contract.md')
 const cloudflare = getDoc('docs/deploy/cloudflare-fixed-preview-production.md')
 
 describe('V1 owner-approved 5-milestone delivery authority', () => {
-  it('makes M1 the only active milestone, with real PostgreSQL Public reads and rollback', () => {
-    for (const v of ['#306', '#307', '#308', '#309', '#310', '#311', 'ACTIVE M1']) {
+  it('uses one shared current milestone authority and preserves PostgreSQL Public reads and rollback', () => {
+    for (const v of ['#306', '#307', '#308', '#309', '#310', '#311', 'Only the milestone designated active']) {
       expect(agents).toContain(v)
     }
     expect(prodDb).toContain('Public database read path')
     expect(prodDb).toContain('snapshot')
     expect(prodDb).toContain('read-only')
     expect(current).toContain('M1')
-    expect(current).toContain('NOT YET ACCEPTED')
+    expect(current).toContain('Latest decisions:')
+    expect(claude.trim()).toBe('@AGENTS.md')
   })
 
   it('uses one fixed named Preview inside Production Worker with isolated Admin', () => {

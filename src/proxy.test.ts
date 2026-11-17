@@ -66,27 +66,17 @@ describe("public redirect boundary", () => {
   })
 })
 
-describe("legacy Admin launch boundary", () => {
-  it("sends the Admin home to the Product list and allows only login, Products, and Blog posts", () => {
-    const home = request("http://127.0.0.1/admin")
-    expect(home.status).toBe(307)
-    expect(new URL(home.headers.get("location") ?? "http://localhost").pathname).toBe("/admin/products")
-
+describe("legacy Admin M3 boundary", () => {
+  it("serves the Admin home and every inventoried legacy module through the Admin handler", () => {
     for (const path of [
+      "/admin",
       "/admin/login",
       "/admin/products",
       "/admin/products/123",
       "/admin/blog/posts",
       "/admin/blog/posts/123",
       "/admin/blog/posts/new",
-    ]) {
-      const response = request(`http://127.0.0.1${path}`)
-      expect(response.headers.get("x-middleware-next"), path).toBe("1")
-    }
-  })
-
-  it("returns 404 for deferred Admin modules", () => {
-    for (const path of [
+      "/admin/blog/tags",
       "/admin/orders",
       "/admin/customers",
       "/admin/quote-requests",
@@ -97,10 +87,16 @@ describe("legacy Admin launch boundary", () => {
       "/admin/doi-tac",
       "/admin/du-an",
       "/admin/users",
-      "/admin/blog/tags",
     ]) {
       const response = request(`http://127.0.0.1${path}`)
-      expect(response.status, path).toBe(404)
+      expect(response.status, path).toBe(200)
+      expect(response.headers.get("x-middleware-next"), path).toBe("1")
+    }
+  })
+
+  it("returns 404 for unknown Admin paths", () => {
+    for (const path of ["/admin/unknown", "/admin/secret-module"]) {
+      expect(request(`http://127.0.0.1${path}`).status, path).toBe(404)
     }
   })
 })

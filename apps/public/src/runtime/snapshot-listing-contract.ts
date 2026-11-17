@@ -3,6 +3,8 @@ export const PUBLIC_SNAPSHOT_LISTING_PAGE_SIZE = 48
 export const PUBLIC_SNAPSHOT_LISTING_MAX_PAGES = 64
 export const PUBLIC_SNAPSHOT_LISTING_MAX_BRANDS = 32
 
+import { isStagingMediaHost } from './staging-media-host'
+
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const SAFE_CHECKPOINT = /^[a-f0-9]{40}$/
 const PUBLIC_IMAGE_HOSTS = new Set([
@@ -108,7 +110,7 @@ function isSafeImage(value: unknown): value is string | null {
             && !url.password
             && !url.search
             && !url.hash
-            && PUBLIC_IMAGE_HOSTS.has(url.hostname)
+            && (PUBLIC_IMAGE_HOSTS.has(url.hostname) || isStagingMediaHost(url.hostname))
             && (!url.hostname.endsWith('.supabase.co') || url.pathname.startsWith('/storage/v1/object/public/'))
     } catch {
         return false

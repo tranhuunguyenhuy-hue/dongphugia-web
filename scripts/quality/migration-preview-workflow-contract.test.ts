@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/migration-preview.yml'), 'utf8')
 const qualityWorkflow = readFileSync(resolve(process.cwd(), '.github/workflows/quality.yml'), 'utf8')
 const changeGate = readFileSync(resolve(process.cwd(), 'scripts/app-foundation/preview-change-gate.mjs'), 'utf8')
-const buildGuide = readFileSync(resolve(process.cwd(), 'docs/deploy/public-static-build.md'), 'utf8')
+const buildGuide = readFileSync(resolve(process.cwd(), 'docs/deploy/cloudflare-fixed-preview-production.md'), 'utf8')
 
 describe('application CI workflow contract', () => {
   it('keeps required and risk-specific CI while selecting the exact PR head', () => {
@@ -45,10 +45,10 @@ describe('application CI workflow contract', () => {
     expect(workflow).toContain('SKIPPED_UNRELATED_CHANGE')
   })
 
-  it('documents local Preview separately from the serialized Staging publisher', () => {
-    expect(buildGuide).toContain('npm run preview:local')
-    expect(buildGuide).toContain('http://127.0.0.1:8787')
-    expect(buildGuide).toContain('single `dpg-staging` Worker')
+  it('documents the one fixed named Preview and keeps Production separate', () => {
+    expect(buildGuide).toContain('named Preview `staging` INSIDE `dongphugia-v1-public-production`')
+    expect(buildGuide).toContain('separate TEST PostgreSQL')
+    expect(buildGuide).toContain('not root Next.js')
     expect(buildGuide).not.toContain('CLOUDFLARE_READONLY_DISCOVERY_TOKEN')
     expect(buildGuide).not.toContain('dongphugia-v1-public-preview')
   })

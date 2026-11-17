@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
+import { can } from '@/lib/auth/permissions'
 import { randomUUID } from 'node:crypto'
-import sharp from 'sharp'
 import {
     MEDIA_PROFILES,
     createMediaFileName,
@@ -9,8 +9,15 @@ import {
     type MediaUploadResult,
     type MediaVariant,
 } from '@/lib/media/media-profiles'
-import { processImage } from '@/lib/media/process-image'
 import { getWriteFreezeMessage, isWriteFreezeError, requireWritesAllowed, WRITE_FREEZE_ERROR_CODE } from '@/lib/write-freeze'
+import { getAdminRuntimeEnvironment } from '@/lib/admin-runtime-environment'
+import {
+    MediaFormatError,
+    MediaTransformUnavailableError,
+    assertGifImage,
+    processImageWithImagesBinding,
+    type ImagesBindingLike,
+} from '@/lib/media/process-image-worker'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
@@ -23,20 +30,28 @@ type BunnyConfig = {
 }
 
 function getBunnyConfig(): BunnyConfig {
-    const storageZone = process.env.BUNNY_STORAGE_ZONE_NAME
-    const apiKey = process.env.BUNNY_STORAGE_API_KEY
+    const requestEnvironment = getAdminRuntimeEnvironment()
+    const environment = requestEnvironment ?? process.env
+    const storageZone = environment.BUNNY_STORAGE_ZONE_NAME
+    const apiKey = environment.BUNNY_STORAGE_API_KEY
+    const storageHost = environment.BUNNY_STORAGE_HOSTNAME
+    const cdnHost = environment.BUNNY_CDN_HOSTNAME
+    const isPreview = environment.APP_ENV === 'preview' || environment.APP_ENV === 'staging'
 
-    if (!storageZone || !apiKey) {
-        throw new Error('Thiếu cấu hình Bunny Storage')
+    if (!storageZone || !apiKey || (isPreview && (
+        environment.PREVIEW_MEDIA_TARGET_ISOLATED !== 'true'
+        || !storageHost
+        || !cdnHost
+        || ['cdn.dongphugia.com.vn', 'cdn.dongphugia.vn'].includes(cdnHost.toLowerCase())
+    ))) {
+        throw new Error(isPreview ? 'PREVIEW_MEDIA_TARGET_REQUIRED' : 'MEDIA_TARGET_NOT_CONFIGURED')
     }
 
     return {
         storageZone,
         apiKey,
-        storageHost:
-            process.env.BUNNY_STORAGE_HOSTNAME || 'sg.storage.bunnycdn.com',
-        cdnHost:
-            process.env.BUNNY_CDN_HOSTNAME || 'cdn.dongphugia.com.vn',
+        storageHost: storageHost || 'sg.storage.bunnycdn.com',
+        cdnHost: cdnHost || 'cdn.dongphugia.com.vn',
     }
 }
 
@@ -58,9 +73,18 @@ async function uploadToBunny(
     })
 
     if (!uploadRes.ok) {
-        const errorText = await uploadRes.text()
-        throw new Error(`Bunny ${uploadRes.status}: ${errorText}`)
+        throw new Error('MEDIA_STORAGE_REJECTED')
     }
+}
+
+// Worker runtime: the Cloudflare Images binding replaces sharp (native modules cannot load in Workerd).
+// The per-request Admin runtime environment exists ONLY inside the Worker; Node/local has none and keeps sharp.
+// Inside the Worker a missing binding fails closed (503) and never falls through to native sharp.
+function getImagesBinding(): ImagesBindingLike | null {
+    const runtime = getAdminRuntimeEnvironment()
+    if (!runtime) return null
+    if (!runtime.IMAGES) throw new MediaTransformUnavailableError()
+    return runtime.IMAGES as ImagesBindingLike
 }
 
 async function deleteFromBunny(config: BunnyConfig, filePath: string) {
@@ -81,6 +105,11 @@ export async function POST(request: NextRequest) {
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
+        if (!can(user.role, 'products:write')) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+        }
+
+        const config = getBunnyConfig()
 
         const formData = await request.formData()
         const file = formData.get('file') as File | null
@@ -119,14 +148,20 @@ export async function POST(request: NextRequest) {
 
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
-        const config = getBunnyConfig()
         const id = `${Date.now()}-${randomUUID().slice(0, 8)}`
 
         if (file.type === 'image/gif') {
-            const metadata = await sharp(buffer, {
-                animated: true,
-                limitInputPixels: 40_000_000,
-            }).metadata()
+            const images = getImagesBinding()
+            const metadata = images
+                ? await assertGifImage(images, buffer)
+                : await import('sharp').then(async ({ default: sharp }) => {
+                    const info = await sharp(buffer, {
+                        animated: true,
+                        limitInputPixels: 40_000_000,
+                    }).metadata()
+                    if (info.format !== 'gif') throw new MediaFormatError()
+                    return info
+                })
             const filePath = `${safeFolder}/${id}.gif`
             await uploadToBunny(config, filePath, buffer, 'image/gif')
 
@@ -142,7 +177,10 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const processed = await processImage(buffer, profileValue)
+        const images = getImagesBinding()
+        const processed = images
+            ? await processImageWithImagesBinding(images, buffer, profileValue)
+            : await import('@/lib/media/process-image').then(({ processImage }) => processImage(buffer, profileValue))
         const widths = MEDIA_PROFILES[profileValue].widths
         const uploadedPaths: string[] = []
 
@@ -205,12 +243,25 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const message =
-            error instanceof Error ? error.message : 'Lỗi không xác định'
-        console.error('[upload-image] Unexpected error:', error)
+        if (error instanceof MediaFormatError) {
+            return NextResponse.json({ error: 'Chỉ hỗ trợ JPG, PNG, WebP, GIF' }, { status: 400 })
+        }
+
+        if (error instanceof Error && error.message === 'MEDIA_TRANSFORM_UNAVAILABLE') {
+            console.error(JSON.stringify({ event: 'ADMIN_MEDIA_UPLOAD_FAILURE', code: 'MEDIA_TRANSFORM_UNAVAILABLE' }))
+            return NextResponse.json(
+                { error: 'Dịch vụ xử lý ảnh tạm thời không khả dụng hoặc đã hết hạn mức.' },
+                { status: 503 },
+            )
+        }
+
+        const code = error instanceof Error && error.message === 'PREVIEW_MEDIA_TARGET_REQUIRED'
+            ? error.message
+            : 'ADMIN_MEDIA_UPLOAD_FAILED'
+        console.error(JSON.stringify({ event: 'ADMIN_MEDIA_UPLOAD_FAILURE', code }))
         return NextResponse.json(
-            { error: `Lỗi server: ${message}` },
-            { status: 500 }
+            { error: code === 'PREVIEW_MEDIA_TARGET_REQUIRED' ? 'Preview chưa được cấu hình media TEST.' : 'Không thể tải ảnh lúc này.' },
+            { status: code === 'PREVIEW_MEDIA_TARGET_REQUIRED' ? 503 : 500 }
         )
     }
 }

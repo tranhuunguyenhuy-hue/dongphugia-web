@@ -1,6 +1,8 @@
 import { Client } from 'pg'
 
-export const PREVIEW_SOURCE_PROJECT = 'dongphugia-runtime'
+export const PREVIEW_SOURCE_PROJECT = 'dongphugia-production'
+export const PREVIEW_SOURCE_PROJECT_REF = 'bonxyxluzlxfkdetryoo'
+export const PREVIEW_SOURCE_CONTRACT_NAME = 'dongphugia-runtime'
 export const PREVIEW_SOURCE_REGION = 'ap-southeast-1'
 export const PREVIEW_SOURCE_ROLE = 'dpg_readonly'
 
@@ -27,6 +29,11 @@ type FreeTierGuard = {
   hard_stop_350_mib_bytes: number
 }
 
+type PreviewSourceIdentity = {
+  project: typeof PREVIEW_SOURCE_PROJECT
+  projectRef: typeof PREVIEW_SOURCE_PROJECT_REF
+}
+
 export type PreviewSourceAttestation = {
   currentUser: string
   transactionReadOnly: string
@@ -35,13 +42,54 @@ export type PreviewSourceAttestation = {
   missingSelectTables: string[]
 }
 
-export function assertPreviewSourceAttestation(attestation: PreviewSourceAttestation) {
+export function assertPreviewSourceDatabaseIdentity(connectionString: string): PreviewSourceIdentity {
+  let url: URL
+  try {
+    url = new URL(connectionString)
+  } catch {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:invalid connection URL')
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:unsupported protocol')
+  }
+  if (url.port && url.port !== '5432') {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:unexpected port')
+  }
+  if (url.pathname !== '/postgres') {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:unexpected database')
+  }
+
+  const blockedParameters = ['host', 'hostaddr', 'port', 'database', 'dbname', 'user', 'password', 'options', 'service', 'servicefile']
+  if (blockedParameters.some((parameter) => url.searchParams.has(parameter))) {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:connection override is not allowed')
+  }
+
+  const directHost = `db.${PREVIEW_SOURCE_PROJECT_REF}.supabase.co`
+  const poolerHost = 'aws-0-ap-southeast-1.pooler.supabase.com'
+  const direct = url.hostname === directHost
+  const pooler = url.hostname === poolerHost
+    && decodeURIComponent(url.username).endsWith(`.${PREVIEW_SOURCE_PROJECT_REF}`)
+  if (!direct && !pooler) {
+    throw new Error('PREVIEW_SOURCE_DATABASE_IDENTITY_FAILED:project ref mismatch')
+  }
+
+  return { project: PREVIEW_SOURCE_PROJECT, projectRef: PREVIEW_SOURCE_PROJECT_REF }
+}
+
+export function assertPreviewSourceAttestation(
+  attestation: PreviewSourceAttestation,
+  sourceIdentity: PreviewSourceIdentity,
+) {
   const failures: string[] = []
   const target = attestation.targetContract
   const guard = attestation.freeTierGuard
   if (attestation.currentUser !== PREVIEW_SOURCE_ROLE) failures.push('effective role is not dpg_readonly')
   if (attestation.transactionReadOnly !== 'on') failures.push('transaction is not read-only')
-  if (target.project_name !== PREVIEW_SOURCE_PROJECT) failures.push('project identity mismatch')
+  if (sourceIdentity.project !== PREVIEW_SOURCE_PROJECT || sourceIdentity.projectRef !== PREVIEW_SOURCE_PROJECT_REF) {
+    failures.push('Supabase project ref mismatch')
+  }
+  if (target.project_name !== PREVIEW_SOURCE_CONTRACT_NAME) failures.push('internal target contract mismatch')
   if (target.region !== PREVIEW_SOURCE_REGION) failures.push('region identity mismatch')
   if (target.environment !== 'preview') failures.push('environment is not preview')
   if (target.data_class !== 'production-derived-reduced-runtime') failures.push('data class mismatch')
@@ -54,6 +102,7 @@ export function assertPreviewSourceAttestation(attestation: PreviewSourceAttesta
   if (failures.length > 0) throw new Error(`PREVIEW_SOURCE_ATTESTATION_FAILED: ${failures.join('; ')}`)
   return {
     project: PREVIEW_SOURCE_PROJECT,
+    projectRef: PREVIEW_SOURCE_PROJECT_REF,
     region: PREVIEW_SOURCE_REGION,
     environment: 'preview',
     dataClass: target.data_class,
@@ -70,6 +119,7 @@ async function attest() {
   if (process.env.PUBLIC_STATIC_BUILD_READ_ONLY !== 'true') throw new Error('PREVIEW_SOURCE_READ_ONLY_GUARD_FAILED')
   if (!process.env.DATABASE_URL) throw new Error('PREVIEW_SOURCE_DATABASE_URL_MISSING')
 
+  const sourceIdentity = assertPreviewSourceDatabaseIdentity(process.env.DATABASE_URL)
   const client = new Client({ connectionString: process.env.DATABASE_URL })
   let transactionStarted = false
   try {
@@ -101,7 +151,7 @@ async function attest() {
       targetContract: row.target_contract,
       freeTierGuard: row.free_tier_guard,
       missingSelectTables,
-    })
+    }, sourceIdentity)
     process.stdout.write(`${JSON.stringify(evidence)}\n`)
   } catch (error) {
     if (transactionStarted) await client.query('ROLLBACK').catch(() => undefined)

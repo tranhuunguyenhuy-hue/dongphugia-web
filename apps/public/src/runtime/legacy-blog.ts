@@ -1,3 +1,4 @@
+import { isStagingMediaHost } from './staging-media-host'
 import archive from './legacy-blog-snapshot.json'
 import verifiedMedia from './legacy-blog-media.json'
 
@@ -94,7 +95,7 @@ export function historicalBlogImage(value: string | null | undefined): string | 
     if(url.hostname==='cdn.dongphugia.com.vn'&&url.search===''&&url.hash===''
       &&url.pathname.startsWith('/blog/')&&verifiedLegacyBlogFiles.has(url.pathname.slice(6)))
       return `https://dpg-products.b-cdn.net${url.pathname}`
-    return allowedMediaHosts.has(url.hostname) || verifiedMediaUrls.has(url.href) ? url.href : null
+    return allowedMediaHosts.has(url.hostname) || isStagingMediaHost(url.hostname) || verifiedMediaUrls.has(url.href) ? url.href : null
   } catch {
     return null
   }

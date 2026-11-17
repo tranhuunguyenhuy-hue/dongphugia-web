@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { isAdminLaunchHomePath, isAdminLaunchPathAllowed } from "@/lib/admin-launch-scope";
+import { isAdminLaunchPathAllowed } from "@/lib/admin-launch-scope";
 
 // ── Pre-compiled redirect map (source → destination) ────────
 // Generated from the redirects table via scripts/db/export-product-redirect-map.mts
@@ -39,13 +39,6 @@ const BYPASS_PATHS = [
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const search = request.nextUrl.search || "";
-
-  if (isAdminLaunchHomePath(pathname)) {
-    const productsUrl = request.nextUrl.clone();
-    productsUrl.pathname = "/admin/products";
-    productsUrl.search = "";
-    return NextResponse.redirect(productsUrl);
-  }
 
   if ((pathname === "/admin" || pathname.startsWith("/admin/")) && !isAdminLaunchPathAllowed(pathname)) {
     return new NextResponse("Not Found", { status: 404, headers: { "Cache-Control": "no-store" } });

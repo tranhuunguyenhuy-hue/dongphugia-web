@@ -1,9 +1,6 @@
 # LEO-540 runtime backup and recovery
 
-Status: source contract for encrypted protection of the isolated Supabase
-runtime dataset. This document does not authorize Production access, a
-Production write, a new credential, a new encryption-key store, paid backup or
-PITR, or archive deletion.
+Source contract for encrypted protection of the recovered database. The exact ref below is now Production. Revalidate actual workflow enablement, protected credentials, current capacity, target and M4 approval. This does not authorize a write, new credential, key store, paid backup/PITR or deletion.
 
 ## Design
 
@@ -12,11 +9,11 @@ encrypted backup Monday through Saturday at 02:17 UTC and runs the encrypted
 backup plus an isolated restore rehearsal on Sunday at 03:17 UTC. This yields
 exactly one scheduled backup per calendar day and one automatic restore per
 week. The restore can also be manually dispatched from protected `main` before
-a major migration or cutover event. The one-time LEO-540 acceptance rehearsal
-ran before the final fail-closed main-only trigger was retained; the schedule
-is not active on `main` until this PR is approved and merged. The backup job:
+a major migration or cutover event. Verify live workflow activation and run results; checked-in schedule does not prove a successful backup. The backup job:
 
-1. attests the exact `dongphugia-runtime` / `ap-southeast-1` Preview target and
+1. attests Supabase Production `dongphugia-production` (ref
+   `bonxyxluzlxfkdetryoo`) in `ap-southeast-1` and its reduced-runtime contract;
+   the internal data environment label remains `preview`. It then verifies
    its `production-derived-reduced-runtime` contract, using the existing
    `dpg_backup_login` explicitly set to the `dpg_backup` capability with
    `transaction_read_only=on` and SELECT coverage for every table in
@@ -112,11 +109,7 @@ administration capability.
 The approved source contract is 14 days and one encrypted artifact per run.
 The workflow does not delete old artifacts or configure a provider lifecycle
 rule. No paid storage, backup tier, PITR, overage, new bucket, or new external
-service is introduced by this source change. The current repository inventory
-is 46 artifacts / 368,552,993 bytes against the approved 500,000,000-byte
-budget; one measured backup artifact fits with 122,548,818 bytes remaining.
-Schedule activation remains subject to the same cost boundary and Owner merge
-decision.
+service is introduced by this source change. Recheck actual current Actions artifact usage and available no-cost capacity before dispatch.
 
 The database hard stop remains 350 MiB, with existing 250 MiB and 300 MiB
 alerts. The backup job stops unless the live target reports `WITHIN_BUDGET`.
@@ -199,26 +192,5 @@ target. A failed rehearsal is recovered by fixing the exact Owner configuration
 or source defect and rerunning the same workflow; it does not trigger cleanup,
 credential rotation, paid fallback, or Production recovery.
 
-## Current gate record
 
-- Source implementation: complete in open PR #124; exact-head CI is green.
-- Live encrypted logical backup: `PASS`, workflow run `33182413565`.
-- Checksum/integrity manifest: `PASS`.
-- Live isolated restore: `PASS`, workflow run `33182413565`, using the pinned
-  network-disabled/tmpfs-only PostgreSQL 17.6 rehearsal target.
-- Product validation: `PASS`.
-- Family/MS885 validation: `PASS`.
-- Blog validation: `PASS`.
-- Actions artifact free/near-zero-cost allowance: `PASS`; 46 artifacts totaling
-  368,552,993 bytes remain, below the approved 500,000,000-byte budget, with
-  one measured backup artifact fitting inside the remaining headroom.
-- Artifact preservation: `PASS`; 294 previously audited `SAFE_TO_DELETE`
-  artifacts were deleted, while all audited `MUST_KEEP` and `UNCERTAIN`
-  artifacts were retained. The complete per-artifact deletion manifest was not
-  retained; this one-time process deviation was ratified by the Owner.
-- Production database/write-target switch: not performed.
-- Production deployment, DNS/traffic cutover, paid PITR/storage, unrelated
-  credential/security mutation, and AWS retirement: not performed.
-- Schedule activation: daily backup and weekly restore schedules remain
-  fail-closed until Owner approval and merge; no Production authorization is
-  granted by this record.
+Verify a fresh encrypted backup and restore rehearsal before M4; prior run evidence is not current recovery proof.
