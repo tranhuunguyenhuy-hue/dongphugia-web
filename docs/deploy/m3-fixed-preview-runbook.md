@@ -22,3 +22,6 @@ Scope: combined Public+Admin Worker into **only** named Preview `staging` of `do
 - Product photo quality for **new** uploads (widths 320/640/1280/1600, WebP q85–90, no upscaling) is deferred: `createResponsiveSrcSet` derives siblings from the profile widths, so adding 1280/1600 would emit URLs that do not exist for previously uploaded 640-only images. Needs verified/versioned variant metadata first. Production read-only inventory (Owner/Tech Lead): 5,971 eligible rows, 123 main URLs `product.w640`, 5,847 legacy/other, 1 missing; live bytes/dimensions unverified; no mass reprocessing in M3.
 - Audit original/gallery images and retina detail zoom.
 - Assess Supabase TEST Storage free quota as a possible future alternative to the Bunny Staging zone (no migration now).
+
+## Preview secret names (publish failure 16:36 UTC, CF code 10021)
+Run 44126781492 failed at upload validation: the combined Worker's `process.env` is populated from every Preview binding and the shared Public guard rejects `BUNNY_STORAGE_API_KEY` at module init (`PUBLIC_PRIVILEGED_ENV_FORBIDDEN`). The Preview secret is therefore bound as `ADMIN_PREVIEW_MEDIA_KEY` (mapped to `BUNNY_STORAGE_API_KEY` only inside the Admin request environment); the Public guard is unchanged. The GitHub Environment secret name stays `M3_PREVIEW_BUNNY_STORAGE_API_KEY`.

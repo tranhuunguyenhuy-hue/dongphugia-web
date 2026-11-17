@@ -86,4 +86,18 @@ describe('Public application environment contract', () => {
       }),
     ).toThrow('PUBLIC_BROWSER_ENV_NOT_ALLOWLISTED')
   })
+
+  it('tolerates the combined M3 Worker Preview bindings in the shared process environment but still rejects privileged Public names', () => {
+    // The combined Worker populates process.env from every Preview binding, including Admin-only secrets.
+    const combined = {
+      APP_ENV: 'staging',
+      APP_ORIGIN: 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev',
+      PREVIEW_NOINDEX: 'true',
+      ADMIN_PREVIEW_MEDIA_KEY: 'synthetic-admin-media-key',
+      REVALIDATE_SECRET: 'synthetic-revalidate-secret',
+    }
+    expect(getPublicAppEnvironment(combined)).toMatchObject({ environment: 'staging', previewNoindex: true })
+    // The guard itself is unchanged: the legacy privileged names remain forbidden for Public.
+    expect(() => getPublicAppEnvironment({ ...combined, BUNNY_STORAGE_API_KEY: 'x' })).toThrow('PUBLIC_PRIVILEGED_ENV_FORBIDDEN:BUNNY_STORAGE_API_KEY')
+  })
 })
