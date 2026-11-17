@@ -45,6 +45,20 @@ describe('Public Worker fail-closed policy', () => {
     expect(() => assertPreviewRuntime(new Request('https://feature-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev/'), staging)).toThrow('PUBLIC_WORKER_PREVIEW_ORIGIN_INVALID')
     expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), { ...staging, PUBLIC_DB: {} }))
       .toThrow('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+    expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), { ...staging, PUBLIC_CATALOGUE_SOURCE: 'postgresql' }))
+      .toThrow('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+    expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), { ...staging, PREVIEW_TEST_DATABASE_ISOLATED: 'true' }))
+      .toThrow('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+    expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), { ...staging, PREVIEW_TEST_DATABASE_ISOLATED: 'true', PUBLIC_DB: {} }))
+      .toThrow('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+    // M3: the isolated TEST database is allowed only with binding + postgresql source + explicit flag together.
+    expect(() => assertPreviewRuntime(new Request(`${staging.APP_ORIGIN}/`), {
+      ...staging, PREVIEW_TEST_DATABASE_ISOLATED: 'true', PUBLIC_DB: {}, PUBLIC_CATALOGUE_SOURCE: 'postgresql',
+    })).not.toThrow()
+    // The flag never relaxes Production-host protection or privileged binding rejection.
+    expect(() => assertPreviewRuntime(new Request('https://www.dongphugia.vn/'), {
+      ...staging, PREVIEW_TEST_DATABASE_ISOLATED: 'true', PUBLIC_DB: {}, PUBLIC_CATALOGUE_SOURCE: 'postgresql',
+    })).toThrow('PUBLIC_WORKER_PREVIEW_PRODUCTION_HOST_FORBIDDEN')
     expect(() => assertPreviewRuntime(new Request('https://dpg-staging.tranhuunguyenhuy.workers.dev/'), staging))
       .toThrow('PUBLIC_WORKER_PREVIEW_ORIGIN_INVALID')
     expect(() => assertPreviewRuntime(new Request('https://www.dongphugia.vn/'), staging))

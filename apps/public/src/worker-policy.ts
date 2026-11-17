@@ -127,8 +127,16 @@ export function assertPreviewRuntime(request: Request, environment: PublicWorker
     environment.APP_BUILD_TARGET !== 'public' ||
     environment.PREVIEW_NOINDEX !== 'true'
   ) throw new Error('PUBLIC_WORKER_PREVIEW_CONFIGURATION_REQUIRED')
-  if (environment.APP_ENV === 'staging' && ('PUBLIC_DB' in environment || environment.PUBLIC_CATALOGUE_SOURCE === 'postgresql')) {
-    throw new Error('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+  // M2 staging was snapshot-only. M3 staging may read ONLY the isolated TEST database: the Public binding and
+  // the postgresql source must be declared together with the explicit isolation flag; any other combination
+  // (a DB binding or postgresql source without the flag, or the flag without both) stays forbidden.
+  if (environment.APP_ENV === 'staging') {
+    const databaseRequested = 'PUBLIC_DB' in environment || environment.PUBLIC_CATALOGUE_SOURCE === 'postgresql'
+    const isolatedTestDatabase = environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
+      && 'PUBLIC_DB' in environment && environment.PUBLIC_CATALOGUE_SOURCE === 'postgresql'
+    if ((databaseRequested || environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true') && !isolatedTestDatabase) {
+      throw new Error('PUBLIC_WORKER_PREVIEW_DATABASE_FORBIDDEN')
+    }
   }
   const localPreview = environment.APP_ENV === 'preview'
     && configuredOrigin.protocol === 'http:'

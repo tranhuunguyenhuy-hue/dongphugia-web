@@ -77,6 +77,7 @@ export function createM3FixedPreviewConfig({
     ALLOW_ISOLATED_TEST_WRITES: 'true',
     ADMIN_TEST_DB_ROLE: 'dpg_admin_m3_test',
     PREVIEW_MEDIA_TARGET_ISOLATED: 'true',
+    PREVIEW_TEST_DATABASE_ISOLATED: 'true',
     BUNNY_STORAGE_ZONE_NAME: mediaTarget.storageZoneName,
     BUNNY_STORAGE_HOSTNAME: storageHostname,
     BUNNY_CDN_HOSTNAME: cdnHostname,
@@ -126,6 +127,7 @@ export function validateM3FixedPreviewConfig(config, expected) {
   assert.equal(config.previews.vars.PUBLIC_CATALOGUE_SOURCE, 'postgresql')
   assert.equal(config.previews.vars.ADMIN_TEST_DB_ROLE, 'dpg_admin_m3_test')
   assert.equal(config.previews.vars.PREVIEW_MEDIA_TARGET_ISOLATED, 'true')
+  assert.equal(config.previews.vars.PREVIEW_TEST_DATABASE_ISOLATED, 'true', 'M3_PREVIEW_TEST_DATABASE_FLAG_REQUIRED')
   assert.equal(config.previews.vars.BUNNY_STORAGE_ZONE_NAME, APPROVED_PREVIEW_ZONE_NAME, 'M3_PREVIEW_MEDIA_ZONE_NAME_NOT_APPROVED')
   assert.equal(config.previews.vars.BUNNY_STORAGE_HOSTNAME, APPROVED_STORAGE_HOSTNAME, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED')
   assert.match(config.previews.vars.BUNNY_CDN_HOSTNAME, APPROVED_PREVIEW_CDN, 'M3_PREVIEW_MEDIA_CDN_NOT_APPROVED')

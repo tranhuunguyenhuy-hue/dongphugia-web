@@ -56,6 +56,7 @@ function fixture() {
       BUILD_SOURCE_SHA: 'a'.repeat(40),
       PUBLIC_CATALOGUE_SOURCE: 'postgresql',
       ADMIN_TEST_DB_ROLE: 'dpg_admin_m3_test',
+      PREVIEW_TEST_DATABASE_ISOLATED: 'true',
       PUBLIC_DB: { connectionString: 'public-test-readonly' },
       HYPERDRIVE_ADMIN_NO_CACHE: { connectionString: 'synthetic-test-admin' },
       ADMIN_PREVIEW_MEDIA_KEY: 'synthetic-preview-media-key',
@@ -99,6 +100,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   expect(calls.public[0].cookie).toBe('theme=light')
   expect(calls.public[0].authorization).toBe('Bearer public-request-token')
   expect(calls.public[0].publicDb).toBe(environment.PUBLIC_DB)
+  expect(calls.public[0].environmentKeys).toContain('PREVIEW_TEST_DATABASE_ISOLATED')
   expect(calls.public[0].environmentKeys).not.toContain('HYPERDRIVE_ADMIN_NO_CACHE')
   expect(calls.public[0].environmentKeys).not.toContain('ADMIN_TEST_DB_ROLE')
   expect(calls.public[0].environmentKeys).not.toContain('BUNNY_STORAGE_API_KEY')
