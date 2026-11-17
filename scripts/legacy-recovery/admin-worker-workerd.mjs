@@ -292,11 +292,38 @@ async function main() {
     stageName.value = 'Worker route boundary and logout invalidates the test session'
     const unknownAdminResponse = await page.goto(localUrl('/admin/unknown'), { waitUntil: 'domcontentloaded' })
     assert.equal(unknownAdminResponse?.status(), 404)
-    await page.waitForLoadState('networkidle', { timeout: 20000 })
+
+    // The revoked-session check above intentionally removed the current login.
+    // Use a fresh browser context so logout is tested with a clean, valid
+    // session after the route-boundary requests above.
+    await context.close()
+    context = await browser.newContext()
+    const logoutPage = await context.newPage()
+    const reloginResponse = await logoutPage.goto(localUrl('/admin/login'), { waitUntil: 'domcontentloaded' })
+    assert.equal(reloginResponse?.status(), 200)
+    await logoutPage.locator('#identifier').fill(username)
+    await logoutPage.locator('#password').fill(syntheticPassword)
     await Promise.all([
-      page.waitForURL((url) => url.pathname === '/admin/login', { timeout: 10000 }),
-      page.getByTitle('Đăng xuất').first().click(),
+      logoutPage.waitForURL((url) => url.pathname === '/admin/products', {
+        timeout: 20000,
+        waitUntil: 'domcontentloaded',
+      }),
+      logoutPage.getByRole('button', { name: 'Đăng nhập' }).click(),
     ])
+    await logoutPage.locator('button[title="Đăng xuất"]:visible').first().waitFor({ state: 'visible', timeout: 10000 })
+    const activeSessions = await client.query(
+      `SELECT count(*)::int AS count FROM dpg_app.admin_sessions WHERE user_id = $1`,
+      [userId],
+    )
+    assert.equal(activeSessions.rows[0].count, 1)
+    await Promise.all([
+      logoutPage.waitForURL((url) => url.pathname === '/admin/login', {
+        timeout: 10000,
+        waitUntil: 'domcontentloaded',
+      }),
+      logoutPage.locator('button[title="Đăng xuất"]:visible').first().click(),
+    ])
+    await logoutPage.locator('#identifier').waitFor({ state: 'visible', timeout: 10000 })
     const loggedOutSessions = await client.query(
       `SELECT count(*)::int AS count FROM dpg_app.admin_sessions WHERE user_id = $1`,
       [userId],
