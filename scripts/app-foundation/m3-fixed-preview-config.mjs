@@ -8,7 +8,18 @@ import {
 const SOURCE_SHA = /^[a-f0-9]{40}$/
 const HYPERDRIVE_ID = /^[a-f0-9]{32}$/i
 const PREVIEW_SECRETS = ['BUNNY_STORAGE_API_KEY', 'REVALIDATE_SECRET']
-const PRODUCTION_MEDIA_HOSTS = new Set(['cdn.dongphugia.com.vn', 'cdn.dongphugia.vn'])
+const PRODUCTION_MEDIA_HOSTS = new Set([
+  'cdn.dongphugia.com.vn', 'cdn.dongphugia.vn', 'media.dongphugia.vn', 'dpg-products.b-cdn.net',
+  'dpg-publishing-production.b-cdn.net', 'dpg-publishing-staging.b-cdn.net', 'sg.storage.bunnycdn.com.production',
+])
+// Approved isolated Preview media target (Owner-created, Standard tier, 1 region, no replication).
+const APPROVED_PREVIEW_ZONE_NAME = 'dpg-media-staging'
+const APPROVED_STORAGE_HOSTNAME = 'sg.storage.bunnycdn.com'
+const APPROVED_PREVIEW_CDN = /^dpg-media-staging(?:-[a-z0-9]+)*\.b-cdn\.net$/
+// Known Production Bunny Storage Zone IDs/names (historical verified inventory). Storage Zone IDs only: never Pull Zone IDs.
+const PRODUCTION_STORAGE_ZONE_IDS = new Set(['1454608', '1741127', '1741228'])
+const LEGACY_PRODUCTION_MEDIA_ZONE_ID = '1454608'
+const PRODUCTION_STORAGE_ZONE_NAMES = new Set(['dpg-products', 'dpg-publishing-production', 'dpg-publishing-staging', 'production-r2'])
 
 function assertHostname(value, code) {
   assert.equal(typeof value, 'string', code)
@@ -41,10 +52,16 @@ export function createM3FixedPreviewConfig({
   assert.match(String(mediaTarget.zoneId ?? ''), /^[1-9][0-9]*$/, 'M3_PREVIEW_MEDIA_ZONE_ID_REQUIRED')
   assert.match(String(mediaTarget.productionZoneId ?? ''), /^[1-9][0-9]*$/, 'M3_PRODUCTION_MEDIA_ZONE_ID_REQUIRED')
   assert.notEqual(String(mediaTarget.zoneId), String(mediaTarget.productionZoneId), 'M3_PREVIEW_MEDIA_ZONE_MUST_BE_ISOLATED')
+  assert.equal(String(mediaTarget.productionZoneId), LEGACY_PRODUCTION_MEDIA_ZONE_ID, 'M3_PRODUCTION_MEDIA_ZONE_ID_MISMATCH')
+  assert.ok(!PRODUCTION_STORAGE_ZONE_IDS.has(String(mediaTarget.zoneId)), 'M3_PREVIEW_MEDIA_ZONE_MUST_BE_ISOLATED')
   assert.ok(typeof mediaTarget.storageZoneName === 'string' && mediaTarget.storageZoneName.length > 0, 'M3_PREVIEW_MEDIA_ZONE_NAME_REQUIRED')
+  assert.ok(!PRODUCTION_STORAGE_ZONE_NAMES.has(mediaTarget.storageZoneName), 'M3_PRODUCTION_MEDIA_ZONE_FORBIDDEN')
+  assert.equal(mediaTarget.storageZoneName, APPROVED_PREVIEW_ZONE_NAME, 'M3_PREVIEW_MEDIA_ZONE_NAME_NOT_APPROVED')
   const storageHostname = assertHostname(mediaTarget.storageHostname, 'M3_PREVIEW_MEDIA_STORAGE_HOST_REQUIRED')
+  assert.equal(storageHostname, APPROVED_STORAGE_HOSTNAME, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED')
   const cdnHostname = assertHostname(mediaTarget.cdnHostname, 'M3_PREVIEW_MEDIA_CDN_HOST_REQUIRED')
   assert.ok(!PRODUCTION_MEDIA_HOSTS.has(cdnHostname), 'M3_PRODUCTION_MEDIA_CDN_FORBIDDEN')
+  assert.match(cdnHostname, APPROVED_PREVIEW_CDN, 'M3_PREVIEW_MEDIA_CDN_NOT_APPROVED')
 
   const previewVars = {
     APP_ENV: 'staging',
@@ -106,6 +123,10 @@ export function validateM3FixedPreviewConfig(config, expected) {
   assert.equal(config.previews.vars.PUBLIC_CATALOGUE_SOURCE, 'postgresql')
   assert.equal(config.previews.vars.ADMIN_TEST_DB_ROLE, 'dpg_admin_m3_test')
   assert.equal(config.previews.vars.PREVIEW_MEDIA_TARGET_ISOLATED, 'true')
+  assert.equal(config.previews.vars.BUNNY_STORAGE_ZONE_NAME, APPROVED_PREVIEW_ZONE_NAME, 'M3_PREVIEW_MEDIA_ZONE_NAME_NOT_APPROVED')
+  assert.equal(config.previews.vars.BUNNY_STORAGE_HOSTNAME, APPROVED_STORAGE_HOSTNAME, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED')
+  assert.match(config.previews.vars.BUNNY_CDN_HOSTNAME, APPROVED_PREVIEW_CDN, 'M3_PREVIEW_MEDIA_CDN_NOT_APPROVED')
+  assert.ok(!PRODUCTION_MEDIA_HOSTS.has(config.previews.vars.BUNNY_CDN_HOSTNAME), 'M3_PRODUCTION_MEDIA_CDN_FORBIDDEN')
   assert.equal(config.previews.observability.redact_query_string, true)
   assert.equal(config.previews.observability.logs.persist, false)
 

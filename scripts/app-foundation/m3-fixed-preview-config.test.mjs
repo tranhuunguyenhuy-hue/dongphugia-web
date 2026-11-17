@@ -9,11 +9,11 @@ const publicId = '1'.repeat(32)
 const adminId = '2'.repeat(32)
 const productionId = '3'.repeat(32)
 const mediaTarget = {
-  zoneId: 401,
-  productionZoneId: 402,
-  storageZoneName: 'dpg-m3-preview-media',
+  zoneId: 1900001,
+  productionZoneId: 1454608,
+  storageZoneName: 'dpg-media-staging',
   storageHostname: 'sg.storage.bunnycdn.com',
-  cdnHostname: 'm3-preview-media.example.test',
+  cdnHostname: 'dpg-media-staging.b-cdn.net',
 }
 
 function create(overrides = {}) {
@@ -52,6 +52,13 @@ describe('M3 fixed Preview configuration', () => {
     ['unverified Production binding inventory', { productionHyperdriveIds: [], productionHyperdriveInventoryVerified: false }, 'M3_PRODUCTION_HYPERDRIVE_INVENTORY_REQUIRED'],
     ['shared Bunny zone', { mediaTarget: { ...mediaTarget, zoneId: mediaTarget.productionZoneId } }, 'M3_PREVIEW_MEDIA_ZONE_MUST_BE_ISOLATED'],
     ['Production Bunny CDN', { mediaTarget: { ...mediaTarget, cdnHostname: 'cdn.dongphugia.vn' } }, 'M3_PRODUCTION_MEDIA_CDN_FORBIDDEN'],
+    ['Production product pull zone host', { mediaTarget: { ...mediaTarget, cdnHostname: 'dpg-products.b-cdn.net' } }, 'M3_PRODUCTION_MEDIA_CDN_FORBIDDEN'],
+    ['unapproved CDN host', { mediaTarget: { ...mediaTarget, cdnHostname: 'attacker.example.test' } }, 'M3_PREVIEW_MEDIA_CDN_NOT_APPROVED'],
+    ['unapproved storage hostname', { mediaTarget: { ...mediaTarget, storageHostname: 'ny.storage.bunnycdn.com' } }, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED'],
+    ['Production storage zone name', { mediaTarget: { ...mediaTarget, storageZoneName: 'dpg-products' } }, 'M3_PRODUCTION_MEDIA_ZONE_FORBIDDEN'],
+    ['arbitrary storage zone name', { mediaTarget: { ...mediaTarget, storageZoneName: 'other-zone' } }, 'M3_PREVIEW_MEDIA_ZONE_NAME_NOT_APPROVED'],
+    ['known Production zone ID reused', { mediaTarget: { ...mediaTarget, zoneId: 1741127 } }, 'M3_PREVIEW_MEDIA_ZONE_MUST_BE_ISOLATED'],
+    ['wrong declared Production zone ID', { mediaTarget: { ...mediaTarget, productionZoneId: 402 } }, 'M3_PRODUCTION_MEDIA_ZONE_ID_MISMATCH'],
   ])('rejects %s', (_label, overrides, message) => {
     expect(() => create(overrides)).toThrow(message)
   })
