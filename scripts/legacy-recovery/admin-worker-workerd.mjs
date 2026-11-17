@@ -277,9 +277,11 @@ async function main() {
     assert.equal(deniedProduct.rows[0].name, updatedProductName)
 
     stageName.value = 'media upload denied for role without product-write permission'
-    const deniedUpload = await context.request.post(localUrl('/api/upload-image'))
-    const deniedUploadBody = await deniedUpload.text()
-    assert.equal(deniedUpload.status(), 403, `Upload permission-denial response: ${deniedUploadBody}`)
+    const deniedUpload = await page.evaluate(async (url) => {
+      const response = await fetch(url, { method: 'POST' })
+      return { status: response.status, body: await response.text() }
+    }, localUrl('/api/upload-image'))
+    assert.equal(deniedUpload.status, 403, `Upload permission-denial response: ${deniedUpload.body}`)
 
     stageName.value = 'revoked synthetic session denied on protected route'
     await client.query(`DELETE FROM dpg_app.admin_sessions WHERE user_id = $1`, [userId])
