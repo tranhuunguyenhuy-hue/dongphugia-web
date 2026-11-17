@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { PrismaClient } from '@prisma/client/edge'
+import { PrismaClient } from '@prisma/client/wasm'
 import { requireWritesAllowed } from '@/lib/write-freeze'
 
 const WRITE_OPERATIONS = new Set([
