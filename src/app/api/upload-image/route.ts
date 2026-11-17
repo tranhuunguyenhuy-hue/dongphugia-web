@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth/get-current-user'
 import { can } from '@/lib/auth/permissions'
 import { randomUUID } from 'node:crypto'
-import sharp from 'sharp'
 import {
     MEDIA_PROFILES,
     createMediaFileName,
@@ -10,7 +9,6 @@ import {
     type MediaUploadResult,
     type MediaVariant,
 } from '@/lib/media/media-profiles'
-import { processImage } from '@/lib/media/process-image'
 import { getWriteFreezeMessage, isWriteFreezeError, requireWritesAllowed, WRITE_FREEZE_ERROR_CODE } from '@/lib/write-freeze'
 import { getAdminRuntimeEnvironment } from '@/lib/admin-runtime-environment'
 
@@ -136,6 +134,7 @@ export async function POST(request: NextRequest) {
         const id = `${Date.now()}-${randomUUID().slice(0, 8)}`
 
         if (file.type === 'image/gif') {
+            const { default: sharp } = await import('sharp')
             const metadata = await sharp(buffer, {
                 animated: true,
                 limitInputPixels: 40_000_000,
@@ -155,6 +154,7 @@ export async function POST(request: NextRequest) {
             )
         }
 
+        const { processImage } = await import('@/lib/media/process-image')
         const processed = await processImage(buffer, profileValue)
         const widths = MEDIA_PROFILES[profileValue].widths
         const uploadedPaths: string[] = []

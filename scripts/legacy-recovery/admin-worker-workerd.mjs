@@ -266,6 +266,7 @@ async function main() {
     stageName.value = 'Products write denied to sale role'
     await client.query(`UPDATE dpg_app.admin_users SET role = 'sale' WHERE id = $1`, [userId])
     await page.goto(localUrl(`/admin/products/${productId}`), { waitUntil: 'domcontentloaded' })
+    await page.waitForLoadState('networkidle', { timeout: 20000 })
     await page.locator('input[name="name"]').fill(`${marker} Denied Product Edit`)
     await page.getByRole('button', { name: 'Cập nhật', exact: true }).first().click()
     await page.getByText('Bạn không có quyền cập nhật sản phẩm.', { exact: true }).waitFor({
@@ -277,7 +278,8 @@ async function main() {
 
     stageName.value = 'media upload denied for role without product-write permission'
     const deniedUpload = await context.request.post(localUrl('/api/upload-image'))
-    assert.equal(deniedUpload.status(), 403)
+    const deniedUploadBody = await deniedUpload.text()
+    assert.equal(deniedUpload.status(), 403, `Upload permission-denial response: ${deniedUploadBody}`)
 
     stageName.value = 'revoked synthetic session denied on protected route'
     await client.query(`DELETE FROM dpg_app.admin_sessions WHERE user_id = $1`, [userId])
@@ -288,6 +290,7 @@ async function main() {
     stageName.value = 'Worker route boundary and logout invalidates the test session'
     const unknownAdminResponse = await page.goto(localUrl('/admin/unknown'), { waitUntil: 'domcontentloaded' })
     assert.equal(unknownAdminResponse?.status(), 404)
+    await page.waitForLoadState('networkidle', { timeout: 20000 })
     await Promise.all([
       page.waitForURL((url) => url.pathname === '/admin/login', { timeout: 10000 }),
       page.getByTitle('Đăng xuất').first().click(),
