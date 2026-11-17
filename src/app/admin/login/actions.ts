@@ -107,7 +107,7 @@ export async function loginAction(
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: Math.floor(SESSION_MS / 1000),
-        path: '/admin',
+        path: '/',
     })
 
     redirect('/admin/products')
@@ -121,7 +121,7 @@ export async function logoutAction(): Promise<void> {
         await deleteSession(token)
     }
 
-    cookieStore.delete({ name: ADMIN_SESSION_COOKIE, path: '/admin' })
+    cookieStore.delete({ name: ADMIN_SESSION_COOKIE, path: '/' })
     redirect('/admin/login')
 }
 

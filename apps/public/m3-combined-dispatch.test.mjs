@@ -41,7 +41,7 @@ function fixture() {
         mediaKey: environment.BUNNY_STORAGE_API_KEY,
         revalidateSecret: environment.REVALIDATE_SECRET,
       })
-      return new Response('admin', { headers: { 'Set-Cookie': 'dpg-admin-session=test; Path=/admin; HttpOnly; Secure' } })
+      return new Response('admin', { headers: { 'Set-Cookie': 'dpg-admin-session=test; Path=/; HttpOnly; Secure' } })
     },
   }
   return {
@@ -80,7 +80,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   expect(adminResponse.status).toBe(200)
   expect(adminResponse.headers.get('cache-control')).toBe('private, no-store')
   expect(adminResponse.headers.get('x-robots-tag')).toBe('noindex, nofollow')
-  expect(adminResponse.headers.get('set-cookie')).toContain('Path=/admin')
+  expect(adminResponse.headers.get('set-cookie')).toContain('Path=/')
   expect(publicResponse.status).toBe(200)
   expect(calls.admin).toEqual([{
     path: '/admin/login',
