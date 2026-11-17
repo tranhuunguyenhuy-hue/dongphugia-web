@@ -11,6 +11,13 @@ import {
 } from '@/lib/media/media-profiles'
 import { getWriteFreezeMessage, isWriteFreezeError, requireWritesAllowed, WRITE_FREEZE_ERROR_CODE } from '@/lib/write-freeze'
 import { getAdminRuntimeEnvironment } from '@/lib/admin-runtime-environment'
+import {
+    MediaFormatError,
+    MediaTransformUnavailableError,
+    assertGifImage,
+    processImageWithImagesBinding,
+    type ImagesBindingLike,
+} from '@/lib/media/process-image-worker'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
@@ -71,9 +78,13 @@ async function uploadToBunny(
 }
 
 // Worker runtime: the Cloudflare Images binding replaces sharp (native modules cannot load in Workerd).
-function getImagesBinding() {
-    const binding = getAdminRuntimeEnvironment()?.IMAGES
-    return binding ? (binding as import('@/lib/media/process-image-worker').ImagesBindingLike) : null
+// The per-request Admin runtime environment exists ONLY inside the Worker; Node/local has none and keeps sharp.
+// Inside the Worker a missing binding fails closed (503) and never falls through to native sharp.
+function getImagesBinding(): ImagesBindingLike | null {
+    const runtime = getAdminRuntimeEnvironment()
+    if (!runtime) return null
+    if (!runtime.IMAGES) throw new MediaTransformUnavailableError()
+    return runtime.IMAGES as ImagesBindingLike
 }
 
 async function deleteFromBunny(config: BunnyConfig, filePath: string) {
@@ -142,11 +153,15 @@ export async function POST(request: NextRequest) {
         if (file.type === 'image/gif') {
             const images = getImagesBinding()
             const metadata = images
-                ? await import('@/lib/media/process-image-worker').then(({ readImageInfo }) => readImageInfo(images, buffer))
-                : await import('sharp').then(({ default: sharp }) => sharp(buffer, {
-                    animated: true,
-                    limitInputPixels: 40_000_000,
-                }).metadata())
+                ? await assertGifImage(images, buffer)
+                : await import('sharp').then(async ({ default: sharp }) => {
+                    const info = await sharp(buffer, {
+                        animated: true,
+                        limitInputPixels: 40_000_000,
+                    }).metadata()
+                    if (info.format !== 'gif') throw new MediaFormatError()
+                    return info
+                })
             const filePath = `${safeFolder}/${id}.gif`
             await uploadToBunny(config, filePath, buffer, 'image/gif')
 
@@ -164,8 +179,7 @@ export async function POST(request: NextRequest) {
 
         const images = getImagesBinding()
         const processed = images
-            ? await import('@/lib/media/process-image-worker').then(({ processImageWithImagesBinding }) =>
-                processImageWithImagesBinding(images, buffer, profileValue))
+            ? await processImageWithImagesBinding(images, buffer, profileValue)
             : await import('@/lib/media/process-image').then(({ processImage }) => processImage(buffer, profileValue))
         const widths = MEDIA_PROFILES[profileValue].widths
         const uploadedPaths: string[] = []
@@ -227,6 +241,10 @@ export async function POST(request: NextRequest) {
                 },
                 { status: 503 },
             )
+        }
+
+        if (error instanceof MediaFormatError) {
+            return NextResponse.json({ error: 'Chỉ hỗ trợ JPG, PNG, WebP, GIF' }, { status: 400 })
         }
 
         if (error instanceof Error && error.message === 'MEDIA_TRANSFORM_UNAVAILABLE') {

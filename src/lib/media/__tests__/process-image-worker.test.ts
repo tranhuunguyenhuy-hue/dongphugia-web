@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import {
+    MediaFormatError,
     MediaTransformUnavailableError,
+    assertGifImage,
     processImageWithImagesBinding,
     readImageInfo,
     type ImagesBindingLike,
@@ -25,13 +27,10 @@ function fakeImages(options: { width?: number; height?: number; fail?: 'transfor
             let target = 0
             const chain = {
                 transform(opts: { width: number }) { target = opts.width; widths.push(target); return chain },
-                output() {
-                    return {
-                        response() {
-                            if (options.fail === 'transform') throw new Error('9422')
-                            return new Response(new Uint8Array([0x57, target / 10]))
-                        },
-                    }
+                // Official API: output() is async and resolves to an object with response().
+                async output() {
+                    if (options.fail === 'transform') throw Object.assign(new Error('quota'), { code: 9422 })
+                    return { response: () => new Response(new Uint8Array([0x57, target / 10])) }
                 },
             }
             return chain as never
@@ -53,6 +52,15 @@ describe('Images binding adapter (Worker upload path)', () => {
         const images = fakeImages({ width: 10000, height: 5000 })
         await expect(processImageWithImagesBinding(images, new Uint8Array([1]), 'product')).rejects.toThrow('độ phân giải')
         expect(images.widths).toEqual([])
+    })
+
+    it('rejects non-raster or mismatched source formats and non-GIF pass-through input', async () => {
+        const gif = { ...fakeImages(), async info() { return { format: 'image/gif', width: 10, height: 10 } } } as ImagesBindingLike
+        await expect(processImageWithImagesBinding(gif, new Uint8Array([1]), 'product')).rejects.toBeInstanceOf(MediaFormatError)
+        await expect(assertGifImage(fakeImages(), new Uint8Array([1]))).rejects.toBeInstanceOf(MediaFormatError)
+        await expect(assertGifImage(gif, new Uint8Array([1]))).resolves.toMatchObject({ format: 'image/gif' })
+        const notImage = { ...fakeImages(), async info() { throw Object.assign(new Error('x'), { code: 9412 }) } } as ImagesBindingLike
+        await expect(readImageInfo(notImage, new Uint8Array([1]))).rejects.toBeInstanceOf(MediaFormatError)
     })
 
     it('fails closed with a sanitized error when the binding rejects (quota or unavailable)', async () => {
