@@ -242,6 +242,8 @@ if (process.argv[1]?.endsWith('/publish-m3-fixed-preview.mjs')) main().catch(err
   const message = error instanceof Error ? error.message : ''
   evidence.status = 'FAIL'; evidence.phase = phase
   evidence.reason = /^M3_[A-Z0-9_]{1,100}$/.test(message) ? message : 'M3_VALIDATION_FAILED'
+  // Sanitized class only (never message text) so an un-coded failure is diagnosable from evidence.
+  if (evidence.reason === 'M3_VALIDATION_FAILED' && error instanceof Error) evidence.errorClass = String(error.name).replace(/[^A-Za-z0-9_]/g, '').slice(0, 60) + (error.code ? ':' + String(error.code).replace(/[^A-Za-z0-9_]/g, '').slice(0, 30) : '')
   process.exitCode = 1
 }).finally(async () => {
   if (secretsFile) await rm(secretsFile, { force: true }).catch(() => {})

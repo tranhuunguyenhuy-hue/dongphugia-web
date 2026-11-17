@@ -172,3 +172,40 @@ it('fails closed for a missing Admin database, wrong TEST identity, or non-stagi
   expect(calls.admin).toHaveLength(0)
   expect(calls.public).toHaveLength(0)
 })
+
+it('keeps Admin process.env writes out of Public requests, including concurrent ones, and restores nothing globally', async () => {
+  const seen = []
+  const adminWorker = {
+    async fetch() {
+      process.env.APP_ENV = 'preview'
+      process.env.APP_BUILD_TARGET = 'admin'
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      seen.push({ side: 'admin', appEnv: process.env.APP_ENV, keys: Object.keys(process.env).includes('APP_BUILD_TARGET') })
+      return new Response('admin')
+    },
+  }
+  const publicWorker = {
+    async fetch() {
+      seen.push({ side: 'public', appEnv: process.env.APP_ENV, target: process.env.APP_BUILD_TARGET ?? null })
+      return new Response('public')
+    },
+  }
+  const { environment } = fixture()
+  const worker = createCombinedM3Worker({ publicWorker, adminWorker })
+  process.env.APP_ENV = 'staging'
+  const context = { waitUntil() {} }
+
+  const admin = worker.fetch(new Request(`${STAGING_ORIGIN}/admin/login`), environment, context)
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  await worker.fetch(new Request(`${STAGING_ORIGIN}/`), environment, context) // overlaps the in-flight Admin request
+  await admin
+  await worker.fetch(new Request(`${STAGING_ORIGIN}/`), environment, context)
+
+  expect(seen.filter(({ side }) => side === 'public')).toEqual([
+    { side: 'public', appEnv: 'staging', target: null },
+    { side: 'public', appEnv: 'staging', target: null },
+  ])
+  expect(seen.find(({ side }) => side === 'admin')).toEqual({ side: 'admin', appEnv: 'preview', keys: true })
+  expect(process.env.APP_ENV).toBe('staging')
+  expect(process.env.APP_BUILD_TARGET).toBeUndefined()
+})

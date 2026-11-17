@@ -1,3 +1,55 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+// The Admin handler assigns process.env.APP_ENV='preview', APP_BUILD_TARGET='admin', ... per request. In the combined
+// Worker those writes land in the isolate-global process.env and made later Public requests in the same isolate fail
+// (Public reads staging config from process.env). Admin requests therefore run in an AsyncLocalStorage overlay:
+// writes go to the overlay, reads prefer it, and nothing leaks into Public requests or after the Admin request.
+const ADMIN_ENV_SCOPE = new AsyncLocalStorage()
+const SCOPED_ENV_MARK = Symbol.for('dpg.m3.scopedProcessEnv')
+
+export function installScopedProcessEnv() {
+  if (process.env && process.env[SCOPED_ENV_MARK]) return
+  const base = process.env
+  const proxy = new Proxy(base, {
+    get(target, key, receiver) {
+      if (key === SCOPED_ENV_MARK) return true
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      return overlay && typeof key === 'string' && Object.hasOwn(overlay, key) ? overlay[key] : Reflect.get(target, key, receiver)
+    },
+    set(target, key, value) {
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      if (overlay && typeof key === 'string') { overlay[key] = String(value); return true }
+      return Reflect.set(target, key, value)
+    },
+    has(target, key) {
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      return (overlay && typeof key === 'string' && Object.hasOwn(overlay, key)) || Reflect.has(target, key)
+    },
+    deleteProperty(target, key) {
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      if (overlay && typeof key === 'string') { delete overlay[key]; return true }
+      return Reflect.deleteProperty(target, key)
+    },
+    ownKeys(target) {
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      return overlay ? [...new Set([...Reflect.ownKeys(target), ...Object.keys(overlay)])] : Reflect.ownKeys(target)
+    },
+    getOwnPropertyDescriptor(target, key) {
+      const overlay = ADMIN_ENV_SCOPE.getStore()
+      if (overlay && typeof key === 'string' && Object.hasOwn(overlay, key)) {
+        return { value: overlay[key], writable: true, enumerable: true, configurable: true }
+      }
+      return Reflect.getOwnPropertyDescriptor(target, key)
+    },
+  })
+  process.env = proxy
+}
+
+export function runInAdminEnvironmentScope(callback) {
+  installScopedProcessEnv()
+  return ADMIN_ENV_SCOPE.run(Object.create(null), callback)
+}
+
 const ADMIN_BASE_PATH = '/admin'
 const ADMIN_SESSION_COOKIE = 'dpg-admin-session'
 const FIXED_PREVIEW_HOST = 'staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
@@ -105,6 +157,8 @@ export function createCombinedM3Worker({ publicWorker, adminWorker }) {
     throw new Error('COMBINED_WORKER_HANDLERS_REQUIRED')
   }
 
+  installScopedProcessEnv()
+
   return {
     async fetch(request, environment, context) {
       const { pathname, hostname } = new URL(request.url)
@@ -142,7 +196,7 @@ export function createCombinedM3Worker({ publicWorker, adminWorker }) {
         if (environment.ADMIN_TEST_DB_ROLE !== 'dpg_admin_m3_test') {
           return fail(503, 'Admin TEST database identity is unavailable.', sourceSha)
         }
-        const response = await adminWorker.fetch(request, adminEnvironment(environment), context)
+        const response = await runInAdminEnvironmentScope(() => adminWorker.fetch(request, adminEnvironment(environment), context))
         return withHeaders(response, {
           ...(sourceSha ? { 'X-DPG-Source-SHA': sourceSha } : {}),
           'X-Robots-Tag': ADMIN_NOINDEX,
