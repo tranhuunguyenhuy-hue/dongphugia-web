@@ -7,7 +7,9 @@ import {
 
 const SOURCE_SHA = /^[a-f0-9]{40}$/
 const HYPERDRIVE_ID = /^[a-f0-9]{32}$/i
-const PREVIEW_SECRETS = ['BUNNY_STORAGE_API_KEY', 'REVALIDATE_SECRET']
+// The Admin media key uses a non-`BUNNY_*` binding name: the combined Worker's process.env is populated from
+// every binding, and the shared Public guard rejects a `BUNNY_STORAGE_API_KEY` there at module init (CF 10021).
+const PREVIEW_SECRETS = ['ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET']
 const PRODUCTION_MEDIA_HOSTS = new Set([
   'cdn.dongphugia.com.vn', 'cdn.dongphugia.vn', 'media.dongphugia.vn', 'dpg-products.b-cdn.net',
   'dpg-publishing-production.b-cdn.net', 'dpg-publishing-staging.b-cdn.net', 'sg.storage.bunnycdn.com.production',

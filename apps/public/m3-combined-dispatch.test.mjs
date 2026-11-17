@@ -58,7 +58,7 @@ function fixture() {
       ADMIN_TEST_DB_ROLE: 'dpg_admin_m3_test',
       PUBLIC_DB: { connectionString: 'public-test-readonly' },
       HYPERDRIVE_ADMIN_NO_CACHE: { connectionString: 'synthetic-test-admin' },
-      BUNNY_STORAGE_API_KEY: 'synthetic-preview-media-key',
+      ADMIN_PREVIEW_MEDIA_KEY: 'synthetic-preview-media-key',
       REVALIDATE_SECRET: 'synthetic-preview-revalidate-secret',
       IMAGES: { synthetic: 'images-binding' },
       ASSETS: assets,
@@ -102,6 +102,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   expect(calls.public[0].environmentKeys).not.toContain('HYPERDRIVE_ADMIN_NO_CACHE')
   expect(calls.public[0].environmentKeys).not.toContain('ADMIN_TEST_DB_ROLE')
   expect(calls.public[0].environmentKeys).not.toContain('BUNNY_STORAGE_API_KEY')
+  expect(calls.public[0].environmentKeys).not.toContain('ADMIN_PREVIEW_MEDIA_KEY')
   expect(calls.public[0].environmentKeys).not.toContain('RUNTIME_ROLE')
   expect(calls.public[0].environmentKeys).not.toContain('WRITE_FREEZE_MODE')
   expect(calls.public[0].environmentKeys).not.toContain('REVALIDATE_SECRET')
