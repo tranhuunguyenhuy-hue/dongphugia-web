@@ -1,19 +1,30 @@
 -- M3 TEST-only supplementary migration (does not edit 001). Narrows grants/policies to what the
--- legacy Admin and Public actually use. Fail-closed target guard: the TEST target_contract
--- signature must match (Production's differs: environment='preview', production_data_allowed=true),
--- the dedicated roles must exist, and no Production-derived data class may be present.
+-- legacy Admin and Public actually use. Baseline (001) ACLs: admin = SELECT/INSERT/UPDATE/DELETE on all 68
+-- dpg_app tables + USAGE,SELECT on all dpg_app sequences + 68 policies m3_test_admin_all; public = SELECT on
+-- 14 tables + 14 policies m3_test_public_select. 002 only removes/adds within those objects.
+-- Fail-closed guard (forward). IN ADDITION the operator MUST verify, immediately before apply, that the
+-- trusted tool/runner targets exactly ref uybumsnyqpwcidjxmfsv (MCP get_project_url) and record it.
+-- No single row/data name proves identity: all signals below must hold together.
 do $$ begin
   if not exists (select 1 from dpg_control.target_contract
       where environment='preview_synthetic' and data_class='synthetic-with-approved-public-fixtures'
         and production_data_allowed is false and production_credentials_allowed is false
         and production_writes_allowed is false) then
-    raise exception 'M3_TEST_TARGET_GUARD_FAILED';
+    raise exception 'M3_TEST_TARGET_GUARD_FAILED:contract';
   end if;
   if (select count(*) from pg_roles where rolname in ('dpg_admin_m3_test','dpg_public_m3_test')) <> 2 then
-    raise exception 'M3_TEST_ROLES_MISSING';
+    raise exception 'M3_TEST_TARGET_GUARD_FAILED:roles';
   end if;
-  if exists (select 1 from dpg_app.products where name !~ '^(PREVIEW ONLY|M3 TEST)') then
-    raise exception 'M3_TEST_NON_SYNTHETIC_DATA_PRESENT';
+  if pg_database_size(current_database()) > 200*1024*1024 then
+    raise exception 'M3_TEST_TARGET_GUARD_FAILED:size';
+  end if;
+  if exists (select 1 from dpg_app.orders) or exists (select 1 from dpg_app.customers) then
+    raise exception 'M3_TEST_TARGET_GUARD_FAILED:business_data_present';
+  end if;
+  -- 001 baseline must be intact: exactly 68 admin policies and 14 public policies
+  if (select count(*) from pg_policy where polname='m3_test_admin_all') <> 68
+     or (select count(*) from pg_policy where polname='m3_test_public_select') <> 14 then
+    raise exception 'M3_TEST_TARGET_GUARD_FAILED:baseline_001';
   end if;
 end $$;
 
@@ -59,5 +70,3 @@ begin
     execute format('grant usage, select on sequence dpg_app.%I to dpg_admin_m3_test', t);
   end loop;
 end $$;
-revoke create on schema public from dpg_admin_m3_test, dpg_public_m3_test;
-revoke all on all tables in schema public from dpg_admin_m3_test, dpg_public_m3_test;
