@@ -2,13 +2,20 @@
 
 **Owner-approved roadmap since 2026-11-13: five milestones only.** This is V1 (`tranhuunguyenhuy-hue/dongphugia.com.vn`), **not V2**.
 
-**Start here:** [AGENTS.md](AGENTS.md) (agent policy) · [Current milestone M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) · [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) · [Project handbook](docs/PROJECT.md) · [Verified status](docs/ops/project-current-state.md).
+**Start here:** [AGENTS.md](AGENTS.md) (agent policy) · [Current milestone M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) · [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) · [Project handbook](docs/PROJECT.md) · [Verified status](docs/ops/project-current-state.md).
 
 ## Approved sequence
 
 **M1** DB-backed Production Public + Products/Blog → **M2** one fixed Worker Preview named `staging` inside Production Worker (Public snapshot allowed) → **M3** full legacy Admin, Hyperdrive and real Auth on that Preview with isolated TEST DB → **M4** accepted Admin to Production → **M5** audit.
 
 **Environments:** localhost (development) → **fixed Preview `staging` INSIDE existing `dongphugia-v1-public-production` Worker** (M2/M3) → same Worker's Production deployment (`www.dongphugia.vn`). No new Worker, no automatic per-PR Preview. The old separate `dpg-staging` Worker is no longer used. Preview secrets/Hyperdrive/test database are isolated. Code rollback is not database rollback.
+
+## Supabase project identities
+
+- Production: `dongphugia-production` (`bonxyxluzlxfkdetryoo`).
+- Staging/TEST for M3: `dongphugia-staging` (`uybumsnyqpwcidjxmfsv`).
+
+Use the immutable ref to validate database endpoints; project health alone does not prove schema or M3 isolation readiness. See [the project handbook](docs/PROJECT.md) for environment boundaries.
 
 ## Repo pointers
 

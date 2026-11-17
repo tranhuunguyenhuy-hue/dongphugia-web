@@ -8,8 +8,8 @@ async function main() {
     return response.json()
   }
   const organization=await request('/v1/organizations/ymjvuwefhqqlymwlocqn')
-  const projects=await request('/v1/organizations/ymjvuwefhqqlymwlocqn/projects?search=dongphugia-runtime&limit=100')
-  const result=validateSupabaseManagementResponses(organization,projects,{ref:'bonxyxluzlxfkdetryoo',name:'dongphugia-runtime',region:'ap-southeast-1'})
+  const projects=await request('/v1/organizations/ymjvuwefhqqlymwlocqn/projects?search=dongphugia-production&limit=100')
+  const result=validateSupabaseManagementResponses(organization,projects,{ref:'bonxyxluzlxfkdetryoo',name:'dongphugia-production',region:'ap-southeast-1'})
   if(!result.ok)throw new Error('target')
   process.stdout.write('EXISTING_BACKUP_MANAGEMENT status=PASS free=PASS healthy=PASS target=PASS\n')
 }

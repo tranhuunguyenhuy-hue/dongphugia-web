@@ -103,7 +103,7 @@ export async function createBlogPost(data: unknown) {
                     skipDuplicates: true,
                 })
                 await transaction.$executeRawUnsafe(
-                    `UPDATE blog_tags SET post_count = (SELECT COUNT(*) FROM blog_post_tags WHERE tag_id = blog_tags.id) WHERE id = ANY($1::int[])`,
+                    `UPDATE dpg_app.blog_tags SET post_count = (SELECT COUNT(*) FROM dpg_app.blog_post_tags WHERE dpg_app.blog_post_tags.tag_id = dpg_app.blog_tags.id) WHERE id = ANY($1::int[])`,
                     d.tag_ids,
                 )
             }
@@ -216,10 +216,10 @@ export async function updateBlogPost(id: number, data: unknown) {
                 })
             }
             await transaction.$executeRaw(
-                Prisma.sql`UPDATE blog_tags
+                Prisma.sql`UPDATE dpg_app.blog_tags
                     SET post_count = (
-                        SELECT COUNT(*) FROM blog_post_tags
-                        WHERE blog_post_tags.tag_id = blog_tags.id
+                        SELECT COUNT(*) FROM dpg_app.blog_post_tags
+                        WHERE dpg_app.blog_post_tags.tag_id = dpg_app.blog_tags.id
                     )`,
             )
             if (existing.publishing_identity_id) {
@@ -327,8 +327,8 @@ export async function deleteBlogPost(id: number, expectedVersion: number) {
         }
         // Refresh tag counts
         await prisma.$executeRaw(
-            Prisma.sql`UPDATE blog_tags SET post_count = (
-                SELECT COUNT(*) FROM blog_post_tags WHERE tag_id = blog_tags.id
+            Prisma.sql`UPDATE dpg_app.blog_tags SET post_count = (
+                SELECT COUNT(*) FROM dpg_app.blog_post_tags WHERE dpg_app.blog_post_tags.tag_id = dpg_app.blog_tags.id
             )`,
         )
         revalidatePath('/admin/blog/posts')

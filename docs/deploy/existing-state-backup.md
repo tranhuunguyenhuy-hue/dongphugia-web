@@ -8,8 +8,10 @@ this recovered database. Its workflows, history and runtime controls are retaine
 
 ## Locked current state
 
-Target is `bonxyxluzlxfkdetryoo`, `dongphugia-runtime`, Singapore, healthy Free
-Preview. `existing-state/baseline.json` contains only catalog metadata or hashes
+Target is Supabase Production `dongphugia-production`, ref
+`bonxyxluzlxfkdetryoo`, Singapore, healthy Free project. The database's internal
+reduced-runtime contract is still labeled `preview`; this does not change the
+provider environment or authorize Production writes. `existing-state/baseline.json` contains only catalog metadata or hashes
 of definitions/settings, never table rows, credential values, passwords or role
 password hashes. It records 66 tables, 52 sequences, one view, eight existing
 recovery/application roles, schema owners/ACLs, relation structures, column-ACL fingerprints and policies,

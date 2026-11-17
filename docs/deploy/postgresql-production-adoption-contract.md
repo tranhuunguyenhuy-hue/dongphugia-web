@@ -4,7 +4,7 @@
 
 ## Target confirmation, before touching data
 
-1. Verify actual Supabase **V1** project ref, Postgres version/schema (candidate `bonxyxluzlxfkdetryoo/dpg_app`), role boundaries, network path and Worker account. Never access V2.
+1. Verify actual Supabase **Production** project `dongphugia-production` (ref `bonxyxluzlxfkdetryoo`), Postgres version/schema (`dpg_app`), role boundaries, network path and Worker account. Never access V2 or infer Staging/TEST readiness from this Production identity.
 2. Preserve and verify a restorable database backup/checkpoint and source artefacts with checksums. Confirm backup recovery separately from a Worker rollback.
 3. **Read-only inventory:** table list and schema drift; Product, SKU, published Product, Blog, published Blog, category, URLs/slugs/media; compare with the best available original/source inventory and audit exceptions. Local restored figures (~17,752/10) are leads, not acceptance numbers.
 4. Estimate free-tier quotas, DB size, query volume/connection pooling and CPU before high-volume import.

@@ -182,6 +182,7 @@ async function main() {
       ])
       const productResponse = await page.goto(localUrl('/admin/products'), { waitUntil: 'domcontentloaded' })
       assert.equal(productResponse?.status(), 200)
+      await page.waitForLoadState('networkidle', { timeout: 20000 })
       const blogResponse = await page.goto(localUrl('/admin/blog/posts'), { waitUntil: 'domcontentloaded' })
       assert.equal(blogResponse?.status(), 200)
       return { context: signedInContext, page }
@@ -213,6 +214,7 @@ async function main() {
       { waitUntil: 'domcontentloaded' },
     )
     assert.equal(productEditResponse?.status(), 200)
+    await page.waitForLoadState('networkidle', { timeout: 20000 })
     await page.locator('input[name="name"]').fill(updatedProductName)
     await Promise.all([
       page.waitForURL((url) => url.pathname === '/admin/products', { timeout: 20000 }),

@@ -1,26 +1,28 @@
 # Đông Phú Gia V1 — technical handbook (CURRENT)
 
-Effective: **2026-11-13**, supersedes former V1 roadmap/Phase 2 and dated AWS/Preview handoffs. **For execution authority read root `AGENTS.md` and the current milestone Issue.**
+Effective: **2026-11-17**, supersedes former V1 roadmap/Phase 2 and dated AWS/Preview handoffs. **For execution authority read root `AGENTS.md` and the current milestone Issue.**
 
 ## Goal and hard milestone sequence
 
 | Gate | Owner outcome | Issue | Validation |
 | --- | --- | --- | --- |
-| **M1 ACTIVE** | Production Public uses V1 PostgreSQL; **all recovered Products/SKUs and Blog** loaded, counted, verified, served on Public | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) | Hosted row counts + source reconciliation + actual Worker DB read-path + production URL smoke + snapshot fallback |
-| M2 QUEUED | **Fixed Preview named `staging`** inside `dongphugia-v1-public-production` matches Public Production; snapshot allowed | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308) | Stable Preview URL + exact Preview deployment, Public UI/Blog/PLP/PDP parity and revert path |
-| M3 QUEUED | Full legacy Admin **on the same fixed Preview** with real Hyperdrive/Auth/session/RBAC and separate TEST DB | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) | Module coverage, Preview login/CRUD, isolation and hosted runtime evidence |
+| **M1 DONE / OWNER-ACCEPTED** | Production Public uses V1 PostgreSQL; recovered Products/SKUs and Blog accepted | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) | Owner UAT acceptance recorded in the issue |
+| **M2 DONE / OWNER-ACCEPTED** | Fixed Preview named `staging` inside `dongphugia-v1-public-production` passed Gate B | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308) | Public parity and Gate B acceptance recorded in the issue |
+| **M3 ACTIVE** | Full legacy Admin on the same fixed Preview with real Hyperdrive/Auth/session/RBAC and separate TEST DB | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) | Module coverage, Preview login/CRUD, isolation and hosted runtime evidence |
 | M4 QUEUED | Deploy accepted Admin to same-origin Production `/admin` | [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310) | Owner acceptance, backup, Production login/CRUD/fresh Public, rollback |
 | M5 QUEUED | Audit website and propose future backlog | [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) | Issue-level findings with URLs, priority, estimates; no automatic feature work |
 
-Master tracker: [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306). Milestones are sequential; only M1 is active until accepted.
+Master tracker: [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306). Milestones are sequential; M1 and M2 are Owner-accepted and M3 is active.
 
 ## Live environment architecture and provenance
 
 - Cloudflare V1 account: `d54f3402b9d112ab64d6135e0e3f1fb1` (revalidate before modifying).
-- Production Worker: `dongphugia-v1-public-production`, custom domains `www.dongphugia.vn`, `dongphugia.vn`. Last observed deployed version `7d0194d7-b007-4fb0-9fd9-d365ca9de834`, 2026-11-04 15:05 UTC. Current Public catalogue is **snapshot-backed**, NOT confirmed live PostgreSQL.
-- Fixed Worker Preview `staging` is the chosen M2/M3 target **inside Production Worker**; no successful named-Preview deployment was confirmed as of this doc change. Former `dpg-staging` Worker had version `f0cabc41-f024-46cc-8978-510c3d8c1216` (2026-11-13 06:13 UTC) but is **obsolete for new work**, not deleted.
-- Last read-only Cloudflare inspection found no Production Hyperdrive binding or Worker secrets; `nodejs_compat` was enabled. Preview **does not inherit Production settings**, and its dedicated Hyperdrive must point to separate TEST PostgreSQL/schema; authentication secrets are Preview-specific. Published Preview is not Production.
-- Supabase V1 candidate `bonxyxluzlxfkdetryoo`, application schema candidate `dpg_app`; **confirm hosted identity, schema, rows, permissions and actual owner**. Never confuse with V2.
+- Supabase Production: `dongphugia-production`, ref `bonxyxluzlxfkdetryoo`, region `ap-southeast-1`, verified `ACTIVE_HEALTHY` on 2026-11-17.
+- Supabase Staging/TEST: `dongphugia-staging`, ref `uybumsnyqpwcidjxmfsv`, region `ap-southeast-1`, verified `ACTIVE_HEALTHY` on 2026-11-17. This identity change does not establish M3 schema, role, data isolation, or consumer readiness; confirm those independently before any hosted write.
+- Production Worker: `dongphugia-v1-public-production`, custom domains `www.dongphugia.vn`, `dongphugia.vn`. Production source SHA read back at M2 closure: `87a0e4b6cd9997be8e195ce2bd9a6647608ee253`; M1 was Owner-accepted. M3 must not alter Production.
+- M2 fixed Worker Preview `staging` was accepted at Gate B inside the Production Worker: URL `https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev`, deployment `ab789db6-fc80-4c81-a884-fdcbe6e6bfcb`, source SHA `00914b73fe6eed8dd78a8e8d8884bfa475c60870`. This was Public parity evidence, not an M3 Admin deployment. The separate `dpg-staging` Worker is obsolete and must not be used or deleted.
+- M3 uses isolated Staging/TEST Supabase ref `uybumsnyqpwcidjxmfsv` only after schema, roles, data isolation, Hyperdrive and consumers are verified. A project rename or `ACTIVE_HEALTHY` status does not establish this readiness. Preview settings/secrets remain separate from Production.
+- Production application schema is `dpg_app`; confirm hosted schema, rows and permissions before any write. Never confuse either V1 project with V2.
 - PR #300: legacy Products/Blog Admin source recovered locally. PR #301: local Workerd/Prisma test only. PR #304: proposed least-privilege DB role tested locally. **None constitutes hosted Admin or Production database import proof.** Reported 17,752 Products and 10 Blogs are local recovery evidence until independently reconciled on hosted DB.
 
 ## M1 — Production database recovery contract
@@ -62,6 +64,10 @@ Only post-recovery audit for broken images/routes, product data, Blog media, SEO
 - Preserve rollback SQL/sha256, backups, imports, provenance and required CI even when deleting old **policy** documentation; these remain technical assets, not active work tickets.
 
 See `docs/deploy/cloudflare-fixed-preview-production.md` and `docs/deploy/postgresql-production-adoption-contract.md`. Snapshot evidence is kept in `docs/ops/project-current-state.md`, but **live provider verification overrides date-stamped observations**.
+
+### Supabase naming compatibility
+
+Historical records may retain former display labels. The `dongphugia-runtime` string also remains intentionally unchanged as the internal `dpg_control.target_contract.project_name` compatibility key in database contracts and their tests; it is not a provider project name or a reason to select a different ref. Use the canonical names and immutable refs above for current provider identity.
 
 
 ## Legacy data-security evidence retained for audit only

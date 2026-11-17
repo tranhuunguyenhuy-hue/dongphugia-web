@@ -16,7 +16,9 @@ a major migration or cutover event. The one-time LEO-540 acceptance rehearsal
 ran before the final fail-closed main-only trigger was retained; the schedule
 is not active on `main` until this PR is approved and merged. The backup job:
 
-1. attests the exact `dongphugia-runtime` / `ap-southeast-1` Preview target and
+1. attests Supabase Production `dongphugia-production` (ref
+   `bonxyxluzlxfkdetryoo`) in `ap-southeast-1` and its reduced-runtime contract;
+   the internal data environment label remains `preview`. It then verifies
    its `production-derived-reduced-runtime` contract, using the existing
    `dpg_backup_login` explicitly set to the `dpg_backup` capability with
    `transaction_read_only=on` and SELECT coverage for every table in

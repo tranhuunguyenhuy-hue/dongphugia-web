@@ -7,9 +7,10 @@ other runtime.
 
 ## Boundary
 
-The implementation uses the approved `dongphugia-runtime` target identity in
-`ap-southeast-1`, but the target must be revalidated immediately before any
-rollout. The public static build remains fixture/artifact based and does not
+The implementation targets Supabase Production `dongphugia-production`, ref
+`bonxyxluzlxfkdetryoo`, in `ap-southeast-1`; verify the exact ref and health
+immediately before any rollout. The database's internal target contract may
+retain a reduced-runtime environment label. The public static build remains fixture/artifact based and does not
 import this client or require a database at render time. Admin and Publishing
 adapters may consume the transport contract in
 `src/lib/supabase-runtime-contract.ts` later; this issue does not wire those
@@ -94,7 +95,7 @@ routing, paid tier, or Production deployment action is part of LEO-541.
 
 The target classification was reconciled to the accepted LEO-538
 `production-derived-reduced-runtime` state. The Owner-approved migration was
-applied only to `dongphugia-runtime` in `ap-southeast-1`; the repository now
+applied only to the ref `bonxyxluzlxfkdetryoo` in `ap-southeast-1`; the repository now
 uses the exact recorded migration filename
 `20260828163113_leo541_runtime_api.sql`. `commerce-orders` and
 `commerce-quotes` were deployed with JWT verification enabled.

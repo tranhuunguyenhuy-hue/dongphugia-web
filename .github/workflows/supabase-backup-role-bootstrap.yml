@@ -35,7 +35,7 @@ env:
   APPROVAL_MARKER: 'BACKUP-BOOTSTRAP-APPROVED: bonxyxluzlxfkdetryoo / exactly two existing migrations'
   SUPABASE_ORGANIZATION_SLUG: ymjvuwefhqqlymwlocqn
   SUPABASE_PROJECT_REF: bonxyxluzlxfkdetryoo
-  SUPABASE_PROJECT_NAME: dongphugia-runtime
+  SUPABASE_PROJECT_NAME: dongphugia-production
   SUPABASE_PROJECT_REGION: ap-southeast-1
 
 jobs:
@@ -190,7 +190,7 @@ jobs:
           printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_MANAGEMENT_TOKEN" | \
             curl --config - --fail --silent --show-error \
               --output "$PROJECTS_RESULT" \
-              "https://api.supabase.com/v1/organizations/$SUPABASE_ORGANIZATION_SLUG/projects?search=dongphugia-runtime&limit=100"
+              "https://api.supabase.com/v1/organizations/$SUPABASE_ORGANIZATION_SLUG/projects?search=dongphugia-production&limit=100"
           node scripts/backup/supabase-management-response.mjs "$ORGANIZATION_RESULT" "$PROJECTS_RESULT"
           rm -f "$ORGANIZATION_RESULT" "$PROJECTS_RESULT"
           test -n "$SUPABASE_REHOME_DATABASE_URL"
@@ -208,7 +208,7 @@ jobs:
         run: |
           {
             echo '### Supabase backup capability bootstrap: PASS'
-            echo '- Target: exact healthy Free Preview project; database target contract and size enforced by the migration runner'
+            echo '- Target: Supabase Production dongphugia-production (bonxyxluzlxfkdetryoo); reduced-runtime database contract and size enforced by the migration runner'
             echo "- Applied: ${{ needs.preflight.outputs.migrations_applied }} existing backup role/coverage migration(s) only"
             echo '- Checkpoint: seven existing migrations attested and recorded with source checksums; total ledger prefix is nine'
             echo '- Access: SELECT-only policies for the exact nine backup tables; four family tables remain SELECT-only for dpg_readonly'

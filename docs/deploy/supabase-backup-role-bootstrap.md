@@ -12,7 +12,8 @@ schema, Production, DNS, or traffic.
 ## Owner-approved scope
 
 The Owner approved bootstrapping only the two existing backup prerequisite
-migrations on the exact `dongphugia-runtime` Preview project:
+migrations on Supabase Production `dongphugia-production`
+(`bonxyxluzlxfkdetryoo`):
 
 1. `20260828183000_leo542_backup_role_prerequisite.sql`
 2. `20260828183200_leo540_backup_coverage_prerequisite.sql`
@@ -37,7 +38,7 @@ bootstrap.
 ## Exact target and gates
 
 - Supabase organization: `ymjvuwefhqqlymwlocqn` (Free).
-- Project: `dongphugia-runtime`, ref `bonxyxluzlxfkdetryoo`.
+- Project: `dongphugia-production`, ref `bonxyxluzlxfkdetryoo` (Production).
 - Region: `ap-southeast-1`; expected health: `ACTIVE_HEALTHY`.
 - Database target must pass the existing exact URL parser and exact target
   contract, PostgreSQL 17, and the strict 350 MiB size ceiling.

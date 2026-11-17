@@ -29,13 +29,16 @@ source media URLs, legacy 301 rules, `/tin-tuc` redirects, and the existing
 `/api/sitemap_static` compatibility redirect. Query-string category redirects
 are recorded in `redirects.json` for the later Worker responsibility.
 
-The approved `dongphugia-runtime` Preview source stores the reduced runtime
-dataset in the private `dpg_app` schema. Its CI connection must authenticate as
+The read-only source is Supabase Production `dongphugia-production` (ref
+`bonxyxluzlxfkdetryoo`); its reduced runtime dataset is stored in the private
+`dpg_app` schema. Its CI connection must authenticate as
 the target-local `dpg_readonly_login`, explicitly set role `dpg_readonly`, and
 pass `npm run static:verify-preview-source` before the build. That attestation
-checks the target contract, Preview identity, Free-tier headroom, transaction
-read-only mode, and SELECT-only access to every Product, Blog, Family, and
-redirect table used by the build. It emits no rows or credentials.
+checks the immutable project ref from the database endpoint, internal target
+contract, Free-tier headroom, transaction read-only mode, and SELECT-only
+access to every Product, Blog, Family, and redirect table used by the build.
+The database's internal environment label remains `preview`; it is not the
+Supabase provider environment. It emits no rows or credentials.
 
 ## Source-safe invocation
 

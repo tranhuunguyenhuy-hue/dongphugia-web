@@ -1,5 +1,9 @@
 # V1 — current state / evidence boundary
 
+## Supabase identity update — 2026-11-17
+
+Owner-confirmed names and refs: Production `dongphugia-production` / `bonxyxluzlxfkdetryoo`; Staging/TEST `dongphugia-staging` / `uybumsnyqpwcidjxmfsv`. Both were read-only verified `ACTIVE_HEALTHY` in `ap-southeast-1`. The identity update does not verify Staging/TEST schema, roles, isolation, or M3 consumer readiness. The dated observations below remain the 2026-11-13 snapshot and are preserved as historical evidence; use the canonical mapping above for current provider identity.
+
 **Last read-only Cloudflare verification: 2026-11-13.** This file records observations, **not** a claim that recovery is complete. Revalidate before applying any Production changes.
 
 ## Decision and milestone state
