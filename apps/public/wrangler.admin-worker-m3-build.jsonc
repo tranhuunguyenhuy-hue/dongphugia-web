@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dpg-m3-admin-build-local",
+  "compatibility_date": "2026-08-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "../admin-worker/worker.admin.ts",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "../../dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "APP_ENV": "preview",
+    "RUNTIME_ROLE": "staging",
+    "WRITE_FREEZE_MODE": "false",
+    "ALLOW_ISOLATED_TEST_WRITES": "true",
+    "ADMIN_TEST_DB_ROLE": "dpg_admin_m3_test",
+    "PRISMA_REQUEST_SCOPE_REQUIRED": "true"
+  }
+}

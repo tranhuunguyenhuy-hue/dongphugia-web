@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { revalidateTag } from 'next/cache'
 import { getWriteFreezeMessage, requireWritesAllowed, WRITE_FREEZE_ERROR_CODE } from '@/lib/write-freeze'
+import { getAdminRuntimeEnvironment } from '@/lib/admin-runtime-environment'
 
 const DEFAULT_TAGS = ['brands', 'categories', 'subcategories']
 const MAX_TAGS_PER_REQUEST = 20
 const TAG_PATTERN = /^[a-z0-9:_-]{1,128}$/i
 
 function getRevalidateSecret() {
-    return process.env.REVALIDATE_SECRET || process.env.REVALIDATION_SECRET
+    const requestEnvironment = getAdminRuntimeEnvironment()
+    return requestEnvironment?.REVALIDATE_SECRET
+        || process.env.REVALIDATE_SECRET
+        || process.env.REVALIDATION_SECRET
 }
 
 function parseTags(req: NextRequest) {

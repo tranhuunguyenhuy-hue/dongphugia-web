@@ -1,6 +1,9 @@
 # Dependencies and builds
 /node_modules
 /.next
+/.vinext/
+/.wrangler/
+/dist/
 /apps/*/.next
 /apps/*/dist
 /apps/*/.worker-package

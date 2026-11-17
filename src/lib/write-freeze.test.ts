@@ -63,4 +63,22 @@ describe('toWriteFreezeActionResult', () => {
 
         expect(isWriteFreezeEnabled()).toBe(true)
     })
+
+    it('allows writes only for the explicitly isolated M3 TEST Preview runtime', () => {
+        vi.stubEnv('NODE_ENV', 'production')
+        vi.stubEnv('APP_ENV', 'preview')
+        vi.stubEnv('RUNTIME_ROLE', 'staging')
+        vi.stubEnv('WRITE_FREEZE_MODE', 'false')
+        vi.stubEnv('ALLOW_ISOLATED_TEST_WRITES', 'true')
+        vi.stubEnv('ADMIN_TEST_DB_ROLE', 'dpg_admin_m3_test')
+
+        expect(isWriteFreezeEnabled()).toBe(false)
+
+        vi.stubEnv('ADMIN_TEST_DB_ROLE', 'dpg_runtime')
+        expect(isWriteFreezeEnabled()).toBe(true)
+
+        vi.stubEnv('ADMIN_TEST_DB_ROLE', 'dpg_admin_m3_test')
+        vi.stubEnv('APP_ENV', 'staging')
+        expect(isWriteFreezeEnabled()).toBe(true)
+    })
 })

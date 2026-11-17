@@ -19,6 +19,9 @@ if (configuredPublishingCdn && !/^[a-z0-9.-]+$/.test(configuredPublishingCdn)) {
 const nextConfig: NextConfig = {
   /* config options here */
   output: 'standalone',
+  // The legacy Admin shares the Public Worker origin. Keep its immutable
+  // framework chunks below /admin to isolate the two framework builds.
+  assetPrefix: process.env.ADMIN_ASSET_PREFIX || undefined,
   poweredByHeader: false,
   reactCompiler: true,
   images: {
