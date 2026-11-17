@@ -30,6 +30,16 @@ describe('M3 fixed Preview publisher gates', () => {
     expect(publisher).toContain('M3_PRODUCTION_CHANGED_STOP')
   })
 
+  it('asserts exact Hyperdrive IDs when the provider exposes them and records the readback', () => {
+    expect(publisher).toContain('M3_HYPERDRIVE_ID_READBACK_MISMATCH')
+    expect(publisher).toContain('ID_NOT_EXPOSED_BY_PROVIDER')
+  })
+
+  it('validates the media target before any secret file is created', () => {
+    expect(publisher.indexOf('validateM3FixedPreviewConfig(config')).toBeGreaterThan(-1)
+    expect(publisher.indexOf('validateM3FixedPreviewConfig(config')).toBeLessThan(publisher.indexOf("m3-preview-secrets.json"))
+  })
+
   it('keeps secrets out of the artifact and out of build jobs', () => {
     expect(m3Jobs.split('publish-m3:')[0]).not.toContain('secrets.')
     expect(m3Jobs).toContain('M3_PREVIEW_BUNNY_STORAGE_API_KEY: ${{ secrets.M3_PREVIEW_BUNNY_STORAGE_API_KEY }}')

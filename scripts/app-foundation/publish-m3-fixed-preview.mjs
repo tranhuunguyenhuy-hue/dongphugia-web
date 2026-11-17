@@ -210,6 +210,12 @@ async function main() {
   assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'BUNNY_STORAGE_API_KEY', 'REVALIDATE_SECRET', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
   assert.equal(deployedEnv.PUBLIC_DB?.type, 'hyperdrive'); assert.equal(deployedEnv.HYPERDRIVE_ADMIN_NO_CACHE?.type, 'hyperdrive')
   for (const [name, value] of Object.entries(expectedVars)) { assert.equal(deployedEnv[name]?.type, 'plain_text'); assert.equal(deployedEnv[name]?.text, value) }
+  evidence.hyperdriveReadback = {}
+  for (const [name, expected] of [['PUBLIC_DB', meta.hyperdrive.public.id], ['HYPERDRIVE_ADMIN_NO_CACHE', meta.hyperdrive.admin.id]]) {
+    const actual = deployedEnv[name]?.id ?? deployedEnv[name]?.config_id ?? deployedEnv[name]?.hyperdrive_id
+    if (actual !== undefined) assert.equal(String(actual).toLowerCase(), expected.toLowerCase(), 'M3_HYPERDRIVE_ID_READBACK_MISMATCH')
+    evidence.hyperdriveReadback[name] = actual === undefined ? 'ID_NOT_EXPOSED_BY_PROVIDER' : 'EXACT_MATCH'
+  }
   evidence.previewId = preview.id; evidence.deploymentId = deployment.id
   evidence.stableUrl = FIXED_PREVIEW_ORIGIN; evidence.immutableUrls = deployment.urls
   phase = 'AFTER'
