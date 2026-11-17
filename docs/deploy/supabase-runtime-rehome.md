@@ -4,6 +4,12 @@ Status: source candidate for Issue #158. This runbook does not authorize merge,
 legacy-project mutation, paid service use, DNS, traffic, cutover, or any
 Production access or write.
 
+> **Historical identity notice — 2026-11-17:** this source candidate names ref
+> `bonxyxluzlxfkdetryoo`, which is now Supabase **Production**
+> `dongphugia-production`; `dongphugia-runtime` is its former display label.
+> Preserve the Issue #158 record, but do not execute its Preview/re-home steps
+> against that Production ref. Current M3 work follows Issue #309.
+
 ## Exact target and recovery source
 
 - Organization: `Đông Phú Gia Runtime`, ref `ymjvuwefhqqlymwlocqn`.

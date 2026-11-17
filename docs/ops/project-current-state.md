@@ -4,9 +4,28 @@
 
 Owner-confirmed names and refs: Production `dongphugia-production` / `bonxyxluzlxfkdetryoo`; Staging/TEST `dongphugia-staging` / `uybumsnyqpwcidjxmfsv`. Both were read-only verified `ACTIVE_HEALTHY` in `ap-southeast-1`. The identity update does not verify Staging/TEST schema, roles, isolation, or M3 consumer readiness. The dated observations below remain the 2026-11-13 snapshot and are preserved as historical evidence; use the canonical mapping above for current provider identity.
 
+## Current milestone state — 2026-11-17
+
+- [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307): accepted; Production UAT passed.
+- [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308): accepted and closed.
+- [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309): active; local implementation and Workerd verification continue. Hosted TEST isolation and hosted UAT are not accepted.
+- M4/M5: queued; no implementation started.
+
+## M3 TEST project — bounded read-only assessment — 2026-11-17
+
+Evidence for the Owner's $0-cost candidate check in [#6942936250](https://github.com/tranhuunguyenhuy/dongphugia.com.vn/issues/309#issuecomment-6942936250):
+
+- Supabase organization `Đông Phú Gia Runtime` is on the Free plan. Staging/TEST is `dongphugia-staging`, ref `uybumsnyqpwcidjxmfsv`, host `db.uybumsnyqpwcidjxmfsv.supabase.co`, `ACTIVE_HEALTHY`, Singapore, PostgreSQL 17.11. Production identity remains `dongphugia-production`, ref `bonxyxluzlxfkdetryoo`; this check did not query or mutate its database.
+- TEST database size was 20,166,323 bytes (about 19.2 MiB). Supabase's current [Free plan quota](https://supabase.com/docs/guides/platform/billing-on-supabase#variable-usage-fees-and-quotas) is 500 MB database size per project. Actual disk/WAL usage was not available in the read-only connector, so this is not a disk-headroom attestation.
+- TEST contains existing `dpg_app` (68 tables), `dpg_v1` (36 tables), and `dpg_control` (3 tables); rows exist in prior Admin/catalogue data. RLS is enabled on the inventoried tables. The project has an existing `order-intake` Edge Function (active, version 7) and its own DB roles/grants. Dedicated `dpg_admin_m3_test` and `dpg_public_m3_test` roles are absent. `dpg_control.target_contract.project_name` still carries former display label `dongphugia-phase2-preview-290`; provider identity is the immutable ref above.
+- The TEST health advisor returned no lints. Healthy status and a low database size do not prove safe reuse: existing tables, rows, Auth grants, and the active Edge consumer remain in place. No TEST or Production SQL writes, schema changes, role creation, migrations, or binding changes were made.
+- Direct reuse of the shared `dpg_app` namespace is not cleared for M3 writes yet. Continue the source/PR/CI work locally; any hosted write path must first prove a compatible isolated namespace/role and no conflict with the existing consumer under the Owner's no-cost/no-reset decision.
+
+The dated observations after this section are the 2026-11-13 checkpoint and are retained as historical evidence, not current M1/M2 status.
+
 **Last read-only Cloudflare verification: 2026-11-13.** This file records observations, **not** a claim that recovery is complete. Revalidate before applying any Production changes.
 
-## Decision and milestone state
+## Decision and milestone state — historical snapshot (2026-11-13)
 
 - [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) — approved V1 reset / sole authority.
 - [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307): **ACTIVE, NOT YET ACCEPTED**. Hosted DB completeness and Production DB-backed Public routes: **UNKNOWN / not demonstrated**.
@@ -28,7 +47,7 @@ Owner-confirmed names and refs: Production `dongphugia-production` / `bonxyxluzl
 | Recovery source | PR #300 legacy Admin Products/Blog; PR #301 local Workerd; PR #304 local scoped DB role | Local proof only, no hosted production DB import or Admin acceptance |
 | Local recovery count | about **17,752 Products, 10 Blog posts** in a documented local restoration | Reconcile actual source and hosted target; never treat as already in Supabase |
 
-## Next real work
+## Next real work — historical M1 checkpoint (superseded)
 
 Agent assigned to M1 must: verify actual target/source; capture backup and restore proof; reconcile hosted product/blog inventory; implement live read-only Product+Blog Public path with cached DB reads; keep snapshot rollback; verify actual Production URL and counts. **No Phase 2 work. M1 first; one fixed Preview reserved for M2/M3.**
 

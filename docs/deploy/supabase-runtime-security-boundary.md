@@ -3,6 +3,13 @@
 Status: reproducible LEO-539 target contract and operating procedure. Dated,
 sanitized provisioning evidence lives in `../ops/project-current-state.md`.
 
+> **Historical identity notice — 2026-11-17:** the immutable ref below,
+> `bonxyxluzlxfkdetryoo`, is now Supabase **Production** `dongphugia-production`;
+> `dongphugia-runtime` is its former display label. The Preview designation and
+> any teardown/provisioning authority described by this LEO-539 procedure are
+> historical and must not be applied to the current Production project. See
+> `../PROJECT.md` and the active M3 instructions in Issue #309.
+
 ## Target identity and scope
 
 - Project name: `dongphugia-runtime`
