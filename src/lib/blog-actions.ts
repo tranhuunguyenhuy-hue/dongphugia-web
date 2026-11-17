@@ -215,8 +215,8 @@ export async function updateBlogPost(id: number, data: unknown) {
                     skipDuplicates: true,
                 })
             }
-            await transaction.$executeRaw(
-                Prisma.sql`UPDATE dpg_app.blog_tags
+            await transaction.$executeRawUnsafe(
+                `UPDATE dpg_app.blog_tags
                     SET post_count = (
                         SELECT COUNT(*) FROM dpg_app.blog_post_tags
                         WHERE dpg_app.blog_post_tags.tag_id = dpg_app.blog_tags.id
@@ -326,8 +326,8 @@ export async function deleteBlogPost(id: number, expectedVersion: number) {
             return { message: 'Bài viết đã được người khác cập nhật. Hãy tải lại trang.' }
         }
         // Refresh tag counts
-        await prisma.$executeRaw(
-            Prisma.sql`UPDATE dpg_app.blog_tags SET post_count = (
+        await prisma.$executeRawUnsafe(
+            `UPDATE dpg_app.blog_tags SET post_count = (
                 SELECT COUNT(*) FROM dpg_app.blog_post_tags WHERE dpg_app.blog_post_tags.tag_id = dpg_app.blog_tags.id
             )`,
         )
