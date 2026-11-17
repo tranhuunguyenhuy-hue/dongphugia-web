@@ -1,6 +1,6 @@
 # M1 — Production PostgreSQL adoption and restoration runbook
 
-**Active authority:** [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307), [AGENTS.md](../../AGENTS.md). Replaces the old ARM64/EC2 image-gated adoption process. This runbook does **not** itself attest that hosted DB is populated or authorize destructive operations.
+**Accepted M1 reference (not an active work order):** [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307), [AGENTS.md](../../AGENTS.md). Replaces the old ARM64/EC2 image-gated adoption process. This runbook does **not** itself attest that hosted DB is populated or authorize destructive operations.
 
 ## Target confirmation, before touching data
 

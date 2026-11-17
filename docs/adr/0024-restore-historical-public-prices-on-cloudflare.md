@@ -37,9 +37,7 @@ the contact actions remain phone and Zalo.
 ## Relationship to V1 pricing work
 
 ADR 0020 defines the canonical future Product and Order pricing semantics.
-This Owner decision narrowly supersedes the contact-only July-price rule in
-the M4 section of `docs/deploy/catalogue-direct-migration.md` for this Public
-recovery candidate. Display text identifies the values as restored data and
+This Owner decision narrowly supersedes the older contact-only July-price rule for this Public recovery candidate. Display text identifies the values as restored data and
 asks customers to confirm current price and stock before purchase.
 This recovery snapshot is a compatibility view over the old published fields.
 It does not change the V1 Product/Order schema or make historical field names

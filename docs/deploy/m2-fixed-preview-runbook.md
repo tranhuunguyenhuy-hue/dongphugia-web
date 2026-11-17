@@ -1,4 +1,6 @@
-# M2 fixed Preview operation
+# M2 accepted Preview recovery reference
+
+M2 is closed; use this procedure only for a separately approved M2 recovery on the same named Preview. Not an M3 Admin publisher or new Production reader provisioning authorization.
 
 Authority: Issue #308, Owner Gate A comment 6896587821. Target is **only named `staging` inside `dongphugia-v1-public-production`**, account `d54f3402b9d112ab64d6135e0e3f1fb1`. The legacy `dpg-staging` Worker is not a target.
 

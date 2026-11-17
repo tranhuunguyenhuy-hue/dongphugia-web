@@ -1,4 +1,6 @@
-# Backup capability for the recovered current database
+# Recovered database backup candidate — verify before M4
+
+This is a technical source reference for the current recovered database, not standing authorization to execute historical Issue #270. The 2026-11-05 inventory is a dated baseline, not current live state. Resolve any drift with exact-target read-only evidence; do not force the old baseline, reset or broaden grants.
 
 Source candidate for Issue #270. The PM approved this replacement plan in chat
 on 2026-11-05 (“Duyệt phương án backup cho database hiện có”). This records source

@@ -1,15 +1,3 @@
-# Platform integrations
+# Existing Publishing API source reference
 
-**Audience:** AI Agent developers, automation builders và Technical Owner.
-
-Thư mục này chứa tài liệu kết nối các Agent do người dùng tự xây dựng với
-Publishing API của Đông Phú Gia. Platform cung cấp API, xác thực, Machine
-Identity, credential lifecycle và publishing capability; Platform không cung
-cấp hoặc quản lý AI Agent hay chiến lược marketing.
-
-- [Publishing API v1 Integration Guide](publishing-api-v1-integration-guide.vi.md)
-- [Production OpenAPI](https://www.dongphugia.vn/api/publishing/v1/openapi.json)
-
-The Integration Guide owns authentication, capability, publishing workflow, and
-human-readable API guidance. Production OpenAPI is the machine-readable API
-contract. Do not create short duplicate guides for those topics.
+For regression and M5 audit only. The repository contains API routes in `src/app/api/publishing/v1/` and schema/contract in `src/lib/publishing/openapi.ts`. Existing source is not proof the endpoint is deployed or authorized. The canonical source for methods and request/response shape is the OpenAPI implementation and tests. Do not resume legacy integration/pilot, provision machine identities, run publishing jobs, or change external credentials during M3–M5 without a separate Owner decision. Legacy API behavior and data must not be broken by Admin restoration.

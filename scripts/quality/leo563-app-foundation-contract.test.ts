@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 const root = process.cwd()
 const workflow = readFileSync(resolve(root, '.github/workflows/migration-preview.yml'), 'utf8')
 const changeGate = readFileSync(resolve(root, 'scripts/app-foundation/preview-change-gate.mjs'), 'utf8')
-const foundationDoc = readFileSync(resolve(root, 'docs/deploy/leo-563-app-foundation.md'), 'utf8')
+const foundationDoc = readFileSync(resolve(root, 'apps/admin/README.md'), 'utf8')
 const contracts = readFileSync(resolve(root, 'packages/app-contracts/src/index.ts'), 'utf8')
 const publicConfig = readFileSync(resolve(root, 'apps/public/next.config.ts'), 'utf8')
 const publicProxy = readFileSync(resolve(root, 'apps/public/proxy.ts'), 'utf8')
@@ -115,8 +115,8 @@ describe('LEO-563 application foundation contract', () => {
   })
 
   it('marks the earlier independent Cloudflare Preview plan as historical', () => {
-    expect(foundationDoc).toContain('(historical)')
-    expect(foundationDoc).toContain('Superseded for current Preview and Staging by PR #294')
-    expect(foundationDoc).toContain('preview-staging-worker-foundation.md')
+    expect(foundationDoc).toContain('NOT the selected legacy Admin source')
+    expect(foundationDoc).toContain('src/app/admin/')
+    expect(foundationDoc).toContain('fixed Preview `staging`')
   })
 })

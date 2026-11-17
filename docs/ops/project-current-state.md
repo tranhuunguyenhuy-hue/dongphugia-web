@@ -1,59 +1,32 @@
-# V1 — current state / evidence boundary
+# Current checkpoint — M3 paused for quota
 
-## Supabase identity update — 2026-11-17
+Last accepted Agent report: [Issue #309 / 6944468351](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309#issuecomment-6944468351), 2026-11-17 VN. Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) and [active M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Verify newer comments/current branch before action.
 
-Owner-confirmed names and refs: Production `dongphugia-production` / `bonxyxluzlxfkdetryoo`; Staging/TEST `dongphugia-staging` / `uybumsnyqpwcidjxmfsv`. Both were read-only verified `ACTIVE_HEALTHY` in `ap-southeast-1`. The identity update does not verify Staging/TEST schema, roles, isolation, or M3 consumer readiness. The dated observations below remain the 2026-11-13 snapshot and are preserved as historical evidence; use the canonical mapping above for current provider identity.
+## Status
 
-## Current milestone state — 2026-11-17
+- M1 DONE / OWNER UAT PASS on 15 Nov, [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307); Production Public PostgreSQL, reported 5,362 listing products and 10 published Blog posts. Prior severe failures preserved in closed issue; do not claim root cause of every incident was proven.
+- M2 DONE / OWNER UAT PASS on 17 Nov, [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308#issuecomment-6940948568); fixed Preview Public parity. Chromium acceptance passed; historical mobile WebKit 503 remains unresolved and automated rerun UNKNOWN.
+- M3 ACTIVE / PAUSED. M4 and M5 queued. Owner may resume the same agent or hand off to Claude; no other lane.
 
-- [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307): accepted; Production UAT passed.
-- [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308): accepted and closed.
-- [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309): active; local implementation and Workerd verification continue. Hosted TEST isolation and hosted UAT are not accepted.
-- M4/M5: queued; no implementation started.
+## Source to resume
 
-## M3 TEST project — bounded read-only assessment — 2026-11-17
+Branch `feat/m3-legacy-admin-preview`; Codex implementation checkpoint `867379b5f9797e441c91b5f10887accd2c6f6e1b`. The subsequent documentation-normalization commit must preserve this ancestor. Use branch HEAD, not main checkout for implementation. At checkpoint branch was pushed, clean, 10 commits ahead of main `00914b73fe6eed8dd78a8e8d8884bfa475c60870` and no PR. Local combined build/typecheck PASS at `6c03426c627855fbe4d4baf11d44c995f805c562`; focused regressions 26/26 PASS; Workerd local login/logout and Product/Blog persistence PASS on that artifact with harness fix `b4183ab`. Provenance preserved. WASM fixes `7ce0f72` / `9e6a136`, Blog raw writes `f20b5f6`. No hosted UAT or production change. These are Agent-reported prior local results, not tests on every later commit.
 
-Evidence for the Owner's $0-cost candidate check in [#6942936250](https://github.com/tranhuunguyenhuy/dongphugia.com.vn/issues/309#issuecomment-6942936250):
+## Environment (last verified/reported, recheck before writes)
 
-- Supabase organization `Đông Phú Gia Runtime` is on the Free plan. Staging/TEST is `dongphugia-staging`, ref `uybumsnyqpwcidjxmfsv`, host `db.uybumsnyqpwcidjxmfsv.supabase.co`, `ACTIVE_HEALTHY`, Singapore, PostgreSQL 17.11. Production identity remains `dongphugia-production`, ref `bonxyxluzlxfkdetryoo`; this check did not query or mutate its database.
-- TEST database size was 20,166,323 bytes (about 19.2 MiB). Supabase's current [Free plan quota](https://supabase.com/docs/guides/platform/billing-on-supabase#variable-usage-fees-and-quotas) is 500 MB database size per project. Actual disk/WAL usage was not available in the read-only connector, so this is not a disk-headroom attestation.
-- TEST contains existing `dpg_app` (68 tables), `dpg_v1` (36 tables), and `dpg_control` (3 tables); rows exist in prior Admin/catalogue data. RLS is enabled on the inventoried tables. The project has an existing `order-intake` Edge Function (active, version 7) and its own DB roles/grants. Dedicated `dpg_admin_m3_test` and `dpg_public_m3_test` roles are absent. `dpg_control.target_contract.project_name` still carries former display label `dongphugia-phase2-preview-290`; provider identity is the immutable ref above.
-- The TEST health advisor returned no lints. Healthy status and a low database size do not prove safe reuse: existing tables, rows, Auth grants, and the active Edge consumer remain in place. No TEST or Production SQL writes, schema changes, role creation, migrations, or binding changes were made.
-- Direct reuse of the shared `dpg_app` namespace is not cleared for M3 writes yet. Continue the source/PR/CI work locally; any hosted write path must first prove a compatible isolated namespace/role and no conflict with the existing consumer under the Owner's no-cost/no-reset decision.
+- Production Worker `dongphugia-v1-public-production`, source `87a0e4b6cd9997be8e195ce2bd9a6647608ee253`, deployment `ae4ddd11-df03-4462-8268-2af4d20b6084`, version `93b44508-afa2-42f8-b02b-acaeec7990f7`, domain https://www.dongphugia.vn. M3 must not change it.
+- M2 fixed Preview `staging`: https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev, deployment `ab789db6-fc80-4c81-a884-fdcbe6e6bfcb`, source `00914b73fe6eed8dd78a8e8d8884bfa475c60870`, snapshot checkpoint `fe25b6966d912ffb360a06962fcafe642a1eab18`. No M3 deployed.
+- Supabase Free organization `ymjvuwefhqqlymwlocqn`: Production `dongphugia-production` / `bonxyxluzlxfkdetryoo`; TEST `dongphugia-staging` / `uybumsnyqpwcidjxmfsv`. Both ACTIVE_HEALTHY in Singapore on 17 Nov; no hosted writes by M3.
+- TEST read-only inventory: 20,166,323 bytes DB; actual disk/WAL usage UNKNOWN. `dpg_app` 68 tables, `dpg_v1` 36, `dpg_control` 3; prior rows/grants/RLS; active Edge `order-intake` v7. Dedicated `dpg_admin_m3_test` and `dpg_public_m3_test` absent. Internal target contract still contains former display label: not a reason to mutate. **Shared schema reuse and write isolation NOT proven.** No verified dedicated Hyperdrive IDs or Preview Bunny destination.
+- Denylisted historical database ref `tlmgudfhsyzayiazuugf` is neither of the approved targets. Do not use it.
 
-The dated observations after this section are the 2026-11-13 checkpoint and are retained as historical evidence, not current M1/M2 status.
+## Immediate next work (after Owner resume)
 
-**Last read-only Cloudflare verification: 2026-11-13.** This file records observations, **not** a claim that recovery is complete. Revalidate before applying any Production changes.
+1. Confirm branch/head and latest #309 decision, preserve M2 recovery below; check Claude Cloud access to only required repo/TEST and GitHub Actions. Read-only identity/consumer assessment before any hosted action. Do not repeat local Workerd proof solely because agent changed.
+2. Resolve TEST namespace/role compatibility without reset, separate Public/Admin least-privilege grants, public/synthetic seed only, verify existing Auth/Edge/Worker consumers. Never reuse Production table/credential. Verify zero incremental cost, isolated Preview Hyperdrive/secrets/Access, query redaction and Bunny media destination. If destructive reset or incompatible reuse is necessary, stop that mutation and report minimal Owner decision.
+3. Finish one M3 integration PR, relevant CI, exact-source combined artifact and verified staging publisher; apply accepted gates, then deploy same fixed Preview only, no Production release.
+4. Hosted Admin login/logout, role denials, module CRUD/read-back, Public freshness using same TEST data, Public/mobile regression, media isolation and rollback evidence. Report PASS/FAIL/UNKNOWN, Owner UAT. M4 only after eligible GO.
 
-## Decision and milestone state — historical snapshot (2026-11-13)
+## M2 recovery — time-sensitive
 
-- [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) — approved V1 reset / sole authority.
-- [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307): **ACTIVE, NOT YET ACCEPTED**. Hosted DB completeness and Production DB-backed Public routes: **UNKNOWN / not demonstrated**.
-- [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308): **QUEUED**. One fixed named Worker Preview `staging` INSIDE Production Worker chosen, but no deployed URL/functional parity verified yet.
-- [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309): **QUEUED**. Owner permits full legacy Admin+Hyperdrive+real Auth on the SAME fixed Preview, isolated TEST DB. Hosted end-to-end not verified.
-- [M4 #310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310): **QUEUED**. No current Admin Production deploy verified.
-- [M5 #311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311): **QUEUED**.
-
-## Provider observations
-
-| Item | Last observed | Limitations |
-| --- | --- | --- |
-| Cloudflare primary account | `d54f3402b9d112ab64d6135e0e3f1fb1` | V1 only; do not use V2 account |
-| Fixed Preview `staging` INSIDE `dongphugia-v1-public-production` | Approved new M2/M3 destination; current deployed URL unknown/not proven | Explicit Preview bindings/secrets, isolated test DB/Hyperdrive and real auth required |
-| Old separate Worker `dpg-staging` (obsolete) | Earlier version `f0cabc41-f024-46cc-8978-510c3d8c1216` | Leave untouched; no M2/M3 deployment there |\n| Production Worker | `dongphugia-v1-public-production`; version `7d0194d7-b007-4fb0-9fd9-d365ca9de834` deployed 2026-11-04 15:05 UTC | Public snapshot, not verified live PostgreSQL |
-| Public domains | `www.dongphugia.vn`, `dongphugia.vn` → Worker Production deployment | Fixed Preview has independent URL after first successful deployment, no new custom domain |
-| Worker bindings | Both `nodejs_compat` and assets; **no Hyperdrive binding**, no listed Worker secrets | Does not prove external DB cannot be used by other paths; actual code path must be inspected |
-| Supabase V1 candidate | `bonxyxluzlxfkdetryoo`, schema proposed `dpg_app` | Hosted schema/rows, auth and source-of-truth **not reverified** |
-| Recovery source | PR #300 legacy Admin Products/Blog; PR #301 local Workerd; PR #304 local scoped DB role | Local proof only, no hosted production DB import or Admin acceptance |
-| Local recovery count | about **17,752 Products, 10 Blog posts** in a documented local restoration | Reconcile actual source and hosted target; never treat as already in Supabase |
-
-## Next real work — historical M1 checkpoint (superseded)
-
-Agent assigned to M1 must: verify actual target/source; capture backup and restore proof; reconcile hosted product/blog inventory; implement live read-only Product+Blog Public path with cached DB reads; keep snapshot rollback; verify actual Production URL and counts. **No Phase 2 work. M1 first; one fixed Preview reserved for M2/M3.**
-
-After M1 succeeds, update this file with deployed SHA, measured DB counts, source/freshness evidence, acceptance URL, rollback and remaining issues. Keep UNKNOWNs visible rather than inventing success.
-
-
-## Archived identity — never confuse with V1 Production
-
-Historical LEO-539 isolated, synthetic-only Supabase test project: `tlmgudfhsyzayiazuugf`, name `dongphugia-runtime`, Singapore `ap-southeast-1`. This is **historical evidence, not the selected Production target**; it is kept here solely to preserve security-boundary provenance and avoid accidental use in M1. The active candidate V1 project requires fresh verification as described above.
+[Artifact #14253475719](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/actions/runs/43918034548/artifacts/14253475719), 37,736,963 bytes, SHA-256 `74cc0631ad1c37898f4b76476a50963b2518332ff11c0af52b2f965499c72bc0`; reported expiry 23 Nov 2026. Codex private workspace copy `/workspace/m2-recovery/m2-fixed-preview-00914b73.zip` verified by Agent; not necessarily accessible to Claude. Preserve/verifiably download to private storage available to Owner before expiry, never upload to public repo. See [M2 rollback runbook](../deploy/m2-fixed-preview-runbook.md). Re-upload is staging only; no automatic Production rollback.
