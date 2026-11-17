@@ -20,6 +20,7 @@ interface AdminWorkerEnvironment {
   BUNNY_STORAGE_HOSTNAME?: string
   BUNNY_CDN_HOSTNAME?: string
   REVALIDATE_SECRET?: string
+  IMAGES?: unknown
 }
 
 interface ExecutionContextLike {
@@ -216,6 +217,7 @@ export default {
       BUNNY_STORAGE_HOSTNAME: environment.BUNNY_STORAGE_HOSTNAME,
       BUNNY_CDN_HOSTNAME: environment.BUNNY_CDN_HOSTNAME,
       REVALIDATE_SECRET: environment.REVALIDATE_SECRET,
+      IMAGES: environment.IMAGES,
     }
 
     try {

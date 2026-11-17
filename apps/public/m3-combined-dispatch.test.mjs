@@ -40,6 +40,7 @@ function fixture() {
         testRole: environment.ADMIN_TEST_DB_ROLE,
         mediaKey: environment.BUNNY_STORAGE_API_KEY,
         revalidateSecret: environment.REVALIDATE_SECRET,
+        images: environment.IMAGES,
       })
       return new Response('admin', { headers: { 'Set-Cookie': 'dpg-admin-session=test; Path=/; HttpOnly; Secure' } })
     },
@@ -59,6 +60,7 @@ function fixture() {
       HYPERDRIVE_ADMIN_NO_CACHE: { connectionString: 'synthetic-test-admin' },
       BUNNY_STORAGE_API_KEY: 'synthetic-preview-media-key',
       REVALIDATE_SECRET: 'synthetic-preview-revalidate-secret',
+      IMAGES: { synthetic: 'images-binding' },
       ASSETS: assets,
     },
   }
@@ -91,6 +93,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
     testRole: 'dpg_admin_m3_test',
     mediaKey: 'synthetic-preview-media-key',
     revalidateSecret: 'synthetic-preview-revalidate-secret',
+    images: environment.IMAGES,
   }])
   expect(calls.public).toHaveLength(1)
   expect(calls.public[0].cookie).toBe('theme=light')
@@ -102,6 +105,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   expect(calls.public[0].environmentKeys).not.toContain('RUNTIME_ROLE')
   expect(calls.public[0].environmentKeys).not.toContain('WRITE_FREEZE_MODE')
   expect(calls.public[0].environmentKeys).not.toContain('REVALIDATE_SECRET')
+  expect(calls.public[0].environmentKeys).not.toContain('IMAGES')
 })
 
 it('routes only the Admin image upload API to the Admin runtime', async () => {

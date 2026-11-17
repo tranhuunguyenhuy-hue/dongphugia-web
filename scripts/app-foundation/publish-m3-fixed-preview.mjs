@@ -207,7 +207,8 @@ async function main() {
   const deployedEnv = deployment.env || Object.fromEntries((deployment.bindings || []).map(binding => [binding.name, binding]))
   const expectedVars = config.previews.vars
   assert.equal(deployedEnv.ASSETS?.type, 'assets', 'M3_ASSETS_BINDING_REQUIRED')
-  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'BUNNY_STORAGE_API_KEY', 'REVALIDATE_SECRET', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
+  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'BUNNY_STORAGE_API_KEY', 'REVALIDATE_SECRET', 'IMAGES', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
+  assert.equal(deployedEnv.IMAGES?.type, 'images', 'M3_IMAGES_BINDING_REQUIRED')
   assert.equal(deployedEnv.PUBLIC_DB?.type, 'hyperdrive'); assert.equal(deployedEnv.HYPERDRIVE_ADMIN_NO_CACHE?.type, 'hyperdrive')
   for (const [name, value] of Object.entries(expectedVars)) { assert.equal(deployedEnv[name]?.type, 'plain_text'); assert.equal(deployedEnv[name]?.text, value) }
   evidence.hyperdriveReadback = {}

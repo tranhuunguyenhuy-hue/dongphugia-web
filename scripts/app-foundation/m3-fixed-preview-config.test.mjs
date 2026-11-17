@@ -40,6 +40,8 @@ describe('M3 fixed Preview configuration', () => {
       logs: { enabled: true, invocation_logs: true, persist: false },
       traces: { enabled: false, persist: false },
     })
+    expect(config.previews.images).toEqual({ binding: 'IMAGES' })
+    expect(config).not.toHaveProperty('images')
     expect(config.previews.vars).not.toHaveProperty('PUBLIC_CATALOGUE_CHECKPOINT')
     expect(config).not.toHaveProperty('vars')
     expect(config).not.toHaveProperty('hyperdrive')

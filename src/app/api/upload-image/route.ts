@@ -70,6 +70,12 @@ async function uploadToBunny(
     }
 }
 
+// Worker runtime: the Cloudflare Images binding replaces sharp (native modules cannot load in Workerd).
+function getImagesBinding() {
+    const binding = getAdminRuntimeEnvironment()?.IMAGES
+    return binding ? (binding as import('@/lib/media/process-image-worker').ImagesBindingLike) : null
+}
+
 async function deleteFromBunny(config: BunnyConfig, filePath: string) {
     const deleteUrl =
         `https://${config.storageHost}/${config.storageZone}/${filePath}`
@@ -134,11 +140,13 @@ export async function POST(request: NextRequest) {
         const id = `${Date.now()}-${randomUUID().slice(0, 8)}`
 
         if (file.type === 'image/gif') {
-            const { default: sharp } = await import('sharp')
-            const metadata = await sharp(buffer, {
-                animated: true,
-                limitInputPixels: 40_000_000,
-            }).metadata()
+            const images = getImagesBinding()
+            const metadata = images
+                ? await import('@/lib/media/process-image-worker').then(({ readImageInfo }) => readImageInfo(images, buffer))
+                : await import('sharp').then(({ default: sharp }) => sharp(buffer, {
+                    animated: true,
+                    limitInputPixels: 40_000_000,
+                }).metadata())
             const filePath = `${safeFolder}/${id}.gif`
             await uploadToBunny(config, filePath, buffer, 'image/gif')
 
@@ -154,8 +162,11 @@ export async function POST(request: NextRequest) {
             )
         }
 
-        const { processImage } = await import('@/lib/media/process-image')
-        const processed = await processImage(buffer, profileValue)
+        const images = getImagesBinding()
+        const processed = images
+            ? await import('@/lib/media/process-image-worker').then(({ processImageWithImagesBinding }) =>
+                processImageWithImagesBinding(images, buffer, profileValue))
+            : await import('@/lib/media/process-image').then(({ processImage }) => processImage(buffer, profileValue))
         const widths = MEDIA_PROFILES[profileValue].widths
         const uploadedPaths: string[] = []
 
@@ -214,6 +225,14 @@ export async function POST(request: NextRequest) {
                     error: getWriteFreezeMessage(),
                     code: WRITE_FREEZE_ERROR_CODE,
                 },
+                { status: 503 },
+            )
+        }
+
+        if (error instanceof Error && error.message === 'MEDIA_TRANSFORM_UNAVAILABLE') {
+            console.error(JSON.stringify({ event: 'ADMIN_MEDIA_UPLOAD_FAILURE', code: 'MEDIA_TRANSFORM_UNAVAILABLE' }))
+            return NextResponse.json(
+                { error: 'Dịch vụ xử lý ảnh tạm thời không khả dụng hoặc đã hết hạn mức.' },
                 { status: 503 },
             )
         }

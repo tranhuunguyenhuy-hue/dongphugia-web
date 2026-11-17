@@ -91,6 +91,7 @@ function adminEnvironment(environment) {
     BUNNY_STORAGE_HOSTNAME: environment.BUNNY_STORAGE_HOSTNAME,
     BUNNY_CDN_HOSTNAME: environment.BUNNY_CDN_HOSTNAME,
     REVALIDATE_SECRET: environment.REVALIDATE_SECRET,
+    IMAGES: environment.IMAGES,
     PRISMA_REQUEST_SCOPE_REQUIRED: 'true',
     HYPERDRIVE_ADMIN_NO_CACHE: environment.HYPERDRIVE_ADMIN_NO_CACHE,
     ASSETS: environment.ASSETS,

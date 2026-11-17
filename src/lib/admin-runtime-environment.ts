@@ -9,6 +9,7 @@ export interface AdminRuntimeEnvironment {
     BUNNY_STORAGE_HOSTNAME?: string
     BUNNY_CDN_HOSTNAME?: string
     REVALIDATE_SECRET?: string
+    IMAGES?: unknown
 }
 
 const requestAdminEnvironment = new AsyncLocalStorage<AdminRuntimeEnvironment>()

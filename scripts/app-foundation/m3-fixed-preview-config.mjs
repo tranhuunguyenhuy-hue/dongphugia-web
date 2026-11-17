@@ -97,6 +97,7 @@ export function createM3FixedPreviewConfig({
         { binding: 'PUBLIC_DB', id: publicHyperdriveId },
         { binding: 'HYPERDRIVE_ADMIN_NO_CACHE', id: adminHyperdriveId },
       ],
+      images: { binding: 'IMAGES' },
       services: [],
       durable_objects: { bindings: [] },
       observability: {
@@ -127,6 +128,7 @@ export function validateM3FixedPreviewConfig(config, expected) {
   assert.equal(config.previews.vars.BUNNY_STORAGE_HOSTNAME, APPROVED_STORAGE_HOSTNAME, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED')
   assert.match(config.previews.vars.BUNNY_CDN_HOSTNAME, APPROVED_PREVIEW_CDN, 'M3_PREVIEW_MEDIA_CDN_NOT_APPROVED')
   assert.ok(!PRODUCTION_MEDIA_HOSTS.has(config.previews.vars.BUNNY_CDN_HOSTNAME), 'M3_PRODUCTION_MEDIA_CDN_FORBIDDEN')
+  assert.deepEqual(config.previews.images, { binding: 'IMAGES' }, 'M3_PREVIEW_IMAGES_BINDING_REQUIRED')
   assert.equal(config.previews.observability.redact_query_string, true)
   assert.equal(config.previews.observability.logs.persist, false)
 
