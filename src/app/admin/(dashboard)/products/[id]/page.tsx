@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { ChevronLeft } from 'lucide-react'
 import { getAdminProductById } from '@/lib/public-api-products'
 import { getAdminCategories, getAdminSubcategories, getAdminBrands, getOrigins, getColors, getMaterials, getFilterDefinitions, getProductTypes, getCatalogTaxons, getNormalizedProductTypes } from '@/lib/cache'

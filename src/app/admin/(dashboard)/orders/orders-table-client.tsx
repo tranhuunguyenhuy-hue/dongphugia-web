@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { type ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '@/components/admin/data-table'
 import { Badge } from '@/components/ui/badge'

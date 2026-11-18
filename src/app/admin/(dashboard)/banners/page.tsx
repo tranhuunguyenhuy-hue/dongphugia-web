@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma"
-import Link from "next/link"
+import Link from '@/components/admin/admin-link'
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"

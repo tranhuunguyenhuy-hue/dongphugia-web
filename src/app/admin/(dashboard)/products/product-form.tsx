@@ -22,7 +22,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDes
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { ProductRelationshipPicker } from './product-relationship-picker'
 import { ProductVariantManager } from '@/components/admin/products/product-variant-manager'
 import { QuickCreateProductModal } from './quick-create-product-modal'

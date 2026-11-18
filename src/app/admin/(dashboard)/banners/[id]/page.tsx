@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma"
-import Link from "next/link"
+import Link from '@/components/admin/admin-link'
 import { ChevronLeft } from "lucide-react"
 import { notFound } from "next/navigation"
 import { BannerForm } from "../banner-form"

@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { useReactToPrint } from 'react-to-print'
 import { toast } from 'sonner'
 import { OrderTemplateA4 } from './order-template-a4'

@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import Image from 'next/image'
 import { Plus, FileText, Eye, Star, Pin, PenLine } from 'lucide-react'
 import prisma from '@/lib/prisma'
