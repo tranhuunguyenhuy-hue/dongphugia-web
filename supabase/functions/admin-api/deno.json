@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "bcryptjs": "npm:bcryptjs@3.0.3",
+    "postgres": "npm:postgres@3.4.7",
+    "zod": "npm:zod@4.4.3"
+  }
+}
