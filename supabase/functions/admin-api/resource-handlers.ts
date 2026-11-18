@@ -131,7 +131,7 @@ export async function audit(tx: Db, ctx: Context, entity: string, action: string
     `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
      values ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb, $7)`,
     [ctx.session!.userId, `${entity}.${action}`, entity, id, oldValue ? JSON.stringify(oldValue) : null,
-      JSON.stringify({ ...(newValue ?? {}), _meta: { request_id: ctx.request_id, changed_fields: changed } }), ctx.ip.slice(0, 64) || null])
+      JSON.stringify({ ...(newValue ?? {}), _meta: { request_id: ctx.request_id, changed_fields: changed } }), ctx.ip.slice(0, 45) || null]) // audit_logs.ip_address is varchar(45)
 }
 export const pick = (row: Row | null | undefined, keys: string[]): Row => Object.fromEntries(keys.filter((key) => row && key in row).map((key) => [key, row![key]]))
 
