@@ -52,6 +52,9 @@ export function runInAdminEnvironmentScope(callback) {
 
 const ADMIN_BASE_PATH = '/admin'
 const ADMIN_SESSION_COOKIE = 'dpg-admin-session'
+// Cloudflare Access forwards its own JWT as this cookie; Public pages must never see it (it also made every
+// staging request look personalised, so the anonymous page cache could not be exercised).
+const PUBLIC_STRIPPED_COOKIES = new Set([ADMIN_SESSION_COOKIE, 'CF_Authorization'])
 const FIXED_PREVIEW_HOST = 'staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
 const STAGING_ORIGIN = `https://${FIXED_PREVIEW_HOST}`
 const PUBLIC_HOSTS = new Set([FIXED_PREVIEW_HOST])
@@ -97,7 +100,7 @@ function stripAdminSessionCookie(request) {
   const cookie = request.headers.get('cookie')
   if (!cookie) return request
   const remaining = cookie.split(';').map((part) => part.trim()).filter((part) =>
-    part && part.split('=', 1)[0]?.trim() !== ADMIN_SESSION_COOKIE,
+    part && !PUBLIC_STRIPPED_COOKIES.has(part.split('=', 1)[0]?.trim()),
   )
   const headers = new Headers(request.headers)
   if (remaining.length) headers.set('cookie', remaining.join('; '))
