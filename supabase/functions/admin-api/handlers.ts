@@ -1,5 +1,6 @@
 import { type AdminRole, type Permission } from './permissions.ts'
 import { ApiError, requirePermission as requirePerm, type Context, type Db, type Session } from './core.ts'
+import * as commerce from './commerce-handlers.ts'
 import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
 import { listQuerySchema, loginSchema, parseAllowedMediaHosts, productPatchSchema, VISIBILITY_FIELDS } from './validation.ts'
@@ -164,6 +165,29 @@ async function dispatchResource(deps: Deps, ctx: Context, method: string, key: s
   throw new ApiError(404, 'NOT_FOUND')
 }
 
+type Routed = Promise<{ status: number; body: unknown }> | undefined
+/** Orders, quotes, assignees and dashboard (see commerce-handlers.ts). Returns undefined when the path is not one of them. */
+function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string, search: URLSearchParams, body: string): Routed {
+  const cd = { db: deps.db }
+  if (method === 'GET' && path === '/assignees') return commerce.listAssignees(cd, ctx)
+  if (method === 'GET' && path === '/dashboard') return commerce.dashboard(cd, ctx, search)
+  const m = path.match(/^\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|payment|assign|complete))?$/)
+  if (!m) return undefined
+  const [, kind, rawId, action] = m
+  const id = rawId === undefined ? undefined : Number(rawId)
+  if (kind === 'orders') {
+    if (id === undefined) return method === 'GET' ? commerce.listOrders(cd, ctx, search) : undefined
+    if (!action) return method === 'GET' ? commerce.getOrder(cd, ctx, id) : method === 'PATCH' ? commerce.editOrder(cd, ctx, id, body) : undefined
+    if (method !== 'PATCH') return undefined
+    return action === 'status' ? commerce.setOrderStatus(cd, ctx, id, body) : action === 'payment' ? commerce.setPaymentStatus(cd, ctx, id, body) : action === 'assign' ? commerce.assignOrder(cd, ctx, id, body) : undefined
+  }
+  if (id === undefined) return method === 'GET' ? commerce.listQuotes(cd, ctx, search) : undefined
+  if (!action) return method === 'GET' ? commerce.getQuote(cd, ctx, id) : method === 'PATCH' ? commerce.saveQuote(cd, ctx, id, body) : undefined
+  if (action === 'complete') return method === 'POST' ? commerce.completeQuote(cd, ctx, id, body) : undefined
+  if (method !== 'PATCH') return undefined
+  return action === 'status' ? commerce.setQuoteStatus(cd, ctx, id, body) : action === 'assign' ? commerce.assignQuote(cd, ctx, id, body) : undefined
+}
+
 async function recordNonce(deps: Deps, nonce: string) {
   const rows = await deps.db.query<{ nonce: string }>(
     `insert into dpg_app.admin_api_nonces (nonce, expires_at) values ($1, now() + ($2 || ' seconds')::interval)
@@ -208,7 +232,11 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
       if (match && request.method === 'GET') result = await getProduct(deps, ctx, Number(match[1]))
       else if (match && request.method === 'PATCH') result = await patchProduct(deps, ctx, Number(match[1]), body)
       else if (generic) result = await dispatchResource(deps, ctx, request.method, generic[1], generic[2], search, body)
-      else throw new ApiError(404, 'NOT_FOUND')
+      else {
+        const routed = dispatchCommerce(deps, ctx, request.method, path, search, body)
+        if (!routed) throw new ApiError(404, 'NOT_FOUND')
+        result = await routed
+      }
     }
     return json(result.body, result.status, request_id)
   } catch (error) {

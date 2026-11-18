@@ -11,9 +11,9 @@ type Result = { status: number; body: unknown }
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`)
 const isRaw = (value: unknown): value is SqlRaw => typeof value === 'object' && value !== null && 'raw' in value
-const parseJson = (text: string): unknown => { try { return JSON.parse(text || '{}') } catch { throw new ApiError(400, 'INVALID_JSON') } }
+export const parseJson = (text: string): unknown => { try { return JSON.parse(text || '{}') } catch { throw new ApiError(400, 'INVALID_JSON') } }
 type Issue = { path: PropertyKey[] }
-function validate<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Issue[] } } }, value: unknown): T {
+export function validate<T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error: { issues: Issue[] } } }, value: unknown): T {
   const result = schema.safeParse(value)
   if (!result.success) {
     // Only property NAMES of the invalid inputs are reported (never values) so forms can highlight them.
@@ -122,13 +122,13 @@ function requireFieldPermissions(ctx: Context, def: ResourceDef, input: Row) {
   for (const field of writableFields(def)) if (field.permission && field.name in input) requirePermission(ctx, field.permission)
 }
 
-async function audit(tx: Db, ctx: Context, def: ResourceDef, action: string, id: number, oldValue: Row | null, newValue: Row | null, changed: string[]) {
+export async function audit(tx: Db, ctx: Context, entity: string, action: string, id: number, oldValue: Row | null, newValue: Row | null, changed: string[]) {
   await tx.query(
     `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address, request_id, changed_fields)
      values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8::uuid, $9)`,
-    [ctx.session!.userId, `${def.key}.${action}`, def.key, id, oldValue ? JSON.stringify(oldValue) : null, newValue ? JSON.stringify(newValue) : null, ctx.ip.slice(0, 64) || null, ctx.request_id, changed])
+    [ctx.session!.userId, `${entity}.${action}`, entity, id, oldValue ? JSON.stringify(oldValue) : null, newValue ? JSON.stringify(newValue) : null, ctx.ip.slice(0, 64) || null, ctx.request_id, changed])
 }
-const pick = (row: Row | null | undefined, keys: string[]): Row => Object.fromEntries(keys.filter((key) => row && key in row).map((key) => [key, row![key]]))
+export const pick = (row: Row | null | undefined, keys: string[]): Row => Object.fromEntries(keys.filter((key) => row && key in row).map((key) => [key, row![key]]))
 
 async function replaceRelations(tx: Db, def: ResourceDef, id: number, input: Row, previous: Row | undefined) {
   for (const relation of def.relations ?? []) {
@@ -179,7 +179,7 @@ export async function createResource(deps: ResourceDeps, ctx: Context, def: Reso
       const created = Number((await tx.query<{ id: number }>(insert, params))[0].id)
       await replaceRelations(tx, def, created, input, undefined)
       const after = await loadRow(tx, def, created)
-      await audit(tx, ctx, def, 'create', created, null, pick(after, [...Object.keys(input), ...Object.keys(sets)]), [...Object.keys(input)])
+      await audit(tx, ctx, def.key, 'create', created, null, pick(after, [...Object.keys(input), ...Object.keys(sets)]), [...Object.keys(input)])
       return created
     })
     const row = await loadRow(deps.db, def, id)
@@ -217,7 +217,7 @@ export async function updateResource(deps: ResourceDeps, ctx: Context, def: Reso
       await replaceRelations(tx, def, id, input, before)
       const fresh = (await loadRow(tx, def, id))!
       const changed = [...direct.map((f) => f.name), ...(def.relations ?? []).filter((r) => Array.isArray(input[r.input])).map((r) => r.input), ...Object.keys(hook?.set ?? {})]
-      await audit(tx, ctx, def, 'update', id, pick(before, changed), pick(fresh, changed), changed)
+      await audit(tx, ctx, def.key, 'update', id, pick(before, changed), pick(fresh, changed), changed)
       return fresh
     })
     return { status: 200, body: { data: stripExtra(after) } }
@@ -259,7 +259,7 @@ export async function deleteResource(deps: ResourceDeps, ctx: Context, def: Reso
         for (const relation of def.relations ?? []) await recount(tx, relation, targets[relation.input])
         result = 'deleted'
       }
-      await audit(tx, ctx, def, result === 'deleted' ? 'delete' : result === 'unpublished' ? 'unpublish' : 'deactivate', id, before, null, [])
+      await audit(tx, ctx, def.key, result === 'deleted' ? 'delete' : result === 'unpublished' ? 'unpublish' : 'deactivate', id, before, null, [])
       return result
     })
     return { status: 200, body: { data: { ok: true, result: outcome } } }

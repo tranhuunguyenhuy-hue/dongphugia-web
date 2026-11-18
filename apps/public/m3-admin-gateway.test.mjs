@@ -47,16 +47,16 @@ describe('Admin shell gateway', () => {
   it('allows only well-formed generic resource routes and signs them like any other request', async () => {
     stubUpstream(json({ data: { items: [] } }))
     const env = environment()
-    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/partners/3']]) {
+    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/partners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/payment'], ['GET', '/quotes/9'], ['PATCH', '/quotes/9/assign'], ['POST', '/quotes/9/complete']]) {
       const init = method === 'GET' ? {} : { method, body: '{}' }
       expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(200)
     }
-    expect(calls).toHaveLength(7)
+    expect(calls).toHaveLength(16)
     const { url, init } = calls[6]
     expect(url).toBe(`${FN}/r/partners/3`)
     expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
     calls.length = 0
-    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890']]) {
+    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['DELETE', '/orders/1'], ['POST', '/orders/1/status'], ['PATCH', '/orders/1/complete'], ['PATCH', '/quotes/1/payment'], ['GET', '/orders/1/status'], ['POST', '/quotes']]) {
       const init = method === 'GET' ? {} : { method, body: '{}' }
       expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(404)
     }
@@ -66,7 +66,7 @@ describe('Admin shell gateway', () => {
   it('rejects unknown routes/methods and cross-site mutations before contacting the function', async () => {
     stubUpstream(json({ data: {} }))
     const env = environment()
-    expect((await handleAdminNext(browser('/admin-next/api/orders'), env, ctx)).status).toBe(404)
+    expect((await handleAdminNext(browser('/admin-next/api/customers-export'), env, ctx)).status).toBe(404)
     expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'DELETE' }), env, ctx)).status).toBe(404)
     for (const headers of [{ origin: 'https://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { origin: '' }]) {
       const r = await handleAdminNext(browser('/admin-next/api/logout', { method: 'POST', body: '{}', headers }), env, ctx)

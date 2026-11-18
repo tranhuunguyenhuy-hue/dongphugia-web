@@ -4,6 +4,7 @@ import path from 'node:path'
 // The function sources are .ts files of a CommonJS package (no "type": "module"): read named exports through interop.
 const interop = <T,>(module: T & { default?: T }): T => ((module as { default?: T }).default && !(Object.keys(module as object).length > 2) ? (module as { default: T }).default : module)
 const { generateAdminResourceMigration } = interop(await import('../../supabase/functions/admin-api/grants.ts')) as typeof import('../../supabase/functions/admin-api/grants.ts')
+const { CUSTOM_GRANTS } = interop(await import('../../supabase/functions/admin-api/custom-grants.ts')) as typeof import('../../supabase/functions/admin-api/custom-grants.ts')
 const { RESOURCES } = interop(await import('../../supabase/functions/admin-api/resources.ts')) as typeof import('../../supabase/functions/admin-api/resources.ts')
 
 const root = process.cwd()
@@ -16,6 +17,7 @@ export const TEST_OPTIONS = {
   baseTables: ['admin_users', 'categories', 'subcategories', 'brands'],
   basePolicies: ['admin_users.select', 'admin_users.update', 'categories.select', 'subcategories.select', 'brands.select'],
   rollbackRegrant: ['grant update (last_login_at) on dpg_app.admin_users to dpg_admin_api_test;'],
+  extra: CUSTOM_GRANTS,
   title: 'M3 TEST-only (project uybumsnyqpwcidjxmfsv): column-level grants + RLS for the Admin resources served by `admin-api`.',
 }
 const { forward, rollback } = generateAdminResourceMigration(RESOURCES, TEST_OPTIONS)

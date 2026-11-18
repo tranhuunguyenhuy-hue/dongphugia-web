@@ -491,6 +491,134 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(audit[1].changed_fields).toContain('password_hash')
     })
 
+    describe('orders, quotes and dashboard', () => {
+      const uid = async (email: string) => (await owner.query('select id from dpg_app.admin_users where email=$1', [email])).rows[0].id as number
+      let saleId = 0, managerId = 0, orderA = 0, orderB = 0, quoteA = 0, quoteB = 0
+      beforeAll(async () => {
+        saleId = await uid('sale@example.test'); managerId = await uid('manager@example.test')
+        const order = async (n: string, name: string, assigned: number | null, status = 'pending') => (await owner.query(
+          `insert into dpg_app.orders(order_number, customer_name, customer_phone, status, assigned_to, internal_note) values ($1::text,$2::text,'0900000000',$3::text,$4::int,'secret') returning id`, [n, name, status, assigned])).rows[0].id as number
+        orderA = await order('DPG-A', 'Khách A', saleId); orderB = await order('DPG-B', 'Khách B', null)
+        for (const [o, p, price, qty] of [[orderA, 1, 1000, 2], [orderA, 2, 500, 1], [orderB, 3, 700, 1]]) await owner.query(`insert into dpg_app.order_items(order_id, product_id, product_name, product_sku, quantity, unit_price, total_price) values ($1::int,$2::int,'Sản phẩm '||$2::text,'SKU-'||$2::text,$3::int,$4::numeric,$4::numeric*$3::int)`, [o, p, qty, price])
+        await owner.query("update dpg_app.orders set subtotal=2500,total=2500 where id=$1", [orderA])
+        const quote = async (n: string, name: string, phone: string, assigned: number | null) => (await owner.query(
+          `insert into dpg_app.quote_requests(quote_number, name, phone, email, assigned_to) values ($1::text,$2::text,$3::text,$2::text||'@example.test',$4::int) returning id`, [n, name, phone, assigned])).rows[0].id as number
+        quoteA = await quote('BG-A', 'Anh Một', '0911000001', saleId); quoteB = await quote('BG-B', 'Chị Hai', '0911000002', null)
+        await owner.query(`insert into dpg_app.quote_items(quote_id, product_id, quantity, product_name_snapshot, sale_price_snapshot, snapshot_at) values ($1,1,2,'Snapshot 1',1500,now()), ($1,2,1,null,null,null), ($2,3,1,'Snapshot 3',900,now())`, [quoteA, quoteB])
+      })
+
+      it('shows sale users only their assigned orders and hides the rest', async () => {
+        const sale = await token('sale'), manager = await token('manager'), admin = await token('admin')
+        const mine = await call('GET', '/orders', undefined, { token: sale })
+        expect(mine.json.data.items.map((o: { id: number }) => o.id)).toEqual([orderA]); expect(mine.json.data.stats.total).toBe(1)
+        expect(JSON.stringify(mine.json)).not.toMatch(/internal_note|owner_id|secret/)
+        expect(code(await call('GET', `/orders/${orderB}`, undefined, { token: sale }))).toBe('NOT_FOUND')
+        expect((await call('GET', `/orders/${orderA}`, undefined, { token: sale })).json.data).toMatchObject({ order_number: 'DPG-A', total: 2500 })
+        expect((await call('GET', '/orders', undefined, { token: manager })).json.data.total).toBe(2)
+        expect((await call('GET', `/orders/${orderA}`, undefined, { token: admin })).json.data.items).toHaveLength(2)
+        expect(code(await call('PATCH', `/orders/${orderB}/status`, { status: 'received' }, { token: sale }))).toBe('NOT_FOUND')
+        expect((await call('PATCH', `/orders/${orderA}/status`, { status: 'received' }, { token: sale })).json.data.status).toBe('received')
+        for (const [route, body] of [[`/orders/${orderA}/payment`, { payment_status: 'paid' }], [`/orders/${orderA}/assign`, { user_id: null }], [`/orders/${orderA}`, { shipping_fee: 1 }]] as const) {
+          expect(code(await call('PATCH', route, body, { token: sale })), route).toBe('FORBIDDEN')
+        }
+        expect(code(await call('PATCH', `/orders/${orderA}/payment`, { payment_status: 'paid' }, { token: manager }))).toBe('FORBIDDEN') // orders:edit is admin-only
+        expect(code(await call('GET', '/orders/abc', undefined, { token: admin }))).toBe('NOT_FOUND')
+        expect(code(await call('GET', '/orders?status=bogus', undefined, { token: admin }))).toBe('VALIDATION_FAILED')
+        expect(code(await call('PATCH', `/orders/${orderA}/status`, { status: 'delivered' }, { token: admin }))).toBe('VALIDATION_FAILED')
+        expect((await call('GET', '/orders?q=' + encodeURIComponent("x'; drop table dpg_app.orders;--"), undefined, { token: admin })).json.data.total).toBe(0)
+        expect((await call('GET', '/orders?q=Kh%C3%A1ch%20B', undefined, { token: admin })).json.data.items[0].id).toBe(orderB)
+      })
+
+      it('assigns orders only to active staff and records the audit trail', async () => {
+        const manager = await token('manager'), sale = await token('sale')
+        const offId = await uid('off@example.test')
+        expect(code(await call('PATCH', `/orders/${orderB}/assign`, { user_id: offId }, { token: manager }))).toBe('VALIDATION_FAILED')
+        expect(code(await call('PATCH', `/orders/${orderB}/assign`, { user_id: 99999 }, { token: manager }))).toBe('VALIDATION_FAILED')
+        expect((await call('PATCH', `/orders/${orderB}/assign`, { user_id: saleId }, { token: manager })).json.data).toMatchObject({ assigned_to: saleId })
+        expect((await call('GET', `/orders/${orderB}`, undefined, { token: sale })).status).toBe(200) // now visible to the assignee
+        expect((await call('PATCH', `/orders/${orderB}/assign`, { user_id: null }, { token: manager })).json.data).toMatchObject({ assigned_to: null, assigned_at: null })
+        const actions = (await owner.query("select action from dpg_app.audit_logs where entity_type='orders' and entity_id=$1 order by id", [orderB])).rows.map((r) => r.action)
+        expect(actions).toEqual(['orders.assign', 'orders.unassign'])
+        expect((await call('GET', '/assignees', undefined, { token: manager })).json.data.items.map((u: { name: string }) => u.name)).not.toContain('Off')
+        expect((await call('GET', '/assignees', undefined, { token: sale })).status).toBe(200) // quotes:update lets sales assign quotes (legacy parity)
+        expect(code(await call('GET', '/assignees'))).toBe('UNAUTHENTICATED')
+      })
+
+      it('recomputes order totals on the server and rejects foreign lines', async () => {
+        const admin = await token('admin')
+        const detail = (await call('GET', `/orders/${orderA}`, undefined, { token: admin })).json.data
+        const [i1, i2] = detail.items as { id: number }[]
+        const edited = await call('PATCH', `/orders/${orderA}`, { items: [{ id: i1.id, unit_price: 2000, quantity: 3 }, { id: i2.id, unit_price: 1000, quantity: 1 }], vat_rate: 10, shipping_fee: 50000, discount: 10000, note: 'Giao giờ hành chính' }, { token: admin })
+        expect(edited.status).toBe(200)
+        expect(edited.json.data).toMatchObject({ subtotal: 7000, vat_rate: 10, shipping_fee: 50000, discount: 10000, total: 7000 + 700 + 50000 - 10000, note: 'Giao giờ hành chính' })
+        const otherLine = (await call('GET', `/orders/${orderB}`, undefined, { token: admin })).json.data.items[0].id
+        expect(code(await call('PATCH', `/orders/${orderA}`, { items: [{ id: otherLine, unit_price: 1, quantity: 1 }] }, { token: admin }))).toBe('VALIDATION_FAILED')
+        expect(code(await call('PATCH', `/orders/${orderA}`, { discount: 999999 }, { token: admin }))).toBe('VALIDATION_FAILED')
+        for (const bad of [{ vat_rate: 101 }, { shipping_fee: -1 }, { items: [{ id: i1.id, unit_price: -5, quantity: 1 }] }, { items: [{ id: i1.id, unit_price: 5, quantity: 0 }] }, { total: 1 }, { items: [{ id: i1.id, unit_price: 5, quantity: 1, total_price: 1 }] }]) {
+          expect(code(await call('PATCH', `/orders/${orderA}`, bad, { token: admin })), JSON.stringify(bad)).toBe('VALIDATION_FAILED')
+        }
+        expect(Number((await owner.query('select total from dpg_app.orders where id=$1', [orderA])).rows[0].total)).toBe(7000 + 700 + 50000 - 10000) // failed edits changed nothing
+        const paid = await call('PATCH', `/orders/${orderA}/payment`, { payment_status: 'paid' }, { token: admin })
+        expect(paid.json.data.payment_status).toBe('paid')
+      })
+
+      it('limits quotes to the assignee, saves pricing, and completes with CSKH sync', async () => {
+        const sale = await token('sale'), manager = await token('manager'), admin = await token('admin')
+        const mine = await call('GET', '/quotes', undefined, { token: sale })
+        expect(mine.json.data.items.map((q: { id: number }) => q.id)).toEqual([quoteA]); expect(mine.json.data.counts).toEqual({ pending: 1 })
+        expect(mine.json.data.items[0].item_names).toContain('Snapshot 1')
+        expect(code(await call('GET', `/quotes/${quoteB}`, undefined, { token: sale }))).toBe('NOT_FOUND')
+        expect(code(await call('PATCH', `/quotes/${quoteB}/status`, { status: 'cancelled' }, { token: sale }))).toBe('NOT_FOUND')
+        const all = await call('GET', '/quotes?status=pending', undefined, { token: manager }); expect(all.json.data.total).toBe(2)
+        const detail = (await call('GET', `/quotes/${quoteA}`, undefined, { token: manager })).json.data
+        expect(detail.items).toHaveLength(2); expect(detail.items[0]).toMatchObject({ product_name_snapshot: 'Snapshot 1', sale_price_snapshot: 1500 })
+        const [q1, q2] = detail.items as { id: number }[]
+        const saved = await call('PATCH', `/quotes/${quoteA}`, { vat_rate: 8, shipping_fee: 30000, admin_notes: 'Giá đã gồm VAT', items: [{ id: q1.id, admin_unit_price: 1400, admin_quantity: 2 }, { id: q2.id, admin_unit_price: 600 }] }, { token: manager })
+        expect(saved.json.data).toMatchObject({ vat_rate: 8, shipping_fee: 30000, status: 'resolved', admin_notes: 'Giá đã gồm VAT' })
+        const after = (await call('GET', `/quotes/${quoteA}`, undefined, { token: manager })).json.data.items
+        expect(after[0]).toMatchObject({ admin_unit_price: 1400, admin_quantity: 2 }); expect(after[1]).toMatchObject({ admin_unit_price: 600, admin_quantity: null })
+        const foreign = (await call('GET', `/quotes/${quoteB}`, undefined, { token: manager })).json.data.items[0].id
+        expect(code(await call('PATCH', `/quotes/${quoteA}`, { items: [{ id: foreign, admin_unit_price: 1 }] }, { token: manager }))).toBe('VALIDATION_FAILED')
+        expect(code(await call('PATCH', `/quotes/${quoteA}`, { name: 'Hacker' }, { token: manager }))).toBe('VALIDATION_FAILED')
+
+        const done = await call('POST', `/quotes/${quoteA}/complete`, { items: [], admin_notes: 'Xong' }, { token: sale })
+        expect(done.json.data).toMatchObject({ status: 'completed', admin_notes: 'Xong' }); expect(done.json.data.customer_id).toBeTruthy()
+        const customer = (await owner.query('select full_name, source, notes from dpg_app.customers where id=$1', [done.json.data.customer_id])).rows[0]
+        expect(customer).toMatchObject({ full_name: 'Anh Một', source: 'QUOTE_FORM' }); expect(customer.notes).toContain('BG-A')
+        // an existing customer with the same phone is linked and its notes appended (not duplicated)
+        await owner.query("insert into dpg_app.customers(full_name, phone, notes) values ('Chị Hai (cũ)','0911000002','Ghi chú cũ')")
+        const second = await call('POST', `/quotes/${quoteB}/complete`, { items: [] }, { token: admin })
+        expect(Number((await owner.query("select count(*) from dpg_app.customers where phone='0911000002'")).rows[0].count)).toBe(1)
+        expect((await owner.query('select notes from dpg_app.customers where id=$1', [second.json.data.customer_id])).rows[0].notes).toBe('Ghi chú cũ\n---\nNhận báo giá #BG-B')
+        expect(code(await call('PATCH', `/quotes/${quoteB}/status`, { status: 'archived' }, { token: admin }))).toBe('VALIDATION_FAILED')
+        expect((await call('PATCH', `/quotes/${quoteB}/assign`, { user_id: managerId }, { token: manager })).json.data.assigned_to).toBe(managerId)
+        expect((await call('PATCH', `/quotes/${quoteB}`, { vat_rate: 5 }, { token: admin })).json.data.status).toBe('completed') // saving never reopens a finished quote
+      })
+
+      it('serves the dashboard to roles with dashboard:read only', async () => {
+        const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
+        const d = await call('GET', '/dashboard?period=week', undefined, { token: manager })
+        expect(d.status).toBe(200); expect(d.json.data.stats).toMatchObject({ pending_orders: 1, pending_quotes: 0, total_products: 30, active_products: 30 }); expect(d.json.data.period).toBe('week')
+        expect(Array.isArray(d.json.data.revenue)).toBe(true); expect(d.json.data.top_quoted.length).toBeGreaterThan(0)
+        expect(code(await call('GET', '/dashboard', undefined, { token: sale }))).toBe('FORBIDDEN')
+        expect(code(await call('GET', '/dashboard?period=decade', undefined, { token: admin }))).toBe('VALIDATION_FAILED')
+        expect(code(await call('GET', "/dashboard?period=day'; drop table dpg_app.orders;--", undefined, { token: admin }))).toBe('VALIDATION_FAILED')
+        await owner.query("update dpg_app.orders set status='completed', payment_status='paid', total=1000 where id=$1", [orderB])
+        const month = (await call('GET', '/dashboard', undefined, { token: admin })).json.data
+        expect(month.stats.revenue_this_month).toBeGreaterThanOrEqual(1000); expect(month.revenue.reduce((s: number, r: { revenue: number }) => s + r.revenue, 0)).toBeGreaterThanOrEqual(1000)
+        expect(month.top_sold[0]).toMatchObject({ total_sold: expect.any(Number) })
+      })
+
+      it('keeps commerce tables write-protected at the database level', async () => {
+        for (const statement of [
+          'select owner_id from dpg_app.orders', 'select internal_note from dpg_app.orders', "update dpg_app.orders set order_number = 'x'", "update dpg_app.orders set customer_name = 'x'",
+          'delete from dpg_app.orders', "insert into dpg_app.orders(order_number) values ('x')", 'delete from dpg_app.order_items', "update dpg_app.order_items set product_name = 'x'",
+          "update dpg_app.quote_requests set name = 'x'", "update dpg_app.quote_requests set phone = 'x'", 'delete from dpg_app.quote_requests', "insert into dpg_app.quote_requests(name, phone) values ('x','y')",
+          'select owner_id from dpg_app.quote_requests', "update dpg_app.quote_items set product_id = 1", 'delete from dpg_app.quote_items', 'update dpg_app.quote_items set list_price_snapshot = 1',
+        ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
+      })
+    })
+
     it('database blocks anything outside the generated grants', async () => {
       for (const statement of [
         'update dpg_app.blog_posts set view_count = 9', 'update dpg_app.blog_posts set created_at = now()', 'select created_at from dpg_app.blog_posts',

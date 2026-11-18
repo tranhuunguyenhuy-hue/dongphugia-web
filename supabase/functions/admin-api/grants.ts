@@ -16,15 +16,18 @@ export interface GrantOptions {
   basePolicies?: readonly string[]
   /** Statements that restore column privileges the earlier migration granted and the rollback's REVOKE removes. */
   rollbackRegrant?: readonly string[]
+  /** Privileges for handlers that are not driven by a resource definition. */
+  extra?: readonly ExtraGrant[]
 }
 
+export interface ExtraGrant { table: string; select?: readonly string[]; insert?: readonly string[]; update?: readonly string[]; delete?: boolean }
 type Command = 'select' | 'insert' | 'update' | 'delete'
 type TableGrant = { select: Set<string>; insert: Set<string>; update: Set<string>; delete: boolean; sequence: boolean }
 
 const sorted = (values: Iterable<string>) => [...values].sort()
 const cols = (values: Iterable<string>) => sorted(values).join(', ')
 
-export function collectGrants(resources: readonly ResourceDef[]): Map<string, TableGrant> {
+export function collectGrants(resources: readonly ResourceDef[], extra: readonly ExtraGrant[] = []): Map<string, TableGrant> {
   const tables = new Map<string, TableGrant>()
   const entry = (table: string) => {
     let grant = tables.get(table)
@@ -60,6 +63,15 @@ export function collectGrants(resources: readonly ResourceDef[]): Map<string, Ta
       if (relation.recount) { const target = entry(relation.recount.table); target.select.add(relation.recount.column); target.update.add(relation.recount.column) }
     }
   }
+  for (const grant of extra) {
+    const entry = tables.get(grant.table) ?? { select: new Set<string>(), insert: new Set<string>(), update: new Set<string>(), delete: false, sequence: false }
+    tables.set(grant.table, entry)
+    for (const name of grant.select ?? []) entry.select.add(name)
+    for (const name of grant.insert ?? []) entry.insert.add(name)
+    for (const name of grant.update ?? []) entry.update.add(name)
+    if (grant.delete) entry.delete = true
+    if (grant.insert?.length) entry.sequence = true
+  }
   return tables
 }
 
@@ -72,7 +84,7 @@ const commandsOf = (grant: TableGrant): Command[] => {
 }
 
 export function generateAdminResourceMigration(resources: readonly ResourceDef[], options: GrantOptions) {
-  const tables = collectGrants(resources)
+  const tables = collectGrants(resources, options.extra)
   const names = sorted(tables.keys())
   const base = new Set(options.baseTables ?? [])
   const { role } = options

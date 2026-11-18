@@ -18,6 +18,8 @@ revoke all on sequence dpg_app.catalog_taxons_id_seq from dpg_admin_api_test;
 revoke insert, update, delete on dpg_app.categories from dpg_admin_api_test;
 revoke all on dpg_app.customers from dpg_admin_api_test;
 revoke all on sequence dpg_app.customers_id_seq from dpg_admin_api_test;
+revoke all on dpg_app.order_items from dpg_admin_api_test;
+revoke all on dpg_app.orders from dpg_admin_api_test;
 revoke all on dpg_app.partners from dpg_admin_api_test;
 revoke all on sequence dpg_app.partners_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.product_sub_types from dpg_admin_api_test;
@@ -26,6 +28,8 @@ revoke all on dpg_app.product_types from dpg_admin_api_test;
 revoke all on sequence dpg_app.product_types_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.projects from dpg_admin_api_test;
 revoke all on sequence dpg_app.projects_id_seq from dpg_admin_api_test;
+revoke all on dpg_app.quote_items from dpg_admin_api_test;
+revoke all on dpg_app.quote_requests from dpg_admin_api_test;
 revoke all on dpg_app.spec_definitions from dpg_admin_api_test;
 revoke all on sequence dpg_app.spec_definitions_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.spec_options from dpg_admin_api_test;
@@ -65,6 +69,10 @@ begin
     ('customers','select'),
     ('customers','insert'),
     ('customers','update'),
+    ('order_items','select'),
+    ('order_items','update'),
+    ('orders','select'),
+    ('orders','update'),
     ('partners','select'),
     ('partners','insert'),
     ('partners','update'),
@@ -79,6 +87,10 @@ begin
     ('projects','insert'),
     ('projects','update'),
     ('projects','delete'),
+    ('quote_items','select'),
+    ('quote_items','update'),
+    ('quote_requests','select'),
+    ('quote_requests','update'),
     ('spec_definitions','select'),
     ('spec_definitions','insert'),
     ('spec_definitions','update'),

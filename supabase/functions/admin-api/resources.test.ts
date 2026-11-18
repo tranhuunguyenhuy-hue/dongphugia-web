@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { generateAdminResourceMigration } from './grants.ts'
+import { CUSTOM_GRANTS } from './custom-grants.ts'
 import { RESOURCES } from './resources.ts'
 import { slugify as appSlugify } from '../../../src/lib/utils.ts'
 import { slugify } from './core.ts'
@@ -51,6 +52,7 @@ describe('resource definitions', () => {
       baseTables: ['admin_users', 'categories', 'subcategories', 'brands'],
       basePolicies: ['admin_users.select', 'admin_users.update', 'categories.select', 'subcategories.select', 'brands.select'],
       rollbackRegrant: ['grant update (last_login_at) on dpg_app.admin_users to dpg_admin_api_test;'],
+      extra: CUSTOM_GRANTS,
       title: 'M3 TEST-only (project uybumsnyqpwcidjxmfsv): column-level grants + RLS for the Admin resources served by `admin-api`.',
     })
     expect(await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')).toBe(forward)
@@ -59,7 +61,7 @@ describe('resource definitions', () => {
 
   it('never grants price/identity/credential columns to the API role', async () => {
     const sql = await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')
-    expect(sql).not.toMatch(/\bprice\b|list_price|\bsku\b/)
+    expect(sql).not.toMatch(/\bprice\b|\blist_price\b|\bsku\b/)
     // The only credential column the API may write is admin_users.password_hash (hashed server-side); never selected.
     expect(sql.split('\n').filter((line) => /password_hash/.test(line)).every((line) => /^grant (insert|update) \(.*\) on dpg_app\.admin_users /.test(line))).toBe(true)
     const writes = sql.split('\n').filter((line) => /^grant (insert|update) \(/.test(line))

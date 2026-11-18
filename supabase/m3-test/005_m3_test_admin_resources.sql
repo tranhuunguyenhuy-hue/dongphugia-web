@@ -63,8 +63,14 @@ grant update (banner_url, updated_at) on dpg_app.categories to dpg_admin_api_tes
 -- customers
 grant select (created_at, email, full_name, id, last_interacted_at, notes, phone, source) on dpg_app.customers to dpg_admin_api_test;
 grant insert (email, full_name, last_interacted_at, notes, phone, source) on dpg_app.customers to dpg_admin_api_test;
-grant update (email, full_name, notes, phone, source, updated_at) on dpg_app.customers to dpg_admin_api_test;
+grant update (email, full_name, last_interacted_at, notes, phone, source, updated_at) on dpg_app.customers to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.customers_id_seq to dpg_admin_api_test;
+-- order_items
+grant select (id, order_id, product_id, product_name, product_sku, quantity, total_price, unit_price) on dpg_app.order_items to dpg_admin_api_test;
+grant update (quantity, total_price, unit_price) on dpg_app.order_items to dpg_admin_api_test;
+-- orders
+grant select (assigned_at, assigned_to, created_at, customer_address, customer_email, customer_name, customer_phone, discount, id, note, order_number, payment_method, payment_status, shipping_fee, status, subtotal, total, updated_at, vat_rate) on dpg_app.orders to dpg_admin_api_test;
+grant update (assigned_at, assigned_to, discount, note, payment_status, shipping_fee, status, subtotal, total, updated_at, vat_rate) on dpg_app.orders to dpg_admin_api_test;
 -- partners
 grant select (description, gradient_class, id, is_active, link_url, logo_url, name, slug, sort_order, tier) on dpg_app.partners to dpg_admin_api_test;
 grant insert (description, gradient_class, is_active, link_url, logo_url, name, slug, sort_order, tier) on dpg_app.partners to dpg_admin_api_test;
@@ -87,6 +93,12 @@ grant insert (category, description, is_active, is_featured, location, slug, sor
 grant update (category, description, is_active, is_featured, location, sort_order, tags, thumbnail_url, title, updated_at) on dpg_app.projects to dpg_admin_api_test;
 grant delete on dpg_app.projects to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.projects_id_seq to dpg_admin_api_test;
+-- quote_items
+grant select (admin_quantity, admin_unit_price, id, list_price_snapshot, note, product_id, product_name_snapshot, product_sku_snapshot, quantity, quote_id, sale_price_snapshot, snapshot_at) on dpg_app.quote_items to dpg_admin_api_test;
+grant update (admin_quantity, admin_unit_price) on dpg_app.quote_items to dpg_admin_api_test;
+-- quote_requests
+grant select (admin_notes, assigned_to, created_at, customer_id, email, id, message, name, phone, quote_number, shipping_fee, status, updated_at, vat_rate) on dpg_app.quote_requests to dpg_admin_api_test;
+grant update (admin_notes, assigned_to, customer_id, shipping_fee, status, updated_at, vat_rate) on dpg_app.quote_requests to dpg_admin_api_test;
 -- spec_definitions
 grant select (data_type, id, is_filterable, is_pdp_visible, is_reserved, key, label, normalize_rule, sort_order, unit) on dpg_app.spec_definitions to dpg_admin_api_test;
 grant insert (data_type, is_filterable, is_pdp_visible, is_reserved, key, label, normalize_rule, sort_order, unit) on dpg_app.spec_definitions to dpg_admin_api_test;
@@ -133,6 +145,10 @@ begin
     ('customers','select'),
     ('customers','insert'),
     ('customers','update'),
+    ('order_items','select'),
+    ('order_items','update'),
+    ('orders','select'),
+    ('orders','update'),
     ('partners','select'),
     ('partners','insert'),
     ('partners','update'),
@@ -147,6 +163,10 @@ begin
     ('projects','insert'),
     ('projects','update'),
     ('projects','delete'),
+    ('quote_items','select'),
+    ('quote_items','update'),
+    ('quote_requests','select'),
+    ('quote_requests','update'),
     ('spec_definitions','select'),
     ('spec_definitions','insert'),
     ('spec_definitions','update'),
