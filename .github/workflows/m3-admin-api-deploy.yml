@@ -49,7 +49,7 @@ jobs:
           grep -q 'verify_jwt = false' supabase/config.toml
       - uses: supabase/setup-cli@v1
         with:
-          version: 2.84.2
+          version: latest
       - name: Deploy function and set secrets (TEST project only)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_TEST_ACCESS_TOKEN }}
@@ -60,4 +60,13 @@ jobs:
           supabase functions deploy admin-api --project-ref "$TEST_PROJECT_REF" --no-verify-jwt --use-api
           supabase secrets set --project-ref "$TEST_PROJECT_REF" \
             "ADMIN_API_HMAC_SECRET=$HMAC" "ADMIN_API_ALLOWED_ORIGIN=$STAGING_ORIGIN" "ADMIN_API_MEDIA_HOSTS=$MEDIA_HOSTS"
-          supabase functions list --project-ref "$TEST_PROJECT_REF" | grep -E 'admin-api' || true
+          supabase functions list --project-ref "$TEST_PROJECT_REF" | tee /tmp/functions.txt
+          grep -q 'admin-api' /tmp/functions.txt
+      - name: Verify the deployed function rejects unsigned requests (expects 401, not 404)
+        run: |
+          set -euo pipefail
+          sleep 10
+          code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' "https://${TEST_PROJECT_REF}.supabase.co/functions/v1/admin-api/me")
+          echo "unsigned GET /me -> $code"; head -c 200 /tmp/body.txt; echo
+          test "$code" = "401"
+          grep -q 'INVALID_SIGNATURE' /tmp/body.txt
