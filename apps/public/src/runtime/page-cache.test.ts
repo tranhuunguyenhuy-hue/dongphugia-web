@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {classifyPagePath,entryFreshness,isStorablePage,pageCacheKey,planPageCache} from './page-cache'
+import {classifyPagePath,entryFreshness,hasRenderErrorMarker,isStorablePage,pageCacheKey,planPageCache,remainingTtlSeconds} from './page-cache'
 
 const SHA='a'.repeat(40)
 const req=(path:string,init:RequestInit={})=>new Request(`https://www.dongphugia.vn${path}`,init)
@@ -34,6 +34,10 @@ describe('page cache plan',()=>{
     expect(planPageCache(req('/thiet-bi-ve-sinh/bon-cau?brand=a&brand=b'))).toBeNull()
     expect(planPageCache(req('/thiet-bi-ve-sinh/bon-cau?brand=<script>'))).toBeNull()
     expect(planPageCache(req('/thiet-bi-ve-sinh/bon-cau?page='+'9'.repeat(80)))).toBeNull()
+    expect(planPageCache(req('/',{headers:{accept:'text/x-component'}}))).toBeNull()
+    expect(planPageCache(req('/',{headers:{accept:'application/json'}}))).toBeNull()
+    expect(planPageCache(req('/',{headers:{accept:'text/html,application/xhtml+xml'}}))).not.toBeNull()
+    expect(planPageCache(req('/',{headers:{accept:'*/*'}}))).not.toBeNull()
   })
   it('partitions the key by source, checkpoint and representation',()=>{
     const plan=planPageCache(req('/'))!
@@ -43,13 +47,24 @@ describe('page cache plan',()=>{
     expect(base).toContain('__dpg_repr=html')
     expect(()=>pageCacheKey(req('/'),plan,'bad',null)).toThrow()
   })
-  it('bounds freshness and stale-if-error',()=>{
+  it('bounds freshness: mutable HTML never stale, legal pages bounded stale-if-error',()=>{
     const now=1_000_000
     expect(entryFreshness(now-30_000,now,60)).toBe('fresh')
-    expect(entryFreshness(now-61_000,now,60)).toBe('stale-usable')
-    expect(entryFreshness(now-661_000,now,60)).toBe('expired')
+    expect(entryFreshness(now-61_000,now,60)).toBe('expired')
+    expect(entryFreshness(now-61_000,now,60,600)).toBe('stale-usable')
+    expect(entryFreshness(now-661_000,now,60,600)).toBe('expired')
+    for(const p of ['/','/thiet-bi-ve-sinh','/thiet-bi-ve-sinh/bon-cau','/thiet-bi-ve-sinh/bon-cau/x','/blog'])expect(planPageCache(req(p))!.staleSeconds).toBe(0)
+    expect(planPageCache(req('/lien-he'))!.staleSeconds).toBe(600)
+    expect(remainingTtlSeconds(now-45_000,now,60)).toBe(15)
+    expect(remainingTtlSeconds(now-90_000,now,60)).toBe(0)
     expect(entryFreshness(NaN,now,60)).toBe('expired')
     expect(entryFreshness(now+5_000,now,60)).toBe('expired')
+  })
+  it('detects render-error markers so failed renders are never cached',()=>{
+    expect(hasRenderErrorMarker('<script>self.__next_f.push([1,"3:E{\\"digest\\":\\"123\\"}"])</script>')).toBe(true)
+    expect(hasRenderErrorMarker('0:{}\n3:E{"digest":"1"}')).toBe(true)
+    expect(hasRenderErrorMarker('<h1>This page couldn’t load</h1>')).toBe(true)
+    expect(hasRenderErrorMarker('<h1>Bồn cầu TOTO</h1><p>digest of specs</p>')).toBe(false)
   })
   it('stores only 200 cookie-free HTML',()=>{
     const html=(status:number,headers:Record<string,string>={})=>new Response('x',{status,headers:{'content-type':'text/html',...headers}})
