@@ -393,7 +393,7 @@ export async function deleteBlogTag(id: number) {
 
 export async function incrementViewCount(postId: number) {
     await prisma.$executeRawUnsafe(
-        `UPDATE blog_posts SET view_count = view_count + 1 WHERE id = $1`,
+        `UPDATE dpg_app.blog_posts SET view_count = view_count + 1 WHERE id = $1`,
         postId
     )
 }

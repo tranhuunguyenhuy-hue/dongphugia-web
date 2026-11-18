@@ -119,7 +119,7 @@ export async function getRevenueChart(period: RevenuePeriod = 'month'): Promise<
       DATE_TRUNC('${truncUnit}', created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AS date,
       SUM(total) AS revenue,
       COUNT(*) AS order_count
-    FROM orders
+    FROM dpg_app.orders
     WHERE
       status = 'delivered'
       AND payment_status = 'paid'
@@ -227,9 +227,9 @@ export async function getTopProductsBySales(limit = 5) {
       oi.product_sku,
       SUM(oi.quantity) AS total_sold,
       p.image_main_url AS image_url
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    JOIN products p ON oi.product_id = p.id
+    FROM dpg_app.order_items oi
+    JOIN dpg_app.orders o ON oi.order_id = o.id
+    JOIN dpg_app.products p ON oi.product_id = p.id
     WHERE o.status = 'delivered'
     GROUP BY oi.product_id, oi.product_name, oi.product_sku, p.image_main_url
     ORDER BY total_sold DESC
@@ -270,8 +270,8 @@ export async function getTopProductsByQuotes(limit = 5) {
       p.sku,
       COUNT(qi.id) AS quote_count,
       p.image_main_url AS image_url
-    FROM quote_items qi
-    JOIN products p ON qi.product_id = p.id
+    FROM dpg_app.quote_items qi
+    JOIN dpg_app.products p ON qi.product_id = p.id
     GROUP BY qi.product_id, p.name, p.sku, p.image_main_url
     ORDER BY quote_count DESC
     LIMIT ${safeLimit}

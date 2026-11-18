@@ -17,3 +17,9 @@ export function usesPublicSnapshot() { return publicPostgresEnabled() || publicS
 export function usesStagingPublicSnapshot() {
  return process.env.APP_ENV === 'staging' && process.env.PUBLIC_CATALOGUE_SOURCE === 'snapshot' && publicSnapshotCheckpoint() !== null
 }
+
+// M3: the fixed Preview may read the isolated TEST database (and only that) instead of the pinned M2 snapshot.
+// Requires the same triple the Worker policy enforces: staging + postgresql source + explicit isolation flag.
+export function usesIsolatedStagingTestDatabase() {
+ return process.env.APP_ENV === 'staging' && publicPostgresEnabled() && process.env.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
+}

@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { publicPostgresEnabled, readPublicRows } from './public-db'
+import { usesIsolatedStagingTestDatabase } from './public-snapshot-mode'
 import {
   blogPosts as snapshotPosts,
   blogCategories as snapshotCategories,
@@ -57,7 +58,7 @@ function projectPublicBlogPost(post: PublicBlogPostRow, category: LegacyBlogCate
 }
 
 export const getPublicBlogPosts = cache(async (): Promise<readonly PublicLegacyBlogPost[]> => {
-  if (process.env.APP_ENV === 'staging') {
+  if (process.env.APP_ENV === 'staging' && !usesIsolatedStagingTestDatabase()) {
     const { readStagingSnapshotBlog } = await import('./public-snapshot-catalogue')
     const frozen = await readStagingSnapshotBlog()
     if (!Array.isArray(frozen.posts)) throw new Error('M2_STAGING_BLOG_REQUIRED')
@@ -89,7 +90,7 @@ export const PUBLIC_BLOG_CATEGORIES_SQL = `
   `
 
 export const getPublicBlogCategories = cache(async (): Promise<readonly LegacyBlogCategory[]> => {
-  if (process.env.APP_ENV === 'staging') {
+  if (process.env.APP_ENV === 'staging' && !usesIsolatedStagingTestDatabase()) {
     const { readStagingSnapshotBlog } = await import('./public-snapshot-catalogue')
     const frozen = await readStagingSnapshotBlog()
     if (!Array.isArray(frozen.categories)) throw new Error('M2_STAGING_BLOG_REQUIRED')

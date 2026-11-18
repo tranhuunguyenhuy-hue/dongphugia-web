@@ -43,3 +43,25 @@ it('keeps Production Blog behavior unchanged', () => {
   expect(response.status).toBe(200)
   expect(response.headers.get('X-Robots-Tag')).toBeNull()
 })
+
+it.each(['/blog', '/blog/huong-dan-chon/bai-viet'])('serves Blog from the isolated TEST database on M3 staging %s (noindex kept)', path => {
+  vi.stubEnv('APP_ENV', 'staging')
+  vi.stubEnv('APP_BUILD_TARGET', 'public')
+  vi.stubEnv('APP_ORIGIN', origin)
+  vi.stubEnv('PREVIEW_NOINDEX', 'true')
+  vi.stubEnv('PUBLIC_CATALOGUE_SOURCE', 'postgresql')
+  vi.stubEnv('PREVIEW_TEST_DATABASE_ISOLATED', 'true')
+  const response = proxy(new NextRequest(origin + path))
+  expect(response.status).toBe(200)
+  expect(response.headers.get('X-Robots-Tag')).toContain('noindex')
+})
+
+it('keeps blocking staging Blog when the database is not declared isolated', () => {
+  vi.stubEnv('APP_ENV', 'staging')
+  vi.stubEnv('APP_BUILD_TARGET', 'public')
+  vi.stubEnv('APP_ORIGIN', origin)
+  vi.stubEnv('PREVIEW_NOINDEX', 'true')
+  vi.stubEnv('PUBLIC_CATALOGUE_SOURCE', 'postgresql')
+  const response = proxy(new NextRequest(origin + '/blog'))
+  expect(response.status).toBe(503)
+})
