@@ -201,6 +201,8 @@ export default {
         ...sourceIdentityHeader,
         'Cache-Control': PRIVATE_CACHE_CONTROL,
         'X-DPG-Cache': 'BYPASS',
+        // Non-sensitive reason code so cache behaviour is observable without logs.
+        'X-DPG-Cache-Reason': !cacheEnabled ? 'disabled' : !plan ? 'not-eligible' : 'not-storable',
         ...robotHeaders,
       })
     }
