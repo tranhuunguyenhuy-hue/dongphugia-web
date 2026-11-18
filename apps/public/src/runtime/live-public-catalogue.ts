@@ -257,14 +257,15 @@ export async function getLiveSitemapProductCount():Promise<number>{
  const rows=await readPublicRows<{n:number|string}>('SELECT count(p.id) AS n'+FROM+' WHERE '+PUBLIC,[],'other')
  return Number(rows[0]?.n??0)
 }
-export async function getLiveSitemapProducts(shard:number):Promise<{path:string;lastmod:string|null}[]>{
+// The Production Public role has column-level SELECT without products.updated_at, so product
+// shards carry no <lastmod> (read only granted columns; never widen the role for a sitemap).
+export async function getLiveSitemapProducts(shard:number):Promise<{path:string}[]>{
  if(!Number.isSafeInteger(shard)||shard<1||shard>1000)return []
- const rows=await readPublicRows<{category_slug:string;listing_slug:string;slug:string;updated_at:Date|string|null}>(
-  'SELECT c.slug AS category_slug,s.slug AS listing_slug,p.slug,p.updated_at'+FROM+' WHERE '+PUBLIC+
+ const rows=await readPublicRows<{category_slug:string;listing_slug:string;slug:string}>(
+  'SELECT c.slug AS category_slug,s.slug AS listing_slug,p.slug'+FROM+' WHERE '+PUBLIC+
   ' ORDER BY p.id LIMIT '+SITEMAP_PRODUCTS_PER_SHARD+' OFFSET $1',[(shard-1)*SITEMAP_PRODUCTS_PER_SHARD],'other')
  return rows.filter(r=>[r.category_slug,r.listing_slug,r.slug].every(v=>SLUG.test(v))).map(r=>({
   path:'/'+r.category_slug+'/'+r.listing_slug+'/'+r.slug,
-  lastmod:r.updated_at?new Date(r.updated_at).toISOString():null,
  }))
 }
 export async function getLiveSitemapListings():Promise<{path:string}[]>{
