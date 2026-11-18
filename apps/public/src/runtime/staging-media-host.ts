@@ -9,7 +9,9 @@ const PRODUCTION_MEDIA_HOSTS = new Set([
 export function stagingMediaHostname(): string | null {
   const environment = process.env
   if (environment.APP_ENV !== 'staging' || environment.PREVIEW_MEDIA_TARGET_ISOLATED !== 'true') return null
-  const host = environment.PREVIEW_MEDIA_CDN_HOSTNAME?.trim().toLowerCase()
+  // The Worker only populates process.env from its real bindings, so on the M3 Preview the delivery host is
+  // the configured BUNNY_CDN_HOSTNAME variable; PREVIEW_MEDIA_CDN_HOSTNAME stays as an explicit override.
+  const host = (environment.PREVIEW_MEDIA_CDN_HOSTNAME ?? environment.BUNNY_CDN_HOSTNAME)?.trim().toLowerCase()
   if (!host || PRODUCTION_MEDIA_HOSTS.has(host) || !STAGING_CDN.test(host)) return null
   return host
 }

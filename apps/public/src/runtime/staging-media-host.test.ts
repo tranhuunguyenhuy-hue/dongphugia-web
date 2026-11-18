@@ -3,7 +3,7 @@ import { isStagingMediaHost, stagingMediaHostname } from './staging-media-host'
 
 const original = { ...process.env }
 function env(values: Record<string, string | undefined>) {
-  for (const key of ['APP_ENV', 'PREVIEW_MEDIA_TARGET_ISOLATED', 'PREVIEW_MEDIA_CDN_HOSTNAME']) delete process.env[key]
+  for (const key of ['APP_ENV', 'PREVIEW_MEDIA_TARGET_ISOLATED', 'PREVIEW_MEDIA_CDN_HOSTNAME', 'BUNNY_CDN_HOSTNAME']) delete process.env[key]
   Object.assign(process.env, values)
 }
 afterEach(() => { process.env = { ...original } })
@@ -29,5 +29,14 @@ describe('staging-only media delivery host', () => {
     env(values)
     expect(stagingMediaHostname()).toBeNull()
     expect(isStagingMediaHost('dpg-media-staging.b-cdn.net')).toBe(false)
+  })
+
+  it('uses the configured BUNNY_CDN_HOSTNAME variable the Worker actually exposes, still only when isolated staging', () => {
+    env({ APP_ENV: 'staging', PREVIEW_MEDIA_TARGET_ISOLATED: 'true', BUNNY_CDN_HOSTNAME: 'dpg-media-staging.b-cdn.net' })
+    expect(stagingMediaHostname()).toBe('dpg-media-staging.b-cdn.net')
+    env({ APP_ENV: 'production', PREVIEW_MEDIA_TARGET_ISOLATED: 'true', BUNNY_CDN_HOSTNAME: 'dpg-media-staging.b-cdn.net' })
+    expect(stagingMediaHostname()).toBeNull()
+    env({ APP_ENV: 'staging', PREVIEW_MEDIA_TARGET_ISOLATED: 'true', BUNNY_CDN_HOSTNAME: 'dpg-products.b-cdn.net' })
+    expect(stagingMediaHostname()).toBeNull()
   })
 })
