@@ -48,12 +48,13 @@ function Login({ onDone }: { onDone: (user: User) => void }) {
 
 function ProductList({ go }: { go: (to: string) => void }) {
   const [q, setQ] = useState(''); const [term, setTerm] = useState(''); const [page, setPage] = useState(1)
-  const [rows, setRows] = useState<ProductRow[]>([]); const [total, setTotal] = useState(0); const [error, setError] = useState(''); const [loading, setLoading] = useState(true)
+  const [rows, setRows] = useState<ProductRow[]>([]); const [total, setTotal] = useState(0); const [error, setError] = useState(''); const [loadedFor, setLoadedFor] = useState('')
+  const requestKey = `${term}|${page}`; const loading = loadedFor !== requestKey
   useEffect(() => { const t = setTimeout(() => { setTerm(q.trim()); setPage(1) }, 300); return () => clearTimeout(t) }, [q])
   useEffect(() => {
-    let live = true; setLoading(true)
-    api.products(term, page).then((r) => { if (live) { setRows(r.items); setTotal(r.total); setError(''); setLoading(false) } })
-      .catch((err) => { if (live) { setError(errorText(err)); setLoading(false) } })
+    let live = true
+    api.products(term, page).then((r) => { if (live) { setRows(r.items); setTotal(r.total); setError(''); setLoadedFor(`${term}|${page}`) } })
+      .catch((err) => { if (live) { setError(errorText(err)); setLoadedFor(`${term}|${page}`) } })
     return () => { live = false }
   }, [term, page])
   const pages = Math.max(1, Math.ceil(total / 20))
