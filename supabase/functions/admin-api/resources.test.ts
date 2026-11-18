@@ -64,7 +64,7 @@ describe('resource definitions', () => {
     // Price columns are writable only through the products resource (admin); identity columns are never updatable.
     expect(sql).not.toMatch(/grant update \([^)]*\b(sku|slug|created_at|id)\b[^)]*\) on dpg_app\.products /)
     // The only credential column the API may write is admin_users.password_hash (hashed server-side); never selected.
-    expect(sql.split('\n').filter((line) => /password_hash/.test(line)).every((line) => /^grant (insert|update) \(.*\) on dpg_app\.admin_users /.test(line))).toBe(true)
+    expect(sql.split('\n').filter((line) => /^grant .*password_hash/.test(line)).every((line) => /^grant (insert|update) \(.*\) on dpg_app\.admin_users /.test(line))).toBe(true)
     const writes = sql.split('\n').filter((line) => /^grant (insert|update) \(/.test(line))
     expect(writes.length).toBeGreaterThan(0)
     for (const line of writes) expect(line, line).not.toMatch(/\b(view_count|created_at|id)\b/)

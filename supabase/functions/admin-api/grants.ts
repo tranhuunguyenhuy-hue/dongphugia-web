@@ -89,11 +89,29 @@ export function generateAdminResourceMigration(resources: readonly ResourceDef[]
   const base = new Set(options.baseTables ?? [])
   const { role } = options
 
+  const pairs: string[] = []
+  const sequences: string[] = []
+  for (const table of names) {
+    const grant = tables.get(table)!
+    for (const column of new Set([...grant.select, ...grant.insert, ...grant.update])) pairs.push(`('${table}','${column}')`)
+    if (grant.sequence) sequences.push(`'${table}_id_seq'`)
+  }
   const forward: string[] = [
     `-- ${options.title}`,
     '-- GENERATED from supabase/functions/admin-api/resources.ts by scripts/m3/generate-admin-resource-grants.mts - do not edit by hand.',
-    '-- Forward migration, idempotent (grants and policies are re-created). Operator MUST verify the runner targets the intended project.',
+    '-- Forward migration, idempotent (grants and policies are re-created), ALL-OR-NOTHING (one transaction).',
+    '-- Operator MUST verify the runner targets the intended project.',
+    'begin;',
     '-- guard:begin', options.guard.trim(), '-- guard:end', '',
+    '-- Preflight: every table/column/sequence referenced below must exist, otherwise nothing is applied.',
+    'do $$ declare missing text; begin',
+    `  select string_agg(w.t || '.' || w.c, ', ' order by w.t, w.c) into missing from (values ${pairs.join(',')}) as w(t,c)`,
+    "   where not exists (select 1 from information_schema.columns i where i.table_schema = 'dpg_app' and i.table_name = w.t and i.column_name = w.c);",
+    "  if missing is not null then raise exception 'ADMIN_SCHEMA_PREFLIGHT_FAILED:columns:%', missing; end if;",
+    `  select string_agg(w.s, ', ') into missing from (values ${sequences.map((q) => `(${q})`).join(',') || "('')"}) as w(s)`,
+    "   where w.s <> '' and not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'dpg_app' and c.relkind = 'S' and c.relname = w.s);",
+    "  if missing is not null then raise exception 'ADMIN_SCHEMA_PREFLIGHT_FAILED:sequences:%', missing; end if;",
+    'end $$;', '',
     `grant usage on schema dpg_app to ${role};`,
   ]
   for (const table of names) {
@@ -115,7 +133,7 @@ export function generateAdminResourceMigration(resources: readonly ResourceDef[]
     `      execute format('create policy %I on dpg_app.%I for update to ${role} using (true) with check (true)', '${options.policyPrefix}'||spec.cmd, spec.tbl);`,
     '    else',
     `      execute format('create policy %I on dpg_app.%I for %s to ${role} using (true)', '${options.policyPrefix}'||spec.cmd, spec.tbl, spec.cmd);`,
-    '    end if;', '  end loop;', 'end $$;', '')
+    '    end if;', '  end loop;', 'end $$;', 'commit;', '')
 
   const rollback: string[] = [
     `-- Rollback of: ${options.title}`,

@@ -47,7 +47,8 @@ describe.skipIf(!integrationUrl || !loopback)('Production migrations (M4) on a P
     const r = await handleRequest(new Request(BASE + route, { method, body: text || undefined, headers: h }), { db: db(), hmacSecret: SECRET, allowedOrigin: ORIGIN, allowedMediaHosts: 'media.example.test', verifyPassword: bcrypt.compare, hashPassword: (p) => bcrypt.hash(p, 4) })
     return { status: r.status, json: await r.json() as any }
   }
-  const apply = async (file: string) => owner.query(await read(file))
+  // The migrations are explicit transactions: a refused run leaves the session inside an aborted one (the SQL editor starts a fresh session each run).
+  const apply = async (file: string) => { try { return await owner.query(await read(file)) } catch (error) { await owner.query('rollback').catch(() => undefined); throw error } }
   const migrate = async () => { await apply('supabase/m4-production/001_m4_production_admin_api_base.sql'); await apply('supabase/m4-production/002_m4_production_admin_resources.sql') }
 
   beforeAll(async () => {
@@ -86,6 +87,13 @@ describe.skipIf(!integrationUrl || !loopback)('Production migrations (M4) on a P
     await owner.query("create role dpg_public_m3_test nologin")
     await expect(apply('supabase/m4-production/001_m4_production_admin_api_base.sql')).rejects.toThrow(/test_roles_present/)
     await owner.query('drop role dpg_public_m3_test')
+  })
+
+  it('fails the schema preflight before changing anything when the database lacks a column', async () => {
+    await owner.query('alter table dpg_app.customers rename column notes to notes_missing')
+    await expect(apply('supabase/m4-production/002_m4_production_admin_resources.sql')).rejects.toThrow(/ADMIN_SCHEMA_PREFLIGHT_FAILED:columns:.*customers\.notes/)
+    await owner.query('alter table dpg_app.customers rename column notes_missing to notes')
+    expect((await owner.query("select 1 from pg_roles where rolname='dpg_admin_api'")).rows).toHaveLength(0) // nothing was applied
   })
 
   it('applies idempotently and the API works on the Production schema (products.version added, base-shape audit rows)', async () => {
