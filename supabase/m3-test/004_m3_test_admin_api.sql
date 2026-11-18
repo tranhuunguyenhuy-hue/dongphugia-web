@@ -1,9 +1,9 @@
 -- M3 TEST-only (project uybumsnyqpwcidjxmfsv). Least-privilege role + support tables for the new Admin
 -- Edge Function `admin-api` (Owner/TL directive G4, #360 comment 6977090843). Forward migration, idempotent.
 -- Operator MUST verify immediately before apply that the runner targets exactly ref uybumsnyqpwcidjxmfsv.
--- The login role is created NOLOGIN-equivalent without a usable password here; the deploy workflow sets a
--- generated password (never stored in git). Column-level grants mirror the Production Public pattern
--- (column privileges, RLS policies per role) so TEST behaves like Production for permission tests.
+-- The role has no password (it cannot authenticate by itself): the Edge Function connects with the platform
+-- credential and runs `SET LOCAL ROLE dpg_admin_api_test` in every request transaction. Column-level grants mirror
+-- the Production Public pattern (column privileges + RLS policies per role) so TEST behaves like Production.
 -- guard:begin
 do $$ begin
   if not exists (select 1 from dpg_control.target_contract
@@ -94,6 +94,18 @@ begin
       execute format('create policy %I on dpg_app.%I for update to dpg_admin_api_test using (true) with check (true)', 'm3_admin_api_'||spec.cmd, spec.tbl);
     else
       execute format('create policy %I on dpg_app.%I for %s to dpg_admin_api_test using (true)', 'm3_admin_api_'||spec.cmd, spec.tbl, spec.cmd);
+    end if;
+  end loop;
+end $$;
+
+-- Supabase API roles never get access to these tables.
+do $$
+declare r text;
+begin
+  foreach r in array array['anon','authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('revoke all on dpg_app.admin_api_login_attempts from %I', r);
+      execute format('revoke all on dpg_app.admin_api_nonces from %I', r);
     end if;
   end loop;
 end $$;
