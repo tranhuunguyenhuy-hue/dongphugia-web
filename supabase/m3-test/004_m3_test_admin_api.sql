@@ -27,6 +27,13 @@ do $$ begin
   end if;
 end $$;
 alter role dpg_admin_api_test set statement_timeout='10s';
+-- The Edge Function connects with the platform-provided credential and switches to this role per transaction
+-- (SET LOCAL ROLE), so no extra database password has to be provisioned. Membership is required for that.
+do $$ begin
+  if exists (select 1 from pg_roles where rolname='postgres') then
+    execute 'grant dpg_admin_api_test to postgres';
+  end if;
+end $$;
 alter role dpg_admin_api_test set search_path='dpg_app';
 
 -- Support tables (owned by the migration role; only the API role may touch them besides the owner).

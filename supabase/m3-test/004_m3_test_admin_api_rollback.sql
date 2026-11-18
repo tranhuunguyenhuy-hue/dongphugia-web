@@ -23,6 +23,7 @@ drop table if exists dpg_app.admin_api_nonces;
 drop table if exists dpg_app.admin_api_login_attempts;
 do $$ begin
   if exists (select 1 from pg_roles where rolname='dpg_admin_api_test') then
+    if exists (select 1 from pg_roles where rolname='postgres') then execute 'revoke dpg_admin_api_test from postgres'; end if;
     execute 'reassign owned by dpg_admin_api_test to dpg_migration';
     execute 'drop owned by dpg_admin_api_test';
     execute 'drop role dpg_admin_api_test';

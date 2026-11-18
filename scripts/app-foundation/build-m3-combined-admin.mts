@@ -198,6 +198,18 @@ async function main() {
   }
   await copyClientTree(adminAssetsToCopy, combinedAdminAssets)
 
+  // Static Admin shell (M3 G4 pilot): built with the same Vite, served by the assets binding under /admin-next/.
+  const adminSpaRoot = path.join(repositoryRoot, 'apps/admin-spa')
+  const combinedAdminNextAssets = path.join(assetsRoot, 'admin-next')
+  if (await stat(combinedAdminNextAssets).then((entry) => entry.isDirectory()).catch(() => false)) {
+    throw new Error('COMBINED_ADMIN_NEXT_ASSET_PATH_COLLISION')
+  }
+  await run(process.execPath, [path.join(repositoryRoot, 'apps/public/node_modules/vite/bin/vite.js'), 'build'], adminSpaRoot, buildEnvironment)
+  await copyClientTree(path.join(adminSpaRoot, 'dist'), combinedAdminNextAssets)
+  if (!(await stat(path.join(combinedAdminNextAssets, 'index.html')).then((entry) => entry.isFile()).catch(() => false))) {
+    throw new Error('COMBINED_ADMIN_NEXT_INDEX_REQUIRED')
+  }
+
   const adminRscNamespace = await namespaceAdminViteRscGlobals([adminServer, combinedAdminAssets])
   if (adminRscNamespace.namespace !== 'dpg-rsc0') throw new Error('COMBINED_ADMIN_RSC_NAMESPACE_INVALID')
 
@@ -207,7 +219,16 @@ async function main() {
     || !sourceEntrypoint.includes(ENTRYPOINT_IMPORT) || !sourceEntrypoint.includes(ENTRYPOINT_DEFAULT)) {
     throw new Error('COMBINED_ADMIN_WORKER_TEMPLATE_INVALID')
   }
-  const dispatchSource = await readFile(path.join(repositoryRoot, 'apps/public/m3-combined-dispatch.mjs'), 'utf8')
+  // Gateway + signing envelope are concatenated (the builder does not bundle); their cross-file imports carry the
+  // `inline-import` marker and are removed because the modules are inlined right before the dispatch source.
+  const INLINE_IMPORT = /^import .*\/\/ inline-import\r?\n/gm
+  const [envelopeSource, gatewaySource, rawDispatchSource] = await Promise.all([
+    readFile(path.join(repositoryRoot, 'supabase/functions/admin-api/envelope.mjs'), 'utf8'),
+    readFile(path.join(repositoryRoot, 'apps/public/m3-admin-gateway.mjs'), 'utf8'),
+    readFile(path.join(repositoryRoot, 'apps/public/m3-combined-dispatch.mjs'), 'utf8'),
+  ])
+  const dispatchSource = [envelopeSource, gatewaySource, rawDispatchSource].map((source) => source.replace(INLINE_IMPORT, '').trim()).join('\n\n')
+  if (/from '\.\.?\/[^']*(?:gateway|envelope)[^']*'/.test(dispatchSource)) throw new Error('COMBINED_ADMIN_WORKER_INLINE_IMPORT_LEFT')
   const workerSource = sourceEntrypoint
     .replace(ENTRYPOINT_IMPORT, '')
     .replace(ENTRYPOINT_DEFAULT, '')

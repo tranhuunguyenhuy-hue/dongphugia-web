@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { handleAdminNext, isAdminNextPath } from './m3-admin-gateway.mjs' // inline-import
 
 // The Admin handler assigns process.env.APP_ENV='preview', APP_BUILD_TARGET='admin', ... per request. In the combined
 // Worker those writes land in the isolate-global process.env and made later Public requests in the same isolate fail
@@ -176,6 +177,8 @@ export function createCombinedM3Worker({ publicWorker, adminWorker }) {
       if (!environment.ASSETS || typeof environment.ASSETS.fetch !== 'function') {
         return fail(503, 'Worker assets binding is unavailable.', sourceSha)
       }
+
+      if (isAdminNextPath(pathname)) return handleAdminNext(request, environment, { sourceSha, stagingOrigin: STAGING_ORIGIN })
 
       if ((request.method === 'GET' || request.method === 'HEAD')
         && isStaticAssetPath(pathname)

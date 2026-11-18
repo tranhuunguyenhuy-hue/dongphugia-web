@@ -191,10 +191,15 @@ async function main() {
   await assertNoProductionRelease()
   await ensureProductionUnchanged()
   const revalidate = randomBytes(32).toString('hex')
-  maskedValues.push(revalidate, process.env.M3_PREVIEW_BUNNY_STORAGE_API_KEY)
+  // Shared with the TEST admin-api Edge Function. If the Owner has not provisioned it yet, publish with a random value:
+  // the gateway then fails closed (the function rejects the signature) instead of blocking every staging release.
+  const adminApiHmac = process.env.M3_ADMIN_API_HMAC_SECRET?.trim() || randomBytes(32).toString('hex')
+  if (!process.env.M3_ADMIN_API_HMAC_SECRET?.trim()) console.log('M3_ADMIN_API_HMAC_SECRET not provisioned: Admin shell API will be rejected by admin-api')
+  maskedValues.push(revalidate, process.env.M3_PREVIEW_BUNNY_STORAGE_API_KEY, adminApiHmac)
+  console.log(`::add-mask::${adminApiHmac}`)
   console.log(`::add-mask::${revalidate}`)
   secretsFile = resolve(process.env.RUNNER_TEMP, 'm3-preview-secrets.json')
-  await writeFile(secretsFile, JSON.stringify({ ADMIN_PREVIEW_MEDIA_KEY: process.env.M3_PREVIEW_BUNNY_STORAGE_API_KEY, REVALIDATE_SECRET: revalidate }), { mode: 0o600, flag: 'wx' })
+  await writeFile(secretsFile, JSON.stringify({ ADMIN_PREVIEW_MEDIA_KEY: process.env.M3_PREVIEW_BUNNY_STORAGE_API_KEY, REVALIDATE_SECRET: revalidate, ADMIN_API_HMAC_SECRET: adminApiHmac }), { mode: 0o600, flag: 'wx' })
   const wrangler = resolve('tools/m2-preview/node_modules/wrangler/bin/wrangler.js')
   const cliOutput = resolve(process.env.RUNNER_TEMP, 'm3-wrangler-output.jsonl')
   await run(process.execPath, [wrangler, 'preview', '--worker-name', FIXED_PREVIEW_WORKER, '--name', FIXED_PREVIEW_NAME,
@@ -215,7 +220,7 @@ async function main() {
   const deployedEnv = deployment.env || Object.fromEntries((deployment.bindings || []).map(binding => [binding.name, binding]))
   const expectedVars = config.previews.vars
   assert.equal(deployedEnv.ASSETS?.type, 'assets', 'M3_ASSETS_BINDING_REQUIRED')
-  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'IMAGES', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
+  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'ADMIN_API_HMAC_SECRET', 'IMAGES', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
   assert.equal(deployedEnv.IMAGES?.type, 'images', 'M3_IMAGES_BINDING_REQUIRED')
   assert.equal(deployedEnv.PUBLIC_DB?.type, 'hyperdrive'); assert.equal(deployedEnv.HYPERDRIVE_ADMIN_NO_CACHE?.type, 'hyperdrive')
   for (const [name, value] of Object.entries(expectedVars)) { assert.equal(deployedEnv[name]?.type, 'plain_text'); assert.equal(deployedEnv[name]?.text, value) }
