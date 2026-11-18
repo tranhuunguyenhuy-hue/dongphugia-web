@@ -4,6 +4,7 @@ import { Pool } from 'pg'
 import { requireWritesAllowed } from '../../src/lib/write-freeze'
 import { withRequestPrismaContext, type ProtectedPrismaClient } from '../../src/lib/prisma'
 import { withAdminRuntimeEnvironment, type AdminRuntimeEnvironment } from '../../src/lib/admin-runtime-environment'
+import { releasePrismaWasmEngine } from './release-prisma-wasm-engine'
 
 interface AdminWorkerEnvironment {
   APP_ENV: 'preview'
@@ -104,8 +105,16 @@ function createRequestPrisma(connectionString: string): {
     pool,
     close() {
       closePromise ??= (async () => {
-        await guarded.$disconnect()
-        await pool.end()
+        try {
+          await guarded.$disconnect()
+        } finally {
+          try {
+            await pool.end()
+          } finally {
+            // See release-prisma-wasm-engine.ts: required to stop per-request WASM memory growth.
+            releasePrismaWasmEngine(client)
+          }
+        }
       })()
       return closePromise
     },

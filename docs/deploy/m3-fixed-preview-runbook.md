@@ -25,3 +25,10 @@ Scope: combined Public+Admin Worker into **only** named Preview `staging` of `do
 
 ## Preview secret names (publish failure 16:36 UTC, CF code 10021)
 Run 44126781492 failed at upload validation: the combined Worker's `process.env` is populated from every Preview binding and the shared Public guard rejects `BUNNY_STORAGE_API_KEY` at module init (`PUBLIC_PRIVILEGED_ENV_FORBIDDEN`). The Preview secret is therefore bound as `ADMIN_PREVIEW_MEDIA_KEY` (mapped to `BUNNY_STORAGE_API_KEY` only inside the Admin request environment); the Public guard is unchanged. The GitHub Environment secret name stays `M3_PREVIEW_BUNNY_STORAGE_API_KEY`.
+
+## TEST capacity provenance (verified 2026-11-18, read-only)
+- Roles: `dpg_admin_m3_test` and `dpg_public_m3_test` `CONNECTION LIMIT 25` each (001 created them at 10; raised on 2026-11-17 after Preview 1102/503 with exhausted slots; recorded in `supabase/m3-test/003_*`, rollback to 10). TEST `max_connections` is 60.
+- Hyperdrive (caching disabled): `dpg-m3-test-admin` `9f81135c…` and `dpg-m3-test-public-readonly` `948e4215…`, `origin_connection_limit` 12 each. The Production configuration `dpg-v1-public-production-readonly` (`905f5791…`, limit 5) is untouched and never referenced by M3.
+
+## Admin Worker memory (issue #360)
+`@prisma/client@5.22.0` wasm: `$disconnect()` does not free the per-client `QueryEngine`; wasm-bindgen only frees it via `FinalizationRegistry`, which V8 does not trigger on WebAssembly memory pressure. A client per request therefore leaked one parsed-schema engine per request (≈1.2 MB/request measured in local workerd) until the isolate hit its memory limit (Cloudflare `exceededResources`/1102). `apps/admin-worker/release-prisma-wasm-engine.ts` frees the engine after `$disconnect()` and `pool.end()`. Re-validate this helper whenever `@prisma/client` is upgraded.
