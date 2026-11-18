@@ -17,6 +17,7 @@ import { ImageUploader } from '@/components/ui/image-uploader'
 import { RichTextEditor } from '@/components/ui/rich-text-editor'
 import { ProductGallery } from './product-gallery'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { productActionFailureMessage, type ProductActionResult } from '@/lib/product-action-result'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/components/ui/form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
@@ -341,11 +342,9 @@ export function ProductForm({ pageTitle, pageSubtitle, product, categories, subc
                 ? await updateProduct(product.id, payload)
                 : await createProduct(payload)
 
-            if (result?.errors) {
-                const firstError = Object.values(result.errors).flat()[0]
-                toast.error(String(firstError) || 'Vui lòng kiểm tra lại dữ liệu')
-            } else if (result?.message) {
-                toast.error(result.message)
+            const failureMessage = productActionFailureMessage(result as ProductActionResult)
+            if (failureMessage) {
+                toast.error(failureMessage)
             } else {
                 toast.success(isEdit ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới')
                 router.push('/admin/products')
