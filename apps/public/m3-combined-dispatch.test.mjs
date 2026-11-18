@@ -75,7 +75,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   }), environment, context)
   const publicResponse = await worker.fetch(new Request(`${STAGING_ORIGIN}/`, {
     headers: {
-      cookie: 'dpg-admin-session=private-token; theme=light',
+      cookie: 'dpg-admin-session=private-token; CF_Authorization=access-jwt; theme=light',
       authorization: 'Bearer public-request-token',
     },
   }), environment, context)
