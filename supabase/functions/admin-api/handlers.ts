@@ -1,7 +1,7 @@
 import { getPermissions, type AdminRole, type Permission } from './permissions.ts'
 import { ApiError, requirePermission as requirePerm, type Context, type Db, type Session } from './core.ts'
 import * as commerce from './commerce-handlers.ts'
-import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
+import { audit, createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
 import { listQuerySchema, loginSchema, parseAllowedMediaHosts, productPatchSchema, VISIBILITY_FIELDS } from './validation.ts'
 
@@ -140,10 +140,7 @@ async function patchProduct(deps: Deps, ctx: Context, id: number, body: string) 
       [id, ...fields.map((field) => input[field] ?? null)]))[0]
     const oldValue: Record<string, unknown> = {}, newValue: Record<string, unknown> = {}
     for (const field of fields) { oldValue[field] = before[field]; newValue[field] = after[field] }
-    await tx.query(
-      `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address, request_id, changed_fields)
-       values ($1, 'product.update', 'product', $2, $3::jsonb, $4::jsonb, $5, $6::uuid, $7)`,
-      [ctx.session!.userId, id, JSON.stringify(oldValue), JSON.stringify(newValue), ctx.ip.slice(0, 64) || null, ctx.request_id, fields])
+    await audit(tx, ctx, 'product', 'update', id, oldValue, newValue, fields as string[])
     return after
   })
   return { status: 200, body: { data: changed } }

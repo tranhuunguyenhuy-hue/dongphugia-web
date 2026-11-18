@@ -83,7 +83,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       create schema dpg_app;
       create table dpg_app.admin_users (id serial primary key, email varchar not null, name varchar not null, password_hash varchar not null, role varchar, is_active boolean default true, avatar_url varchar, last_login_at timestamptz, created_at timestamptz default now(), updated_at timestamptz, username varchar, supabase_auth_user_id uuid);
       create table dpg_app.admin_sessions (id serial primary key, user_id int not null references dpg_app.admin_users(id), token_hash varchar not null, ip_address varchar, user_agent text, expires_at timestamptz not null, created_at timestamptz default now());
-      create table dpg_app.audit_logs (id serial primary key, user_id int, action varchar not null, entity_type varchar not null, entity_id int, old_value jsonb, new_value jsonb, ip_address varchar, created_at timestamptz default now(), auth_user_id uuid, auth_session_id uuid, request_id uuid, idempotency_key_hash char(64), changed_fields text[]);
+      create table dpg_app.audit_logs (id serial primary key, user_id int, action varchar not null, entity_type varchar not null, entity_id int, old_value jsonb, new_value jsonb, ip_address varchar, created_at timestamptz default now());
       create table dpg_app.categories (id serial primary key, name varchar not null, slug varchar not null, is_active boolean default true);
       create table dpg_app.subcategories (id serial primary key, category_id int not null, name varchar not null, slug varchar not null, is_active boolean default true);
       create table dpg_app.brands (id serial primary key, name varchar not null, slug varchar not null, is_active boolean default true);
@@ -210,8 +210,8 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
     const ok = await call('PATCH', '/products/2', { expected_version: version, input: { name: 'Renamed 2', is_featured: true, seo_title: 'Tiêu đề' } }, { token: t })
     expect(ok.status).toBe(200); expect(ok.json.data).toMatchObject({ name: 'Renamed 2', is_featured: true, version: version + 1 })
     expect((await call('PATCH', '/products/2', { expected_version: version, input: { name: 'Stale' } }, { token: t })).json.error.code).toBe('VERSION_CONFLICT')
-    const audit = (await owner.query("select action, entity_id, changed_fields, old_value, new_value, user_id from dpg_app.audit_logs where entity_id=2 order by id desc limit 1")).rows[0]
-    expect(audit).toMatchObject({ action: 'product.update', entity_id: 2 }); expect(audit.changed_fields).toEqual(['name', 'is_featured', 'seo_title']); expect(audit.old_value.name).toBe('Product 2')
+    const audit = (await owner.query("select action, entity_id, old_value, new_value, user_id from dpg_app.audit_logs where entity_id=2 order by id desc limit 1")).rows[0]
+    expect(audit).toMatchObject({ action: 'product.update', entity_id: 2 }); expect(audit.new_value._meta.changed_fields).toEqual(['name', 'is_featured', 'seo_title']); expect(audit.new_value._meta.request_id).toMatch(/^[0-9a-f-]{36}$/); expect(audit.old_value.name).toBe('Product 2')
     const invalid = [{ input: {} }, { input: { sku: 'X' } }, { input: { price: 1 } }, { input: { name: '' } }, { input: { publication_status: 'archived' } }, { input: { image_main_url: 'http://media.example.test/a.jpg' } }, { input: { image_main_url: 'https://evil.example/a.jpg' } }, { extra: 1, input: { name: 'x' } }]
     for (const body of invalid) expect((await call('PATCH', '/products/2', body, { token: t })).json.error.code).toBe('VALIDATION_FAILED')
     expect((await call('PATCH', '/products/2', { input: { image_main_url: 'https://media.example.test/a/b.jpg' } }, { token: t })).status).toBe(200)
@@ -485,9 +485,9 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       // the API can never read or change hashes outside the password flow, nor delete accounts
       await expect(apiPool.query('delete from dpg_app.admin_users'), 'delete users').rejects.toThrow(/permission denied/)
       await expect(apiPool.query("update dpg_app.admin_users set avatar_url='x'"), 'avatar').rejects.toThrow(/permission denied/)
-      const audit = (await owner.query("select new_value, changed_fields from dpg_app.audit_logs where entity_type='users' and entity_id=$1 order by id", [created.json.data.id])).rows
+      const audit = (await owner.query("select new_value from dpg_app.audit_logs where entity_type='users' and entity_id=$1 order by id", [created.json.data.id])).rows
       expect(JSON.stringify(audit)).not.toMatch(/\$2[aby]\$|password-123|another-pass/)
-      expect(audit[1].changed_fields).toContain('password_hash')
+      expect(audit[1].new_value._meta.changed_fields).toContain('password_hash')
     })
 
     describe('orders, quotes and dashboard', () => {
@@ -652,7 +652,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         // identity and untouched columns stay as they were
         expect((await owner.query('select sku, slug from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ sku: 'NEW-1', slug: 'bon-cau-moi' })
         expect((await call('GET', '/r/products?q=bon-cau-moi&category_id=1&is_active=false', undefined, { token: t })).json.data.total).toBe(1)
-        const audit = (await owner.query("select action, changed_fields from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows
+        const audit = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows
         expect(audit.map((a) => a.action)).toEqual(['products.create', 'products.update', 'products.update'])
         expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: sale }))).toBe('FORBIDDEN')
         expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: t }))).toBe('VALIDATION_FAILED') // version required

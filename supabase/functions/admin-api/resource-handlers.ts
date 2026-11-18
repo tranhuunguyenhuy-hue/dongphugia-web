@@ -122,11 +122,14 @@ function requireFieldPermissions(ctx: Context, def: ResourceDef, input: Row) {
   for (const field of writableFields(def)) if (field.permission && field.name in input) requirePermission(ctx, field.permission)
 }
 
+/** Audit row in the portable base shape (user, action, entity, old/new values, ip): Production's audit_logs has no
+ * request_id/changed_fields columns, so that metadata travels inside new_value._meta. */
 export async function audit(tx: Db, ctx: Context, entity: string, action: string, id: number, oldValue: Row | null, newValue: Row | null, changed: string[]) {
   await tx.query(
-    `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address, request_id, changed_fields)
-     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8::uuid, $9)`,
-    [ctx.session!.userId, `${entity}.${action}`, entity, id, oldValue ? JSON.stringify(oldValue) : null, newValue ? JSON.stringify(newValue) : null, ctx.ip.slice(0, 64) || null, ctx.request_id, changed])
+    `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
+     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)`,
+    [ctx.session!.userId, `${entity}.${action}`, entity, id, oldValue ? JSON.stringify(oldValue) : null,
+      JSON.stringify({ ...(newValue ?? {}), _meta: { request_id: ctx.request_id, changed_fields: changed } }), ctx.ip.slice(0, 64) || null])
 }
 export const pick = (row: Row | null | undefined, keys: string[]): Row => Object.fromEntries(keys.filter((key) => row && key in row).map((key) => [key, row![key]]))
 

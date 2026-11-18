@@ -11,7 +11,7 @@
 import {isTrackingQueryKey} from './listing-query'
 
 export type PageCacheClass='home'|'category'|'listing'|'product'|'blog'|'static'
-export const PAGE_CACHE_TTL_SECONDS=60
+export const PAGE_CACHE_TTL_SECONDS=45
 export const STATIC_PAGE_CACHE_TTL_SECONDS=3600
 export const PAGE_CACHE_STALE_IF_ERROR_SECONDS=600
 /** Mutable catalogue/blog/home HTML is never served past its TTL (hidden/deleted content must not linger). */
