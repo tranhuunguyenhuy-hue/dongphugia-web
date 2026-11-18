@@ -1,5 +1,5 @@
 import { getAdminOrders, getOrderStats } from '@/lib/order-actions'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ShoppingBag, Clock, Truck, CheckCircle, TrendingUp } from 'lucide-react'

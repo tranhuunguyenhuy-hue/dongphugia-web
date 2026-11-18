@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { Package2, CheckSquare, Square, Trash2, Eye, EyeOff, Star, StarOff, Loader2, GripVertical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

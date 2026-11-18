@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { redirect } from 'next/navigation'
 import { ArrowUpRight, ClipboardList, Package2, ShoppingCart, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

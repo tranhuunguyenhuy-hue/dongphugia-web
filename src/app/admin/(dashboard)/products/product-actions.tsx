@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { useState } from 'react'
 import { Pencil, Trash2, Star, Eye, EyeOff, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'

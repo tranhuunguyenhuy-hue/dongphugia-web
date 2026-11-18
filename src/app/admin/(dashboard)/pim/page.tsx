@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { PageHeader } from '@/components/admin/page-header'
 

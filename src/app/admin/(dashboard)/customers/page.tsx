@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { Plus, Search } from 'lucide-react'
 import prisma from '@/lib/prisma'
 import { Button } from '@/components/ui/button'
