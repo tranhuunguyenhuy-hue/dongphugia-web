@@ -7,11 +7,13 @@
 // by the platform and is only used to connect; the role switch is enforced by the server for the whole session.
 import postgres from 'postgres'
 import bcrypt from 'bcryptjs'
-import { handleRequest, type Db } from './handlers.ts'
+import { BCRYPT_ROUNDS, handleRequest, type Db } from './handlers.ts'
 
 const dedicatedUrl = Deno.env.get('ADMIN_API_DB_URL')
 const databaseUrl = dedicatedUrl ?? Deno.env.get('SUPABASE_DB_URL')
-const API_ROLE = 'dpg_admin_api_test'
+// TEST uses dpg_admin_api_test (default); Production sets ADMIN_API_DB_ROLE=dpg_admin_api. Only these two names are accepted.
+const configuredRole = Deno.env.get('ADMIN_API_DB_ROLE') ?? 'dpg_admin_api_test'
+const API_ROLE = configuredRole === 'dpg_admin_api' || configuredRole === 'dpg_admin_api_test' ? configuredRole : (() => { throw new Error('ADMIN_API_DB_ROLE_INVALID') })()
 const sql = databaseUrl
   ? postgres(databaseUrl, {
     // Two connections let concurrent requests in one isolate overlap instead of queueing behind a single socket.
@@ -38,6 +40,7 @@ Deno.serve((request) => {
     allowedOrigin: Deno.env.get('ADMIN_API_ALLOWED_ORIGIN') ?? '',
     allowedMediaHosts: Deno.env.get('ADMIN_API_MEDIA_HOSTS') ?? '',
     verifyPassword: (plain, hash) => bcrypt.compare(plain, hash),
+    hashPassword: (plain) => bcrypt.hash(plain, BCRYPT_ROUNDS),
   }).catch((error: unknown) => {
     console.error(JSON.stringify({ event: 'ADMIN_API_FAILURE', name: error instanceof Error ? error.name : 'unknown', sqlstate: (error as { code?: unknown })?.code ?? null }))
     return new Response(JSON.stringify({ error: { code: 'INTERNAL' } }), { status: 500, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })

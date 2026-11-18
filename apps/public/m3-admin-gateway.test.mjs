@@ -44,17 +44,36 @@ describe('Admin shell gateway', () => {
     expect((await handleAdminNext(new Request(ORIGIN + '/admin-next/products', { method: 'POST' }), env, ctx)).status).toBe(405)
   })
 
+  it('allows only well-formed generic resource routes and signs them like any other request', async () => {
+    stubUpstream(json({ data: { items: [] } }))
+    const env = environment()
+    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/partners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/payment'], ['GET', '/quotes/9'], ['PATCH', '/quotes/9/assign'], ['POST', '/quotes/9/complete'], ['POST', '/products/bulk'], ['GET', '/products/5/variants'], ['POST', '/products/5/variants'], ['DELETE', '/products/5/variants/7']]) {
+      const init = method === 'GET' ? {} : { method, body: '{}' }
+      expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(200)
+    }
+    expect(calls).toHaveLength(20)
+    const { url, init } = calls[6]
+    expect(url).toBe(`${FN}/r/partners/3`)
+    expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
+    calls.length = 0
+    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['DELETE', '/orders/1'], ['POST', '/orders/1/status'], ['PATCH', '/orders/1/complete'], ['PATCH', '/quotes/1/payment'], ['GET', '/orders/1/status'], ['POST', '/quotes'], ['PATCH', '/products/bulk'], ['GET', '/products/bulk'], ['PATCH', '/products/5/variants'], ['DELETE', '/products/5/variants'], ['POST', '/products/5/variants/7']]) {
+      const init = method === 'GET' ? {} : { method, body: '{}' }
+      expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(404)
+    }
+    expect(calls).toHaveLength(0)
+  })
+
   it('rejects unknown routes/methods and cross-site mutations before contacting the function', async () => {
     stubUpstream(json({ data: {} }))
     const env = environment()
-    expect((await handleAdminNext(browser('/admin-next/api/orders'), env, ctx)).status).toBe(404)
+    expect((await handleAdminNext(browser('/admin-next/api/customers-export'), env, ctx)).status).toBe(404)
     expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'DELETE' }), env, ctx)).status).toBe(404)
     for (const headers of [{ origin: 'https://evil.example' }, { 'sec-fetch-site': 'cross-site' }, { origin: '' }]) {
       const r = await handleAdminNext(browser('/admin-next/api/logout', { method: 'POST', body: '{}', headers }), env, ctx)
       expect(r.status).toBe(403); expect((await r.json()).error.code).toBe('ORIGIN_NOT_ALLOWED')
     }
     expect((await handleAdminNext(browser('/admin-next/api/logout', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } }), env, ctx)).status).toBe(415)
-    expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'PATCH', body: 'x'.repeat(200_001) }), env, ctx)).status).toBe(413)
+    expect((await handleAdminNext(browser('/admin-next/api/r/products/1', { method: 'PATCH', body: 'x'.repeat(600_001) }), env, ctx)).status).toBe(413)
     expect(calls).toHaveLength(0)
   })
 
@@ -71,15 +90,15 @@ describe('Admin shell gateway', () => {
   it('signs every forwarded request so the function can verify route, body, ip, origin and session', async () => {
     stubUpstream(json({ data: { ok: true } }))
     const body = JSON.stringify({ expected_version: 1, input: { name: 'A' } })
-    const response = await handleAdminNext(browser('/admin-next/api/products/7?x=1&q=%27', { method: 'PATCH', body, headers: { cookie: `dpg-admin-session=${TOKEN}; other=1` } }), environment(), ctx)
+    const response = await handleAdminNext(browser('/admin-next/api/r/products/7?x=1&q=%27', { method: 'PATCH', body, headers: { cookie: `dpg-admin-session=${TOKEN}; other=1` } }), environment(), ctx)
     expect(response.status).toBe(200)
     const { url, init } = calls[0]
-    expect(url).toBe(`${FN}/products/7?x=1&q=%27`)
+    expect(url).toBe(`${FN}/r/products/7?x=1&q=%27`)
     const verified = await verifyEnvelope(SECRET, { method: 'PATCH', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })
     expect(verified).toMatchObject({ ok: true, clientIp: '203.0.113.7', origin: ORIGIN, sessionToken: TOKEN })
     expect(new Headers(init.headers).get('x-region')).toBe('ap-southeast-1')
     // a GET carries no origin marker and no body
-    await handleAdminNext(browser('/admin-next/api/products?limit=5'), environment(), ctx)
+    await handleAdminNext(browser('/admin-next/api/r/products?limit=5'), environment(), ctx)
     const get = calls[1]; const headers = new Headers(get.init.headers)
     expect(headers.get('x-dpg-origin')).toBe(''); expect(get.init.body).toBeUndefined()
     expect(headers.get('x-dpg-session')).toBeNull()

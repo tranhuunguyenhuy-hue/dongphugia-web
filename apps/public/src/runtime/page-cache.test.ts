@@ -1,8 +1,15 @@
 import {describe,expect,it} from 'vitest'
-import {classifyPagePath,entryFreshness,hasRenderErrorMarker,isStorablePage,pageCacheKey,planPageCache,remainingTtlSeconds} from './page-cache'
+import {PAGE_CACHE_TTL_SECONDS,classifyPagePath,entryFreshness,hasRenderErrorMarker,isStorablePage,pageCacheKey,planPageCache,remainingTtlSeconds} from './page-cache'
 
 const SHA='a'.repeat(40)
 const req=(path:string,init:RequestInit={})=>new Request(`https://www.dongphugia.vn${path}`,init)
+
+describe('Admin -> Public freshness budget',()=>{
+  it('keeps the mutable-HTML TTL short enough for the 60 s freshness target (TTL + Admin poll interval)',()=>{
+    expect(PAGE_CACHE_TTL_SECONDS).toBeLessThanOrEqual(45)
+    expect(planPageCache(req('/blog'))!.ttlSeconds).toBe(PAGE_CACHE_TTL_SECONDS)
+  })
+})
 
 describe('page cache plan',()=>{
   it('classifies only known public HTML routes',()=>{

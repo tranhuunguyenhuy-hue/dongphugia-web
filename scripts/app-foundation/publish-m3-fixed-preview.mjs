@@ -31,6 +31,16 @@ async function cf(path, method = 'GET', body) {
   }
   return value.result
 }
+// Cloudflare reads right after a publish can briefly 404 (code 10071: the preview/deployment record is not visible yet).
+// Retry only that exact condition for a bounded time; every other failure still fails immediately.
+async function cfEventually(path, attempts = 10, delayMs = 6000) {
+  for (let attempt = 1; ; attempt += 1) {
+    try { return await cf(path) } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'M3_CF_API_404_10071' || attempt >= attempts) throw error
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+}
 async function gh(path) {
   const response = await fetch(`https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/${path}`, {
     headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' },
@@ -100,12 +110,16 @@ async function cleanup() {
 async function accessFetch(path, token, init = {}) {
   // A freshly published Preview can answer 503 while the first isolated-database connection warms; retry
   // (bounded) and still assert the final status, so a permanent failure is never masked.
+  // A just-created Access policy needs a short time to propagate: until then the request is answered by the Access login
+  // (redirect to *.cloudflareaccess.com or 403). Those are retried for a bounded time too; the Worker's own responses
+  // (e.g. the 307 to /admin/login) are never retried.
+  const accessChallenge = (r) => r.status === 403 || ([301, 302, 303, 307].includes(r.status) && /cloudflareaccess\.com/i.test(r.headers.get('location') || ''))
   let response
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
     response = await fetch(FIXED_PREVIEW_ORIGIN + path, { redirect: 'manual', signal: AbortSignal.timeout(20000), ...init,
       headers: { 'CF-Access-Client-Id': token.client_id, 'CF-Access-Client-Secret': token.client_secret, ...(init.headers || {}) } })
-    if (response.status !== 503) break
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    if (response.status !== 503 && !accessChallenge(response)) break
+    await new Promise(resolve => setTimeout(resolve, 5000))
   }
   return response
 }
@@ -211,8 +225,8 @@ async function main() {
   assert.equal(published?.preview_name, FIXED_PREVIEW_NAME, 'M3_CLI_PREVIEW_OUTPUT_REQUIRED')
   assert.match(published.preview_id || '', /^[a-f0-9]{32}$/)
   assert.match(published.deployment_id || '', /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/)
-  const preview = await cf(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}`)
-  const deployment = await cf(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}/deployments/${published.deployment_id}`)
+  const preview = await cfEventually(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}`)
+  const deployment = await cfEventually(`/workers/workers/${WORKER_ID}/previews/${published.preview_id}/deployments/${published.deployment_id}`)
   assert.equal(preview.name, FIXED_PREVIEW_NAME)
   assert.ok(preview.urls.map(url => new URL(url).origin).includes(FIXED_PREVIEW_ORIGIN))
   assert.ok(deployment.urls.length > 0)
