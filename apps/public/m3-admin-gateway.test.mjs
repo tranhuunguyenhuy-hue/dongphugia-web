@@ -113,5 +113,8 @@ describe('Admin shell gateway', () => {
     expect(down.status).toBe(502); expect(await down.text()).not.toContain('secret-host')
     stubUpstream(new Response('<html>oops</html>', { status: 500 }))
     expect((await handleAdminNext(browser('/admin-next/api/me'), environment(), ctx)).status).toBe(502)
+    stubUpstream(json({ code: 'NOT_FOUND', message: 'Requested function was not found' }, 404))
+    const platform = await handleAdminNext(browser('/admin-next/api/me'), environment(), ctx)
+    expect(platform.status).toBe(502); expect(await platform.text()).not.toContain('Requested function')
   })
 })

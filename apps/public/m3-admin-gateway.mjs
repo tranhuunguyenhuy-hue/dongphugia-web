@@ -95,6 +95,11 @@ export async function handleAdminNext(request, environment, { sourceSha, staging
   const text = await upstream.text()
   let payload
   try { payload = JSON.parse(text) } catch { return jsonError(502, 'UPSTREAM_INVALID', sourceSha) }
+  // Only the admin-api contract is relayed ({data} or {error:{code}}); anything else (platform errors such as a
+  // missing function) is replaced by a generic code so no provider message or detail reaches the browser.
+  const conforming = payload !== null && typeof payload === 'object'
+    && (('data' in payload) || (typeof payload.error?.code === 'string' && /^[A-Z_]{3,40}$/.test(payload.error.code)))
+  if (!conforming) return jsonError(502, 'UPSTREAM_INVALID', sourceSha)
   const extra = {}
   if (path === '/login' && upstream.status === 200 && typeof payload?.data?.token === 'string') {
     extra['set-cookie'] = sessionCookie(payload.data.token, payload.data.expires_at)
