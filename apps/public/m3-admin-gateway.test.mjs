@@ -73,7 +73,7 @@ describe('Admin shell gateway', () => {
       expect(r.status).toBe(403); expect((await r.json()).error.code).toBe('ORIGIN_NOT_ALLOWED')
     }
     expect((await handleAdminNext(browser('/admin-next/api/logout', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } }), env, ctx)).status).toBe(415)
-    expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'PATCH', body: 'x'.repeat(600_001) }), env, ctx)).status).toBe(413)
+    expect((await handleAdminNext(browser('/admin-next/api/r/products/1', { method: 'PATCH', body: 'x'.repeat(600_001) }), env, ctx)).status).toBe(413)
     expect(calls).toHaveLength(0)
   })
 
@@ -90,15 +90,15 @@ describe('Admin shell gateway', () => {
   it('signs every forwarded request so the function can verify route, body, ip, origin and session', async () => {
     stubUpstream(json({ data: { ok: true } }))
     const body = JSON.stringify({ expected_version: 1, input: { name: 'A' } })
-    const response = await handleAdminNext(browser('/admin-next/api/products/7?x=1&q=%27', { method: 'PATCH', body, headers: { cookie: `dpg-admin-session=${TOKEN}; other=1` } }), environment(), ctx)
+    const response = await handleAdminNext(browser('/admin-next/api/r/products/7?x=1&q=%27', { method: 'PATCH', body, headers: { cookie: `dpg-admin-session=${TOKEN}; other=1` } }), environment(), ctx)
     expect(response.status).toBe(200)
     const { url, init } = calls[0]
-    expect(url).toBe(`${FN}/products/7?x=1&q=%27`)
+    expect(url).toBe(`${FN}/r/products/7?x=1&q=%27`)
     const verified = await verifyEnvelope(SECRET, { method: 'PATCH', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })
     expect(verified).toMatchObject({ ok: true, clientIp: '203.0.113.7', origin: ORIGIN, sessionToken: TOKEN })
     expect(new Headers(init.headers).get('x-region')).toBe('ap-southeast-1')
     // a GET carries no origin marker and no body
-    await handleAdminNext(browser('/admin-next/api/products?limit=5'), environment(), ctx)
+    await handleAdminNext(browser('/admin-next/api/r/products?limit=5'), environment(), ctx)
     const get = calls[1]; const headers = new Headers(get.init.headers)
     expect(headers.get('x-dpg-origin')).toBe(''); expect(get.init.body).toBeUndefined()
     expect(headers.get('x-dpg-session')).toBeNull()

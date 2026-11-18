@@ -124,8 +124,8 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
     const unsigned = await handleRequest(new Request(BASE + '/me'), deps()); expect(unsigned.status).toBe(401)
     expect((await call('GET', '/me', undefined, { secret: 'wrong' })).json.error.code).toBe('INVALID_SIGNATURE')
     const nonce = randomNonce()
-    expect((await call('GET', '/products', undefined, { nonce })).status).toBe(401) // unauthenticated but nonce consumed
-    expect((await call('GET', '/products', undefined, { nonce })).json.error.code).toBe('REPLAYED_REQUEST')
+    expect((await call('GET', '/r/products', undefined, { nonce })).status).toBe(401) // unauthenticated but nonce consumed
+    expect((await call('GET', '/r/products', undefined, { nonce })).json.error.code).toBe('REPLAYED_REQUEST')
   })
 
   it('requires the gateway-verified origin marker for mutations', async () => {
@@ -171,47 +171,48 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
 
   it('enforces RBAC on every operation server-side', async () => {
     const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
-    expect((await call('GET', '/products', undefined)).status).toBe(401)
-    for (const t of [admin, manager, sale]) expect((await call('GET', '/products?limit=5', undefined, { token: t })).status).toBe(200)
+    expect((await call('GET', '/r/products', undefined)).status).toBe(401)
+    for (const t of [admin, manager, sale]) expect((await call('GET', '/r/products?limit=5', undefined, { token: t })).status).toBe(200)
     for (const t of [manager, sale]) {
-      expect((await call('PATCH', '/products/1', { input: { name: 'Hacked' } }, { token: t })).json.error.code).toBe('FORBIDDEN')
+      expect((await call('PATCH', '/r/products/1', { expected_version: 1, input: { name: 'Hacked' } }, { token: t })).json.error.code).toBe('FORBIDDEN')
     }
-    expect((await call('PATCH', '/products/1', { input: { name: 'Edited by admin' } }, { token: admin })).status).toBe(200)
+    const v1 = (await call('GET', '/r/products/1', undefined, { token: admin })).json.data.version
+    expect((await call('PATCH', '/r/products/1', { expected_version: v1, input: { name: 'Edited by admin' } }, { token: admin })).status).toBe(200)
     for (const role of ['admin', 'sale_manager', 'sale'] as AdminRole[]) expect(can(role, 'products:read')).toBe(true)
   })
 
   it('lists with pagination and search, escaping LIKE wildcards and ignoring SQL injection', async () => {
     const t = await token('admin')
-    const page = await call('GET', '/products?limit=10&page=2', undefined, { token: t })
+    const page = await call('GET', '/r/products?limit=10&page=2', undefined, { token: t })
     expect(page.json.data).toMatchObject({ total: 30, page: 2, limit: 10 }); expect(page.json.data.items).toHaveLength(10)
-    const q = await call('GET', '/products?q=' + encodeURIComponent('product 2'), undefined, { token: t }); expect(q.json.data.total).toBeGreaterThan(0)
-    const wildcard = await call('GET', '/products?q=' + encodeURIComponent('%'), undefined, { token: t }); expect(wildcard.json.data.total).toBe(0)
-    const inj = await call('GET', '/products?q=' + encodeURIComponent("x'; drop table dpg_app.products;--"), undefined, { token: t }); expect(inj.status).toBe(200)
+    const q = await call('GET', '/r/products?q=' + encodeURIComponent('product 2'), undefined, { token: t }); expect(q.json.data.total).toBeGreaterThan(0)
+    const wildcard = await call('GET', '/r/products?q=' + encodeURIComponent('%'), undefined, { token: t }); expect(wildcard.json.data.total).toBe(0)
+    const inj = await call('GET', '/r/products?q=' + encodeURIComponent("x'; drop table dpg_app.products;--"), undefined, { token: t }); expect(inj.status).toBe(200)
     expect(Number((await owner.query('select count(*) from dpg_app.products')).rows[0].count)).toBe(30)
-    expect((await call('GET', '/products?limit=500', undefined, { token: t })).status).toBe(400)
+    expect((await call('GET', '/r/products?limit=500', undefined, { token: t })).status).toBe(400)
   })
 
   it('edits products atomically with versioning, audit and validation', async () => {
     const t = await token('admin')
-    const before = await call('GET', '/products/2', undefined, { token: t }); const version = before.json.data.version
-    const ok = await call('PATCH', '/products/2', { expected_version: version, input: { name: 'Renamed 2', is_featured: true, seo_title: 'Tiêu đề' } }, { token: t })
+    const before = await call('GET', '/r/products/2', undefined, { token: t }); const version = before.json.data.version
+    const ok = await call('PATCH', '/r/products/2', { expected_version: version, input: { name: 'Renamed 2', is_featured: true, seo_title: 'Tiêu đề' } }, { token: t })
     expect(ok.status).toBe(200); expect(ok.json.data).toMatchObject({ name: 'Renamed 2', is_featured: true, version: version + 1 })
-    expect((await call('PATCH', '/products/2', { expected_version: version, input: { name: 'Stale' } }, { token: t })).json.error.code).toBe('VERSION_CONFLICT')
+    expect((await call('PATCH', '/r/products/2', { expected_version: version, input: { name: 'Stale' } }, { token: t })).json.error.code).toBe('VERSION_CONFLICT')
     const audit = (await owner.query("select action, entity_id, old_value, new_value, user_id from dpg_app.audit_logs where entity_id=2 order by id desc limit 1")).rows[0]
-    expect(audit).toMatchObject({ action: 'product.update', entity_id: 2 }); expect(audit.new_value._meta.changed_fields).toEqual(['name', 'is_featured', 'seo_title']); expect(audit.new_value._meta.request_id).toMatch(/^[0-9a-f-]{36}$/); expect(audit.old_value.name).toBe('Product 2')
-    const invalid = [{ input: {} }, { input: { sku: 'X' } }, { input: { price: 1 } }, { input: { name: '' } }, { input: { publication_status: 'archived' } }, { input: { image_main_url: 'http://media.example.test/a.jpg' } }, { input: { image_main_url: 'https://evil.example/a.jpg' } }, { extra: 1, input: { name: 'x' } }]
-    for (const body of invalid) expect((await call('PATCH', '/products/2', body, { token: t })).json.error.code).toBe('VALIDATION_FAILED')
-    expect((await call('PATCH', '/products/2', { input: { image_main_url: 'https://media.example.test/a/b.jpg' } }, { token: t })).status).toBe(200)
-    expect((await call('PATCH', '/products/99999', { input: { name: 'x' } }, { token: t })).json.error.code).toBe('NOT_FOUND')
-    expect((await call('PATCH', '/products/abc', { input: { name: 'x' } }, { token: t })).json.error.code).toBe('NOT_FOUND')
-    // Price must be untouched by any pilot edit.
+    expect(audit).toMatchObject({ action: 'products.update', entity_id: 2 }); expect(audit.new_value._meta.changed_fields).toEqual(['name', 'is_featured', 'seo_title']); expect(audit.new_value._meta.request_id).toMatch(/^[0-9a-f-]{36}$/); expect(audit.old_value.name).toBe('Product 2')
+    const invalid = [{ input: {} }, { input: { sku: 'X' } }, { input: { slug: 'x' } }, { input: { name: '' } }, { input: { publication_status: 'archived' } }, { input: { image_main_url: 'http://media.example.test/a.jpg' } }, { input: { image_main_url: 'https://evil.example/a.jpg' } }, { extra: 1, input: { name: 'x' } }]
+    for (const body of invalid) expect((await call('PATCH', '/r/products/2', { expected_version: version + 1, ...(body as object) }, { token: t })).json.error.code, JSON.stringify(body)).toBe('VALIDATION_FAILED')
+    expect((await call('PATCH', '/r/products/2', { expected_version: version + 1, input: { image_main_url: 'https://media.example.test/a/b.jpg' } }, { token: t })).status).toBe(200)
+    expect((await call('PATCH', '/r/products/99999', { expected_version: 1, input: { name: 'x' } }, { token: t })).json.error.code).toBe('NOT_FOUND')
+    expect((await call('PATCH', '/r/products/abc', { expected_version: 1, input: { name: 'x' } }, { token: t })).json.error.code).toBe('NOT_FOUND')
+    // None of these edits touches the price.
     expect(Number((await owner.query('select price from dpg_app.products where id=2')).rows[0].price)).toBe(2000)
   })
 
   it('rolls the whole edit back when the audit write fails', async () => {
-    const t = await token('admin'); const v = (await call('GET', '/products/3', undefined, { token: t })).json.data.version
+    const t = await token('admin'); const v = (await call('GET', '/r/products/3', undefined, { token: t })).json.data.version
     await owner.query('revoke insert on dpg_app.audit_logs from dpg_admin_api_test')
-    try { expect((await call('PATCH', '/products/3', { input: { name: 'Should roll back' } }, { token: t })).status).toBe(500) }
+    try { expect((await call('PATCH', '/r/products/3', { expected_version: v, input: { name: 'Should roll back' } }, { token: t })).status).toBe(500) }
     finally { await owner.query('grant insert on dpg_app.audit_logs to dpg_admin_api_test') }
     const row = (await owner.query('select name, version from dpg_app.products where id=3')).rows[0]
     expect(row).toMatchObject({ name: 'Product 3', version: v })

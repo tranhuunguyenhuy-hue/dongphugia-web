@@ -1,9 +1,9 @@
-import { getPermissions, type AdminRole, type Permission } from './permissions.ts'
-import { ApiError, requirePermission as requirePerm, type Context, type Db, type Session } from './core.ts'
+import { getPermissions, type AdminRole } from './permissions.ts'
+import { ApiError, type Context, type Db, type Session } from './core.ts'
 import * as commerce from './commerce-handlers.ts'
-import { audit, createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
+import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
-import { listQuerySchema, loginSchema, parseAllowedMediaHosts, productPatchSchema, VISIBILITY_FIELDS } from './validation.ts'
+import { loginSchema } from './validation.ts'
 
 export type { Db }
 export interface Deps {
@@ -34,7 +34,6 @@ function route(request: Request) {
   return { path: full.split('?')[0], route: full, search: url.searchParams }
 }
 
-const requirePermission = (ctx: Context, permission: Permission) => { requirePerm(ctx, permission) }
 
 async function readBody(request: Request): Promise<string> {
   const text = await request.text()
@@ -47,7 +46,6 @@ const validate = <T>(schema: { safeParse(value: unknown): { success: true; data:
   if (!result.success) throw new ApiError(400, 'VALIDATION_FAILED')
   return result.data
 }
-const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 async function loadSession(deps: Deps, token: string): Promise<Session | undefined> {
   if (!/^[0-9a-f]{64}$/.test(token)) return undefined
@@ -92,58 +90,6 @@ async function login(deps: Deps, ctx: Context, body: string) {
     return rows[0].expires_at
   })
   return { status: 200, body: { data: { token, expires_at: expires, user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: getPermissions(user.role) } } } }
-}
-
-const PRODUCT_COLUMNS = `p.id, p.sku, p.name, p.display_name, p.slug, p.category_id, p.subcategory_id, p.brand_id, p.price, p.price_display,
-  p.description, p.image_main_url, p.is_active, p.is_featured, p.publication_status, p.pdp_visibility, p.listing_visibility,
-  p.seo_title, p.seo_description, p.updated_at, p.version`
-
-async function listProducts(deps: Deps, ctx: Context, search: URLSearchParams) {
-  requirePermission(ctx, 'products:read')
-  const query = validate(listQuerySchema, Object.fromEntries(search))
-  const like = query.q ? `%${escapeLike(query.q)}%` : null
-  const rows = await deps.db.query<Record<string, unknown>>(
-    `select p.id, p.sku, p.name, p.slug, p.is_active, p.publication_status, p.pdp_visibility, p.image_main_url, p.version, p.updated_at,
-            count(*) over() as total
-       from dpg_app.products p
-      where ($1::text is null or p.name ilike $1 escape '\\' or p.sku ilike $1 escape '\\')
-      order by p.id desc limit $2 offset $3`,
-    [like, query.limit, (query.page - 1) * query.limit])
-  const total = Number(rows[0]?.total ?? 0)
-  return { status: 200, body: { data: { items: rows.map(({ total: _t, ...row }) => row), total, page: query.page, limit: query.limit } } }
-}
-
-async function getProduct(deps: Deps, ctx: Context, id: number) {
-  requirePermission(ctx, 'products:read')
-  const rows = await deps.db.query(
-    `select ${PRODUCT_COLUMNS}, c.name as category_name, s.name as subcategory_name, b.name as brand_name
-       from dpg_app.products p join dpg_app.categories c on c.id = p.category_id
-       left join dpg_app.subcategories s on s.id = p.subcategory_id left join dpg_app.brands b on b.id = p.brand_id
-      where p.id = $1`, [id])
-  if (!rows[0]) throw new ApiError(404, 'NOT_FOUND')
-  return { status: 200, body: { data: rows[0] } }
-}
-
-async function patchProduct(deps: Deps, ctx: Context, id: number, body: string) {
-  requirePermission(ctx, 'products:write')
-  const { input, expected_version } = validate(productPatchSchema(parseAllowedMediaHosts(deps.allowedMediaHosts)), parseJson(body))
-  if (VISIBILITY_FIELDS.some((field) => field in input)) requirePermission(ctx, 'visibility:write')
-  const fields = Object.keys(input) as (keyof typeof input)[]
-  const changed = await deps.db.transaction(async (tx) => {
-    const before = (await tx.query<Record<string, unknown>>(`select ${PRODUCT_COLUMNS} from dpg_app.products p where p.id = $1 for update of p`, [id]))[0]
-    if (!before) throw new ApiError(404, 'NOT_FOUND')
-    if (expected_version !== undefined && Number(before.version) !== expected_version) throw new ApiError(409, 'VERSION_CONFLICT')
-    const sets = fields.map((field, index) => `${field} = $${index + 2}`)
-    const after = (await tx.query<Record<string, unknown>>(
-      `update dpg_app.products set ${sets.join(', ')}, version = coalesce(version, 0) + 1, updated_at = now()
-        where id = $1 returning ${PRODUCT_COLUMNS.replace(/p\./g, '')}`,
-      [id, ...fields.map((field) => input[field] ?? null)]))[0]
-    const oldValue: Record<string, unknown> = {}, newValue: Record<string, unknown> = {}
-    for (const field of fields) { oldValue[field] = before[field]; newValue[field] = after[field] }
-    await audit(tx, ctx, 'product', 'update', id, oldValue, newValue, fields as string[])
-    return after
-  })
-  return { status: 200, body: { data: changed } }
 }
 
 async function dispatchResource(deps: Deps, ctx: Context, method: string, key: string, tail: string | undefined, search: URLSearchParams, body: string) {
@@ -229,13 +175,9 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
     } else if (request.method === 'GET' && path === '/schema') {
       if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
       result = { status: 200, body: { data: { resources: resourceMeta(ctx.session.role) } } }
-    } else if (request.method === 'GET' && path === '/products') result = await listProducts(deps, ctx, search)
-    else {
-      const match = path.match(/^\/products\/(\d{1,9})$/)
+    } else {
       const generic = path.match(/^\/r\/([a-z][a-z0-9-]{1,40})(?:\/(options|\d{1,9}))?$/)
-      if (match && request.method === 'GET') result = await getProduct(deps, ctx, Number(match[1]))
-      else if (match && request.method === 'PATCH') result = await patchProduct(deps, ctx, Number(match[1]), body)
-      else if (generic) result = await dispatchResource(deps, ctx, request.method, generic[1], generic[2], search, body)
+      if (generic) result = await dispatchResource(deps, ctx, request.method, generic[1], generic[2], search, body)
       else {
         const routed = dispatchCommerce(deps, ctx, request.method, path, search, body)
         if (!routed) throw new ApiError(404, 'NOT_FOUND')

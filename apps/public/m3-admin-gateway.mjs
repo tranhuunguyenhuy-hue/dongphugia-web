@@ -10,7 +10,6 @@ const SESSION_COOKIE = 'dpg-admin-session'
 const APPROVED_FUNCTION_URL = /^https:\/\/uybumsnyqpwcidjxmfsv\.supabase\.co\/functions\/v1\/admin-api$/
 const ROUTES = [
   { method: 'POST', pattern: /^\/login$/ }, { method: 'POST', pattern: /^\/logout$/ }, { method: 'GET', pattern: /^\/me$/ },
-  { method: 'GET', pattern: /^\/products$/ }, { method: 'GET', pattern: /^\/products\/\d{1,9}$/ }, { method: 'PATCH', pattern: /^\/products\/\d{1,9}$/ },
   // Generic resources (blog, banners, ...): the function owns the resource registry and RBAC; the gateway only checks shape.
   { method: 'GET', pattern: /^\/schema$/ },
   { method: 'GET', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}$/ }, { method: 'POST', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}$/ },

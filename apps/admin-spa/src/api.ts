@@ -1,12 +1,6 @@
 export type Role = 'admin' | 'sale_manager' | 'sale'
 export type User = { id: number; email: string; name: string; role: Role; permissions: string[] }
 export const can = (user: User, permission: string) => user.permissions.includes('*') || user.permissions.includes(permission)
-export type ProductRow = { id: number; sku: string; name: string; slug: string; is_active: boolean; publication_status: string; pdp_visibility: string; image_main_url: string | null; version: number; updated_at: string }
-export type Product = ProductRow & {
-  display_name: string | null; description: string | null; is_featured: boolean; listing_visibility: string
-  seo_title: string | null; seo_description: string | null; price_display: string | null
-  category_name: string; subcategory_name: string | null; brand_name: string | null
-}
 export type Row = Record<string, unknown>
 export type FieldMeta = {
   name: string; label: string; kind: 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email' | 'url'
@@ -36,8 +30,6 @@ export const api = {
   me: () => request<User>('GET', '/me'),
   login: (email: string, password: string) => request<{ user: User; expires_at: string }>('POST', '/login', { email, password }),
   logout: () => request<{ ok: true }>('POST', '/logout', {}),
-  products: (q: string, page: number) => request<{ items: ProductRow[]; total: number; page: number; limit: number }>('GET', `/products?limit=20&page=${page}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
-  product: (id: number) => request<Product>('GET', `/products/${id}`),
   schema: () => request<{ resources: ResourceMeta[] }>('GET', '/schema').then((r) => r.resources),
   list: (key: string, params: Record<string, string | number | boolean | undefined>) => {
     const search = new URLSearchParams(); for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') search.set(k, String(v))
@@ -52,7 +44,6 @@ export const api = {
   linkVariant: (id: number, target_id: number) => request<{ group: string }>('POST', `/products/${id}/variants`, { target_id }),
   unlinkVariant: (id: number, target_id: number) => request<{ ok: true }>('DELETE', `/products/${id}/variants/${target_id}`, {}),
   bulkProducts: (ids: number[], action: string) => request<{ updated: number; skipped: { id: number; reason: string }[] }>('POST', '/products/bulk', { ids, action }),
-  saveProduct: (id: number, expected_version: number, input: Record<string, unknown>) => request<Product>('PATCH', `/products/${id}`, { expected_version, input }),
 }
 
 // Legacy upload route (Cloudflare Images transform + isolated Bunny target): the transform contract is unchanged.
