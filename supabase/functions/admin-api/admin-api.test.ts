@@ -79,20 +79,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       admin: bcrypt.hashSync('admin-pass-1', 4), manager: bcrypt.hashSync('manager-pass-1', 4),
       sale: bcrypt.hashSync('sale-pass-1', 4), off: bcrypt.hashSync('off-pass-1', 4),
     }
-    await owner.query(`
-      create schema dpg_app;
-      create table dpg_app.admin_users (id serial primary key, email varchar not null, name varchar not null, password_hash varchar not null, role varchar, is_active boolean default true, avatar_url varchar, last_login_at timestamptz, created_at timestamptz default now(), updated_at timestamptz, username varchar, supabase_auth_user_id uuid);
-      create table dpg_app.admin_sessions (id serial primary key, user_id int not null references dpg_app.admin_users(id), token_hash varchar not null, ip_address varchar, user_agent text, expires_at timestamptz not null, created_at timestamptz default now());
-      create table dpg_app.audit_logs (id serial primary key, user_id int, action varchar not null, entity_type varchar not null, entity_id int, old_value jsonb, new_value jsonb, ip_address varchar, created_at timestamptz default now());
-      create table dpg_app.categories (id serial primary key, name varchar not null, slug varchar not null, is_active boolean default true);
-      create table dpg_app.subcategories (id serial primary key, category_id int not null, name varchar not null, slug varchar not null, is_active boolean default true);
-      create table dpg_app.brands (id serial primary key, name varchar not null, slug varchar not null, is_active boolean default true);
-      create table dpg_app.products (id serial primary key, sku varchar not null, name varchar not null, slug varchar not null, category_id int not null, subcategory_id int, brand_id int, price numeric, price_display varchar, description text, display_name varchar, image_main_url varchar, is_active boolean default true, is_featured boolean default false, publication_status varchar default 'draft', pdp_visibility varchar default 'public', listing_visibility varchar default 'default', search_visibility varchar default 'visible', seo_title varchar, seo_description varchar, updated_at timestamptz default now(), version int default 1, list_price numeric);
-      create table dpg_app.orders (id serial primary key);
-      alter table dpg_app.admin_users enable row level security; alter table dpg_app.admin_sessions enable row level security; alter table dpg_app.audit_logs enable row level security;
-      alter table dpg_app.products enable row level security; alter table dpg_app.categories enable row level security; alter table dpg_app.subcategories enable row level security; alter table dpg_app.brands enable row level security; alter table dpg_app.orders enable row level security;
-      insert into dpg_app.categories(name,slug) values ('Cat','cat'); insert into dpg_app.subcategories(category_id,name,slug) values (1,'Sub','sub'); insert into dpg_app.brands(name,slug) values ('Brand','brand');
-      insert into dpg_app.products(sku,name,slug,category_id,subcategory_id,brand_id,price,list_price,publication_status) select 'SKU-'||g,'Product '||g,'product-'||g,1,1,1,1000*g,2000*g,'public' from generate_series(1,30) g;`)
+    await owner.query(await readFile(path.join(root, 'supabase/functions/admin-api/test-fixtures/base.sql'), 'utf8'))
     await owner.query(`insert into dpg_app.admin_users(email,name,password_hash,role,is_active) values
       ('admin@example.test','Admin',$1,'admin',true),('manager@example.test','Manager',$2,'sale_manager',true),('sale@example.test','Sale',$3,'sale',true),('off@example.test','Off',$4,'admin',false)`,
       [hashes.admin, hashes.manager, hashes.sale, hashes.off])

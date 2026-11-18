@@ -112,7 +112,7 @@ export function buildInput(meta: ResourceMeta, form: Row, original: Row | null):
     else value = raw ?? ''
     if (original) {
       if (value === undefined) continue
-      const before = f.kind === 'int' || f.kind === 'ref' ? (original[f.name] ?? null) : f.kind === 'strings' ? (original[f.name] ?? []) : f.kind === 'bool' ? Boolean(original[f.name]) : f.kind === 'json' ? (original[f.name] ?? {}) : (original[f.name] ?? '')
+      const before = f.kind === 'int' || f.kind === 'ref' ? (original[f.name] ?? null) : f.kind === 'money' ? (original[f.name] === null || original[f.name] === undefined ? null : Number(original[f.name])) : f.kind === 'strings' ? (original[f.name] ?? []) : f.kind === 'bool' ? Boolean(original[f.name]) : f.kind === 'json' ? (original[f.name] ?? {}) : (original[f.name] ?? '')
       if (!sameJson(value, before)) input[f.name] = value
     }
     else if (value !== undefined && value !== '' && value !== null) input[f.name] = value
@@ -176,7 +176,7 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
       }} />
       case 'password': return <input {...common} type="password" autoComplete="new-password" minLength={8} maxLength={f.max ?? 200} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
       case 'email': return <input {...common} type="email" autoComplete="off" maxLength={f.max} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
-      case 'money': return <input {...common} type="number" min={f.min ?? 0} step="1" value={value === null || value === undefined ? '' : String(value)} onChange={(e) => set(f.name, e.target.value)} />
+      case 'money': return <input {...common} type="number" min={f.min ?? 0} step="any" value={value === null || value === undefined ? '' : String(value)} onChange={(e) => set(f.name, e.target.value)} />
       case 'datetime': return <input {...common} disabled value={value ? new Date(String(value)).toLocaleString('vi-VN') : ''} readOnly />
       default: return <input {...common} type={f.kind === 'link' ? 'text' : 'text'} maxLength={f.max} value={String(value ?? '')} onChange={(e) => { if (f.slugFrom) setTouched((t) => new Set(t).add(f.name)); set(f.name, e.target.value) }} />
     }

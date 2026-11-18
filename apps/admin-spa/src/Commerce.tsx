@@ -120,7 +120,7 @@ export function OrderDetailPage({ id, user, go }: { id: number; user: User; go: 
   const apply = useCallback((o: OrderDetail) => { setOrder(o); setLines(o.items.map((i) => ({ id: i.id, name: i.product_name, sku: i.product_sku, unit_price: Number(i.unit_price ?? 0), quantity: i.quantity }))); setVat(o.vat_rate); setShipping(Number(o.shipping_fee ?? 0)); setDiscount(Number(o.discount ?? 0)); setNote(o.note ?? '') }, [])
   useEffect(() => { let live = true; commerce.order(id).then((o) => { if (live) apply(o) }).catch((e) => { if (live) setError(errorText(e)) }); return () => { live = false } }, [id, apply])
   if (!order) return <section className="card">{error ? <p role="alert" className="error">{error}</p> : <p className="muted">Đang tải…</p>}</section>
-  const run = async (fn: () => Promise<OrderDetail>, ok: string) => { setBusy(true); setError(''); setMessage(''); try { apply(await fn()); setMessage(ok) } catch (e) { setError(errorText(e)) } finally { setBusy(false) } }
+  const run = async (fn: () => Promise<unknown>, ok: string) => { setBusy(true); setError(''); setMessage(''); try { await fn(); apply(await commerce.order(id)); setMessage(ok) } catch (e) { setError(errorText(e)) } finally { setBusy(false) } }
   const invalid = lines.some((l) => !Number.isFinite(l.unit_price) || l.unit_price < 0 || !Number.isInteger(l.quantity) || l.quantity < 1) || ![vat, shipping, discount].every(Number.isFinite)
   return (
     <div className="split">
@@ -198,7 +198,7 @@ export function QuoteBuilderPage({ id, user, go }: { id: number; user: User; go:
   if (!quote) return <section className="card">{error ? <p role="alert" className="error">{error}</p> : <p className="muted">Đang tải…</p>}</section>
   const body = { vat_rate: vat, shipping_fee: shipping, admin_notes: notes, items: lines.map((l) => ({ id: l.id, admin_unit_price: l.unit_price, admin_quantity: l.quantity })) }
   const invalid = lines.some((l) => !Number.isFinite(l.unit_price) || l.unit_price < 0 || !Number.isInteger(l.quantity) || l.quantity < 1) || ![vat, shipping].every(Number.isFinite)
-  const run = async (fn: () => Promise<QuoteDetail>, ok: string, then?: () => void) => { setBusy(true); setError(''); setMessage(''); try { apply(await fn()); setMessage(ok); then?.() } catch (e) { setError(e instanceof ApiError ? errorText(e) : 'Có lỗi xảy ra.') } finally { setBusy(false) } }
+  const run = async (fn: () => Promise<unknown>, ok: string) => { setBusy(true); setError(''); setMessage(''); try { await fn(); apply(await commerce.quote(id)); setMessage(ok) } catch (e) { setError(e instanceof ApiError ? errorText(e) : 'Có lỗi xảy ra.') } finally { setBusy(false) } }
   return (
     <div className="split">
       <section className="card">

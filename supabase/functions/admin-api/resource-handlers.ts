@@ -110,11 +110,13 @@ export async function getResource(deps: ResourceDeps, ctx: Context, def: Resourc
   return { status: 200, body: { data: stripExtra(row) } }
 }
 
+// JSON parameters are sent as TEXT and cast in SQL: postgres.js would JSON-encode a string bound to a jsonb parameter a second
+// time (node-pg would not), so `$n::text::jsonb` is the only form that behaves identically in the Edge runtime and in tests.
 type Assignment = { column: string; expr: string; value?: unknown; bind: boolean }
 function assignment(field: FieldDef | undefined, column: string, value: unknown, nextParam: () => string): Assignment {
   if (isRaw(value)) return { column: quote(column), expr: value.raw, bind: false }
-  if (field?.kind === 'json' && value !== null) return { column: quote(column), expr: `${nextParam()}::jsonb`, value: JSON.stringify(value), bind: true }
-  if (field?.kind === 'strings' && value !== null) return { column: quote(column), expr: `array(select jsonb_array_elements_text(${nextParam()}::jsonb))`, value: JSON.stringify(value), bind: true }
+  if (field?.kind === 'json' && value !== null) return { column: quote(column), expr: `${nextParam()}::text::jsonb`, value: JSON.stringify(value), bind: true }
+  if (field?.kind === 'strings' && value !== null) return { column: quote(column), expr: `array(select jsonb_array_elements_text(${nextParam()}::text::jsonb))`, value: JSON.stringify(value), bind: true }
   return { column: quote(column), expr: nextParam(), value, bind: true }
 }
 
@@ -127,7 +129,7 @@ function requireFieldPermissions(ctx: Context, def: ResourceDef, input: Row) {
 export async function audit(tx: Db, ctx: Context, entity: string, action: string, id: number, oldValue: Row | null, newValue: Row | null, changed: string[]) {
   await tx.query(
     `insert into dpg_app.audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip_address)
-     values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)`,
+     values ($1, $2, $3, $4, $5::text::jsonb, $6::text::jsonb, $7)`,
     [ctx.session!.userId, `${entity}.${action}`, entity, id, oldValue ? JSON.stringify(oldValue) : null,
       JSON.stringify({ ...(newValue ?? {}), _meta: { request_id: ctx.request_id, changed_fields: changed } }), ctx.ip.slice(0, 64) || null])
 }
@@ -143,7 +145,7 @@ async function replaceRelations(tx: Db, def: ResourceDef, id: number, input: Row
     if (unique.length) {
       await tx.query(
         `insert into dpg_app.${quote(relation.table)} (${quote(relation.owner)}, ${quote(relation.target)})
-         select $1::int, v::int from jsonb_array_elements_text($2::jsonb) v`, [id, JSON.stringify(unique)])
+         select $1::int, v::int from jsonb_array_elements_text($2::text::jsonb) v`, [id, JSON.stringify(unique)])
     }
     await recount(tx, relation, [...new Set([...before, ...unique])])
     if (previous) previous[relation.input] = before
@@ -154,7 +156,7 @@ async function recount(tx: Db, relation: NonNullable<ResourceDef['relations']>[n
   const { table, column } = relation.recount
   await tx.query(
     `update dpg_app.${quote(table)} set ${quote(column)} = (select count(*) from dpg_app.${quote(relation.table)} x where x.${quote(relation.target)} = dpg_app.${quote(table)}.id)
-      where id in (select v::int from jsonb_array_elements_text($1::jsonb) v)`, [JSON.stringify(targetIds)])
+      where id in (select v::int from jsonb_array_elements_text($1::text::jsonb) v)`, [JSON.stringify(targetIds)])
 }
 
 export async function createResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, body: string): Promise<Result> {
