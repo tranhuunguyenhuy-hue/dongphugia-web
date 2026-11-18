@@ -1,17 +1,14 @@
 import { withPublicReadScope } from './src/runtime/public-read-scope'
+// Static import is required: vinext's fetch-handler resolves sibling modules (vinext-client-assets.js)
+// relative to the Worker entry. A dynamic import moved it into _next/static/ and broke every render in
+// the packaged artifact (#360 P1 readiness, verified in workerd).
+import vinextHandler from 'vinext/server/fetch-handler'
 import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnostic-safety.mjs'
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
 import {readBoundedPublicAssetText} from './src/runtime/bounded-public-asset'
 import {serveCampaignLanding} from './src/runtime/campaign-landing'
 import {entryFreshness, hasRenderErrorMarker, isStorablePage, pageCacheKey, planPageCache, remainingTtlSeconds} from './src/runtime/page-cache'
-
-// The SSR bundle is loaded only on a cache miss so cache hits never initialise it (#360 P1).
-type VinextHandler = typeof import('vinext/server/fetch-handler').default
-let vinextHandlerPromise: Promise<VinextHandler> | undefined
-const loadVinextHandler = () => (vinextHandlerPromise ??= import('vinext/server/fetch-handler')
-  .then(module => module.default)
-  .catch((error: unknown) => { vinextHandlerPromise = undefined; throw error }))
 
 import {
   assertPublicRuntime,
@@ -187,7 +184,6 @@ export default {
 
     let rendered: Response
     try {
-      const vinextHandler = await loadVinextHandler()
       rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
     } catch (renderError) {
       if (staleEntry) return serveStale()
