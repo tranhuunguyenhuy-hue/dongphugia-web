@@ -9,12 +9,12 @@ export type Product = ProductRow & {
 }
 export type Row = Record<string, unknown>
 export type FieldMeta = {
-  name: string; label: string; kind: 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email'
+  name: string; label: string; kind: 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email' | 'url'
   required: boolean; max?: number; min?: number; options?: string[]; ref?: string; readOnly: boolean; createOnly?: boolean; list: boolean; slugFrom?: string; initial?: unknown
   nullable: boolean; editable: boolean; upload?: { folder: string; profile: string }
 }
 export type ResourceMeta = {
-  key: string; label: string; group: string; inNav: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean; versioned: boolean; searchable: boolean
+  key: string; label: string; group: string; children?: { key: string; column: string }[]; inNav: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean; versioned: boolean; searchable: boolean
   fields: FieldMeta[]; relations: { input: string; label: string; ref: string }[]
   filters: { name: string; label: string; kind: 'bool' | 'int' | 'enum'; options?: string[] }[]
 }
@@ -48,6 +48,9 @@ export const api = {
   create: (key: string, input: Row) => request<Row>('POST', `/r/${key}`, { input }),
   update: (key: string, id: number, expected_version: number | undefined, input: Row) => request<Row>('PATCH', `/r/${key}/${id}`, { ...(expected_version === undefined ? {} : { expected_version }), input }),
   remove: (key: string, id: number, expected_version: number | undefined) => request<{ ok: true; result: string }>('DELETE', `/r/${key}/${id}`, expected_version === undefined ? {} : { expected_version }),
+  variants: (id: number) => request<{ group: string | null; items: { id: number; sku: string; name: string; price: number | null; image_main_url: string | null; color_name: string | null }[] }>('GET', `/products/${id}/variants`),
+  linkVariant: (id: number, target_id: number) => request<{ group: string }>('POST', `/products/${id}/variants`, { target_id }),
+  unlinkVariant: (id: number, target_id: number) => request<{ ok: true }>('DELETE', `/products/${id}/variants/${target_id}`, {}),
   bulkProducts: (ids: number[], action: string) => request<{ updated: number; skipped: { id: number; reason: string }[] }>('POST', '/products/bulk', { ids, action }),
   saveProduct: (id: number, expected_version: number, input: Record<string, unknown>) => request<Product>('PATCH', `/products/${id}`, { expected_version, input }),
 }

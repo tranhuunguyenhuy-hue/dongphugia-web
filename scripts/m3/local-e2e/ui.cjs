@@ -74,6 +74,24 @@ const expectText = async (page, text, timeout = 8000) => page.getByText(text, { 
     if ((await sql('select is_active from dpg_app.products where id=$1', [id]))[0].is_active !== true) throw new Error('not activated')
     if (await page.goto(BASE + `/r/products/${id}`).then(() => page.locator('#f-sku').isEnabled())) throw new Error('sku must be read-only after creation')
   }, page)
+  await check('product child records: document, relation and spec value added/removed in the editor', async () => {
+    const id = (await sql("select id from dpg_app.products where sku='E2E-1'"))[0].id
+    await page.goto(BASE + `/r/products/${id}`); await page.getByRole('button', { name: /Thêm tài liệu sản phẩm/ }).click()
+    await page.locator('#c-name').fill('Catalogue E2E'); await page.locator('#c-url').fill('https://docs.example.test/e2e.pdf'); await page.getByRole('button', { name: 'Thêm', exact: true }).click(); await expectText(page, 'Catalogue E2E')
+    await page.getByRole('button', { name: /Thêm sản phẩm liên kết/ }).click(); await page.locator('#c-child_sku').fill('SKU-2'); await page.locator('#c-child_id').fill('2'); await page.getByRole('button', { name: 'Thêm', exact: true }).click(); await expectText(page, 'SKU-2')
+    if ((await sql('select count(*) from dpg_app.product_documents where product_id=$1', [id]))[0].count !== '1') throw new Error('document not stored')
+    if ((await sql('select count(*) from dpg_app.product_relationships where parent_id=$1', [id]))[0].count !== '1') throw new Error('relation not stored')
+    page.once('dialog', (d) => d.accept()); await page.getByRole('row', { name: /Catalogue E2E/ }).getByRole('button', { name: 'Xóa' }).click(); await page.getByText('Catalogue E2E').waitFor({ state: 'detached', timeout: 6000 })
+    page.once('dialog', (d) => d.accept()); await page.getByRole('row', { name: /SKU-2/ }).getByRole('button', { name: 'Xóa' }).click(); await new Promise((r) => setTimeout(r, 700))
+    if ((await sql('select count(*) from dpg_app.product_documents where product_id=$1', [id]))[0].count !== '0') throw new Error('document not removed')
+  }, page)
+  await check('product variants: search, link, then unlink', async () => {
+    const id = (await sql("select id from dpg_app.products where sku='E2E-1'"))[0].id
+    await page.goto(BASE + `/r/products/${id}`); const variants = page.getByRole('group', { name: /Biến thể/ }); await page.getByLabel('Tìm sản phẩm để liên kết biến thể').fill('Product 7'); await variants.getByRole('button', { name: 'Liên kết', exact: true }).first().click(); await expectText(page, 'VG-')
+    const g = await sql("select count(*) from dpg_app.products where variant_group is not null"); if (g[0].count !== '2') throw new Error('variant group size ' + g[0].count)
+    page.once('dialog', (d) => d.accept()); await variants.getByRole('button', { name: 'Gỡ' }).first().click(); await new Promise((r) => setTimeout(r, 700))
+    const h = await sql("select count(*) from dpg_app.products where variant_group is not null"); if (h[0].count !== '1') throw new Error('unlink failed ' + h[0].count)
+  }, page)
   await check('customer and user management (bcrypt) via UI', async () => {
     await page.goto(BASE + '/r/customers/new'); await page.locator('#f-full_name').fill('Khách E2E mới'); await page.locator('#f-phone').fill('0977888999'); await page.getByRole('button', { name: 'Tạo' }).click(); await page.waitForURL(/\/r\/customers\/\d+$/)
     await page.goto(BASE + '/r/users/new'); await page.locator('#f-email').fill('nhanvien.moi@example.test'); await page.locator('#f-name').fill('Nhân viên mới'); await page.locator('#f-password').fill('mat-khau-dai-1'); await page.getByRole('button', { name: 'Tạo' }).click(); await page.waitForURL(/\/r\/users\/\d+$/)

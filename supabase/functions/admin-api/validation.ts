@@ -62,12 +62,16 @@ function mediaUrl(allowedMediaHosts: readonly string[], max: number) {
     } catch { return false }
   }, 'MEDIA_HOST_NOT_ALLOWED')
 }
+/** https only, no credentials, never a local host (mirrors assertSafeDocumentUrl in src/lib/pim-validation.ts). */
+export function isSafeDocumentUrl(value: string): boolean {
+  try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1' } catch { return false }
+}
 export function isSafeLink(value: string): boolean {
   if (/^\/(?!\/)[^\s\\]*$/.test(value)) return true
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password } catch { return false }
 }
 
-const isTextLike = (kind: FieldDef['kind']) => kind === 'text' || kind === 'textarea' || kind === 'html' || kind === 'link' || kind === 'media' || kind === 'email'
+const isTextLike = (kind: FieldDef['kind']) => kind === 'url' || kind === 'text' || kind === 'textarea' || kind === 'html' || kind === 'link' || kind === 'media' || kind === 'email'
 export const allowsNull = (field: FieldDef) => field.required ? false : field.nullable ?? (isTextLike(field.kind) || field.kind === 'strings' || field.kind === 'datetime')
 
 /** Value schema for one writable field (before optional/nullable wrapping). */
@@ -82,6 +86,7 @@ function valueSchema(field: FieldDef, allowedMediaHosts: readonly string[]): z.Z
       if (field.required || (field.min ?? 0) > 0) schema = (schema as z.ZodString).min(Math.max(1, field.min ?? 1))
       return schema
     }
+    case 'url': return z.string().trim().max(field.max ?? 1000).refine(isSafeDocumentUrl, 'URL_NOT_ALLOWED')
     case 'email': return z.string().trim().toLowerCase().email().max(field.max ?? 200)
     case 'int': return z.number().int().min(field.min ?? INT_MIN).max(field.max ?? INT_MAX)
     case 'bool': return z.boolean()

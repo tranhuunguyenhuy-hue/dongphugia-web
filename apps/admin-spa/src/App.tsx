@@ -36,7 +36,7 @@ export function App() {
   else if (resource) {
     if (!meta) content = <section className="card"><p className="muted">{resources.length ? 'Không tìm thấy hoặc không có quyền truy cập.' : 'Đang tải…'}</p></section>
     else if (resource[2] === 'new') content = <ResourceForm key={`${meta.key}:new`} meta={meta} id={null} go={go} />
-    else if (resource[2]) content = <ResourceForm key={`${meta.key}:${resource[2]}`} meta={meta} id={Number(resource[2])} go={go} />
+    else if (resource[2]) content = <ResourceForm key={`${meta.key}:${resource[2]}`} meta={meta} id={Number(resource[2])} go={go} resources={resources} />
     else content = <ResourceList key={meta.key} meta={meta} go={go} />
   } else content = <section className="card"><p className="muted">Không tìm thấy trang.</p></section>
   return (

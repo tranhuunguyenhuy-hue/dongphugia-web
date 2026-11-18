@@ -376,3 +376,53 @@ export async function bulkProducts(deps: Deps, ctx: Context, body: string): Prom
     return { status: 200, body: { data: result } }
   } catch (error) { throw error instanceof ApiError ? error : mapDatabaseError(error) ?? error }
 }
+
+// ---------------------------------------------------------------------------------------------------- product variants
+/** Variant group members (legacy getProductVariants). */
+export async function listVariants(deps: Deps, ctx: Context, productId: number): Promise<Result> {
+  requirePermission(ctx, 'products:read')
+  const current = (await deps.db.query<{ variant_group: string | null }>('select variant_group from dpg_app.products where id = $1', [idOf(productId)]))[0]
+  if (!current) throw new ApiError(404, 'NOT_FOUND')
+  if (!current.variant_group) return { status: 200, body: { data: { group: null, items: [] } } }
+  const rows = await deps.db.query<Row>(
+    `select p.id, p.sku, p.name, p.price, p.image_main_url, c.name as color_name, c.hex_code
+       from dpg_app.products p left join dpg_app.colors c on c.id = p.color_id where p.variant_group = $1 order by p.id asc limit 200`, [current.variant_group])
+  return { status: 200, body: { data: { group: current.variant_group, items: rows.map((r) => ({ ...r, price: num(r.price) })) } } }
+}
+
+/** Legacy linkVariant: both products join the current product's group (created as VG-<epoch ms> when it has none). */
+export async function linkVariant(deps: Deps, ctx: Context, productId: number, body: string): Promise<Result> {
+  requirePermission(ctx, 'products:write')
+  const { target_id } = validate(z.object({ target_id: z.number().int().min(1).max(2_147_483_647) }).strict(), parseJson(body))
+  if (target_id === productId) throw new ApiError(400, 'VALIDATION_FAILED', ['target_id'])
+  try {
+    const group = await deps.db.transaction(async (tx) => {
+      const rows = await tx.query<{ id: number; variant_group: string | null }>('select id, variant_group from dpg_app.products where id = any($1) for update', [[idOf(productId), target_id]])
+      const current = rows.find((r) => r.id === productId), target = rows.find((r) => r.id === target_id)
+      if (!current || !target) throw new ApiError(404, 'NOT_FOUND')
+      const variantGroup = current.variant_group ?? `VG-${Date.now()}`
+      const moved = await tx.query<{ id: number }>(
+        `update dpg_app.products set variant_group = $2, updated_at = now(), version = coalesce(version, 0) + 1 where id = any($1) and variant_group is distinct from $2 returning id`, [[productId, target_id], variantGroup])
+      for (const row of moved) await audit(tx, ctx, 'products', 'variant_link', row.id, { variant_group: row.id === target_id ? target.variant_group : current.variant_group }, { variant_group: variantGroup }, ['variant_group'])
+      return variantGroup
+    })
+    return { status: 200, body: { data: { group } } }
+  } catch (error) { throw error instanceof ApiError ? error : mapDatabaseError(error) ?? error }
+}
+
+/** Legacy unlinkVariant: the given product leaves its variant group. */
+export async function unlinkVariant(deps: Deps, ctx: Context, productId: number, targetId: number): Promise<Result> {
+  requirePermission(ctx, 'products:write')
+  try {
+    await deps.db.transaction(async (tx) => {
+      const rows = await tx.query<{ variant_group: string | null }>('select variant_group from dpg_app.products where id = $1 for update', [idOf(targetId)])
+      if (!rows[0]) throw new ApiError(404, 'NOT_FOUND')
+      if (rows[0].variant_group) {
+        await tx.query('update dpg_app.products set variant_group = null, updated_at = now(), version = coalesce(version, 0) + 1 where id = $1', [targetId])
+        await audit(tx, ctx, 'products', 'variant_unlink', targetId, { variant_group: rows[0].variant_group }, { variant_group: null }, ['variant_group'])
+      }
+    })
+    void productId
+    return { status: 200, body: { data: { ok: true } } }
+  } catch (error) { throw error instanceof ApiError ? error : mapDatabaseError(error) ?? error }
+}

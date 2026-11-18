@@ -12,6 +12,6 @@ cd supabase/functions/admin-api && ADMIN_API_DB_URL=postgres://dpg_admin_api_tes
   ADMIN_API_MEDIA_HOSTS=dpg-media-staging.b-cdn.net DENO_SERVE_ADDRESS=tcp:127.0.0.1:8799 \
   deno run --config deno.json --allow-net --allow-env --allow-read index.ts &
 node scripts/m3/local-e2e/stack.mjs &                                     # gateway + static SPA on http://localhost:8800
-node scripts/m3/local-e2e/ui.cjs                                          # 16 browser checks, exits non-zero on failure
+node scripts/m3/local-e2e/ui.cjs                                          # 18 browser checks, exits non-zero on failure
 ```
 Seed accounts (local only): admin@example.test / admin-pass-1, manager@example.test / manager-pass-1, sale@example.test / sale-pass-1.

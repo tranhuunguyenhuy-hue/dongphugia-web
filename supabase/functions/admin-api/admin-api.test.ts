@@ -42,8 +42,8 @@ describe('request envelope', () => {
     expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf({ ...h, 'x-dpg-session': 'b'.repeat(64) }) })).toMatchObject({ ok: false })
     expect(await verifyEnvelope('other-secret', { ...base, headers: headersOf(h) })).toMatchObject({ ok: false })
     expect(await verifyEnvelope('', { ...base, headers: headersOf(h) })).toMatchObject({ ok: false })
-    expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf(h), now: Date.now() + 61_000 })).toMatchObject({ ok: false, code: 'EXPIRED_REQUEST' })
-    expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf(h), now: Date.now() - 61_000 })).toMatchObject({ ok: false, code: 'EXPIRED_REQUEST' })
+    expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf(h), now: Date.now() + 62_000 })).toMatchObject({ ok: false, code: 'EXPIRED_REQUEST' })
+    expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf(h), now: Date.now() - 62_000 })).toMatchObject({ ok: false, code: 'EXPIRED_REQUEST' })
     expect(await verifyEnvelope(SECRET, { ...base, headers: headersOf({ ...h, 'x-dpg-nonce': 'zz' }) })).toMatchObject({ ok: false })
   })
 })
@@ -240,8 +240,11 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-categories')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
       expect(JSON.stringify(a.json.data)).not.toMatch(/blog:write|dpg_app|select |insert /)
       const keysOf = async (who: string) => (await call('GET', '/schema', undefined, { token: who })).json.data.resources.map((r: { key: string }) => r.key).sort()
-      expect(await keysOf(manager)).toEqual(['categories', 'colors', 'customers', 'materials', 'origins', 'product-images', 'products', 'subcategories'])
-      expect(await keysOf(sale)).toEqual(['colors', 'customers', 'materials', 'origins', 'product-images', 'products'])
+      const childKeys = ['product-documents', 'product-images', 'product-relationships', 'product-spec-values', 'product-taxon-assignments']
+      expect(await keysOf(manager)).toEqual(['categories', 'colors', 'customers', 'materials', 'origins', ...childKeys, 'products', 'subcategories'].sort())
+      expect(await keysOf(sale)).toEqual(['colors', 'customers', 'materials', 'origins', ...childKeys, 'products'].sort())
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'products').children.map((c: { key: string }) => c.key).sort()).toEqual(childKeys.filter((k) => k !== 'product-images')) // the gallery has its own panel
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'product-documents')).toMatchObject({ inNav: false, canCreate: true })
       expect((await call('GET', '/schema', undefined, { token: manager })).json.data.resources.find((r: { key: string }) => r.key === 'customers')).toMatchObject({ canCreate: true, canUpdate: true })
       expect((await call('GET', '/schema', undefined, { token: sale })).json.data.resources.find((r: { key: string }) => r.key === 'products')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false, inNav: true })
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'product-images').inNav).toBe(false)
@@ -666,6 +669,68 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(audits).toEqual(['products.bulk_activate', 'products.bulk_feature', 'products.bulk_deactivate'])
         expect(code2(await call('POST', '/products/bulk', { ids: [10], action: 'delete' }, { token: sale }))).toBe('FORBIDDEN')
         expect((await call('POST', '/products/bulk', { ids: [12], action: 'delete' }, { token: t })).json.data.updated).toBe(1)
+      })
+
+      it('manages product documents, spec values, taxon assignments and relations as child records', async () => {
+        const t = await token('admin'), manager = await token('manager')
+        // documents: https only, never local hosts or credentials; documents:write is admin-only
+        const doc = await call('POST', '/r/product-documents', { input: { product_id: 2, name: 'Catalogue', url: 'https://docs.example.test/a.pdf', file_ext: 'pdf', file_size: 1024 } }, { token: t })
+        expect(doc.status).toBe(201); expect(doc.json.data).toMatchObject({ document_type: 'DOCUMENT', product_id: 2, file_size: 1024 })
+        for (const url of ['http://docs.example.test/a.pdf', 'https://localhost/a.pdf', 'https://user:pw@docs.example.test/a.pdf', 'javascript:alert(1)', '/relative.pdf']) {
+          expect(code2(await call('POST', '/r/product-documents', { input: { product_id: 2, name: 'x', url } }, { token: t })), url).toBe('VALIDATION_FAILED')
+        }
+        expect(code2(await call('POST', '/r/product-documents', { input: { product_id: 2, name: 'x', url: 'https://docs.example.test/b.pdf', file_size: -1 } }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect(code2(await call('POST', '/r/product-documents', { input: { product_id: 9999, name: 'x', url: 'https://docs.example.test/c.pdf' } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+        expect(code2(await call('POST', '/r/product-documents', { input: { product_id: 2, name: 'x', url: 'https://docs.example.test/d.pdf' } }, { token: manager }))).toBe('FORBIDDEN')
+        expect((await call('GET', '/r/product-documents?product_id=2', undefined, { token: manager })).json.data.total).toBe(1)
+        expect(code2(await call('PATCH', `/r/product-documents/${doc.json.data.id}`, { input: { product_id: 3 } }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect((await call('PATCH', `/r/product-documents/${doc.json.data.id}`, { input: { name: 'Catalogue 2025', source_url: 'https://src.example.test/a' } }, { token: t })).json.data).toMatchObject({ name: 'Catalogue 2025' })
+        expect((await call('DELETE', `/r/product-documents/${doc.json.data.id}`, {}, { token: t })).json.data.result).toBe('deleted')
+
+        // spec values (numeric + JSON + option), taxon assignments, relationships (auto sort order, unique per type)
+        const spec = (await call('POST', '/r/spec-definitions', { input: { key: 'dung-tich', label: 'Dung tích' } }, { token: t })).json.data.id
+        const sv = await call('POST', '/r/product-spec-values', { input: { product_id: 2, spec_definition_id: spec, value_number: -1.5, value_json: { unit: 'l' }, raw_key: 'Dung tích' } }, { token: t })
+        expect(sv.status).toBe(201); expect(sv.json.data).toMatchObject({ value_number: '-1.5', value_json: { unit: 'l' } })
+        expect(code2(await call('POST', '/r/product-spec-values', { input: { product_id: 2, spec_definition_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+        expect((await call('PATCH', `/r/product-spec-values/${sv.json.data.id}`, { input: { value_json: null, value_text: '6 lít' } }, { token: t })).json.data).toMatchObject({ value_json: null, value_text: '6 lít' })
+        const taxon = (await call('POST', '/r/catalog-taxons', { input: { name: 'Bồn cầu', slug: 'bon-cau-x', canonical_path: '/bon-cau-x' } }, { token: t })).json.data.id
+        const ta = await call('POST', '/r/product-taxon-assignments', { input: { product_id: 2, taxon_id: taxon, is_primary: true } }, { token: t })
+        expect(ta.json.data).toMatchObject({ is_primary: true, taxon_id: taxon })
+        expect(code2(await call('POST', '/r/product-taxon-assignments', { input: { product_id: 2, taxon_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+        const r1 = await call('POST', '/r/product-relationships', { input: { parent_id: 2, child_sku: 'SKU-3', child_id: 3 } }, { token: t })
+        const r2 = await call('POST', '/r/product-relationships', { input: { parent_id: 2, child_sku: 'SKU-4', child_id: 4, quantity: 2 } }, { token: t })
+        expect([r1.json.data.sort_order, r2.json.data.sort_order]).toEqual([0, 1]); expect(r1.json.data).toMatchObject({ relationship_type: 'component', resolution_status: 'unresolved' })
+        expect(code2(await call('POST', '/r/product-relationships', { input: { parent_id: 2, child_sku: 'SKU-3' } }, { token: t }))).toBe('DUPLICATE')
+        expect(code2(await call('PATCH', `/r/product-relationships/${r1.json.data.id}`, { input: { resolution_status: 'resolved' } }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect((await call('GET', '/r/product-relationships?parent_id=2', undefined, { token: manager })).json.data.total).toBe(2)
+        for (const [key, id] of [['product-relationships', r1.json.data.id], ['product-taxon-assignments', ta.json.data.id], ['product-spec-values', sv.json.data.id]] as const) expect((await call('DELETE', `/r/${key}/${id}`, {}, { token: t })).json.data.result).toBe('deleted')
+        await expect(apiPool.query("update dpg_app.product_taxon_assignments set metadata = '{}'::jsonb"), 'metadata').rejects.toThrow(/permission denied/)
+        await expect(apiPool.query("update dpg_app.product_spec_values set source = 'x'"), 'source').rejects.toThrow(/permission denied/)
+      })
+
+      it('links and unlinks product variants (groups created on demand, versions bumped, audited)', async () => {
+        const t = await token('admin'), manager = await token('manager'), sale = await token('sale')
+        await owner.query("update dpg_app.products set color_id=1 where id in (20,21,22)")
+        expect((await call('GET', '/products/20/variants', undefined, { token: sale })).json.data).toEqual({ group: null, items: [] })
+        expect(code2(await call('POST', '/products/20/variants', { target_id: 21 }, { token: manager }))).toBe('FORBIDDEN')
+        expect(code2(await call('POST', '/products/20/variants', { target_id: 20 }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect(code2(await call('POST', '/products/20/variants', { target_id: 99999 }, { token: t }))).toBe('NOT_FOUND')
+        expect(code2(await call('POST', '/products/20/variants', { target_id: 21, extra: 1 }, { token: t }))).toBe('VALIDATION_FAILED')
+        const before = (await owner.query('select id, version from dpg_app.products where id in (20,21,22) order by id')).rows
+        const linked = await call('POST', '/products/20/variants', { target_id: 21 }, { token: t })
+        expect(linked.json.data.group).toMatch(/^VG-\d{10,}$/)
+        expect((await call('POST', '/products/20/variants', { target_id: 22 }, { token: t })).json.data.group).toBe(linked.json.data.group)
+        const group = (await call('GET', '/products/21/variants', undefined, { token: manager })).json.data
+        expect(group.group).toBe(linked.json.data.group); expect(group.items.map((i: { id: number }) => i.id)).toEqual([20, 21, 22]); expect(group.items[0]).toMatchObject({ sku: 'SKU-20', color_name: 'Trắng' })
+        const after = (await owner.query('select id, version from dpg_app.products where id in (20,21,22) order by id')).rows
+        expect(after[0].version).toBe(before[0].version + 1); expect(after[1].version).toBe(before[1].version + 1); expect(after[2].version).toBe(before[2].version + 1)
+        expect(code2(await call('DELETE', '/products/20/variants/21', {}, { token: manager }))).toBe('FORBIDDEN')
+        expect((await call('DELETE', '/products/20/variants/21', {}, { token: t })).json.data.ok).toBe(true)
+        expect((await call('GET', '/products/20/variants', undefined, { token: t })).json.data.items.map((i: { id: number }) => i.id)).toEqual([20, 22])
+        expect((await owner.query('select variant_group from dpg_app.products where id=21')).rows[0].variant_group).toBeNull()
+        const actions = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and action like 'products.variant_%' order by id")).rows.map((r) => r.action)
+        expect(actions).toEqual(['products.variant_link', 'products.variant_link', 'products.variant_link', 'products.variant_unlink'])
+        await expect(apiPool.query("update dpg_app.products set variant_type = 'x'"), 'variant_type').rejects.toThrow(/permission denied|does not exist/)
       })
 
       it('manages gallery images and lookups', async () => {

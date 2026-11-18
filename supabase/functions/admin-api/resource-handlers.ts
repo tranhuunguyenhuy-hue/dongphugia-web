@@ -40,7 +40,7 @@ function readableSelect(def: ResourceDef, alias = 't') {
 /** Field metadata for the SPA forms. Contains no permission strings or SQL. */
 export function resourceMeta(role: AdminRole) {
   return RESOURCES.filter((def) => can(role, def.read)).map((def) => ({
-    key: def.key, label: def.label, group: def.group, inNav: Boolean(def.write) && !def.hideFromNav,
+    key: def.key, label: def.label, group: def.group, children: RESOURCES.filter((c) => c.childOf?.parent === def.key && can(role, c.read)).map((c) => ({ key: c.key, column: c.childOf!.column })), inNav: Boolean(def.write) && !def.hideFromNav,
     canCreate: Boolean(def.create && def.write && can(role, def.write)),
     canUpdate: Boolean(def.write && def.update !== false && can(role, def.write)),
     canDelete: Boolean(def.delete && can(role, def.remove ?? def.write ?? def.read) && def.write),

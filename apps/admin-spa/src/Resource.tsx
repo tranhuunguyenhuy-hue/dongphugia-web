@@ -125,7 +125,7 @@ export function buildInput(meta: ResourceMeta, form: Row, original: Row | null):
   return input
 }
 
-export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number | null; go: (to: string) => void }) {
+export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceMeta; id: number | null; go: (to: string) => void; resources?: ResourceMeta[] }) {
   const creating = id === null
   const [original, setOriginal] = useState<Row | null>(null); const [form, setForm] = useState<Row>(() => initialRow(meta))
   const [options, setOptions] = useState<Record<string, Option[]>>({}); const [loaded, setLoaded] = useState(creating)
@@ -218,6 +218,8 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
         </fieldset>
       ))}
       {error && <p role="alert" className="error">{error}</p>}{message && <p role="status" className="ok">{message}</p>}
+      {!creating && (meta.children ?? []).map((c) => { const child = resources.find((r) => r.key === c.key); return child ? <ChildPanel key={c.key} child={child} column={c.column} parentId={id} /> : null })}
+      {meta.key === 'products' && !creating && <Variants productId={id} canEdit={meta.canUpdate} />}
       {meta.key === 'products' && !creating && <Gallery productId={id} canEdit={meta.canUpdate} mainUrl={String(form.image_main_url ?? '')} onSetMain={(url) => set('image_main_url', url)} />}
       <div className="bar">
         {canEdit ? <button disabled={busy}>{busy ? 'Đang xử lý…' : creating ? 'Tạo' : 'Lưu'}</button> : <p className="muted">Vai trò của bạn chỉ có quyền xem.</p>}
@@ -260,6 +262,103 @@ function Gallery({ productId, canEdit, mainUrl, onSetMain }: { productId: number
         void run(async () => { const url = await uploadImage(file, 'products', 'product'); await api.create('product-images', { product_id: productId, image_url: url, sort_order: items.length }) })
       }} />}
       <p className="muted">Ảnh chính được lưu cùng sản phẩm: chọn «Ảnh chính» rồi nhấn Lưu.</p>
+      {error && <p role="alert" className="error">{error}</p>}
+    </fieldset>
+  )
+}
+
+/** Compact input for one field of a child record (used by ChildPanel; the main form has its own richer inputs). */
+function SimpleInput({ field, value, options, disabled, onChange }: { field: FieldMeta; value: unknown; options: { id: number; label: string }[]; disabled: boolean; onChange: (value: unknown) => void }) {
+  const [jsonText, setJsonText] = useState<string | null>(null)
+  const id = `c-${field.name}`
+  switch (field.kind) {
+    case 'bool': return <input id={id} type="checkbox" disabled={disabled} checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
+    case 'enum': return <select id={id} disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>{(field.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}</select>
+    case 'ref': return <select id={id} disabled={disabled} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}><option value="">— chọn —</option>{options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}</select>
+    case 'int': case 'money': return <input id={id} type="number" step="any" disabled={disabled} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
+    case 'textarea': case 'html': return <textarea id={id} rows={3} disabled={disabled} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+    case 'json': return <textarea id={id} rows={3} className="mono" spellCheck={false} disabled={disabled} value={jsonText ?? (value === null || value === undefined ? '' : JSON.stringify(value, null, 2))} onChange={(e) => {
+      const text = e.target.value; setJsonText(text)
+      if (text.trim() === '') { onChange(null); return }
+      try { const parsed = JSON.parse(text); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) onChange(parsed) } catch { /* keep the previous valid value until the text parses */ }
+    }} />
+    default: return <input id={id} type={field.kind === 'url' ? 'url' : 'text'} disabled={disabled} maxLength={field.max} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
+  }
+}
+
+/** Child records of a parent (documents, spec values, taxon assignments, relations): list, add, edit, delete in place. */
+function ChildPanel({ child, column, parentId }: { child: ResourceMeta; column: string; parentId: number | null }) {
+  const [items, setItems] = useState<Row[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0)
+  const [editing, setEditing] = useState<{ id: number | null; form: Row } | null>(null); const [options, setOptions] = useState<Record<string, { id: number; label: string }[]>>({})
+  useEffect(() => {
+    let live = true
+    api.list(child.key, { [column]: parentId ?? '', limit: 50 }).then((r) => { if (live) setItems(r.items) }).catch((e) => { if (live) setError(errorText(e)) })
+    return () => { live = false }
+  }, [child.key, column, parentId, reload])
+  useEffect(() => {
+    let live = true
+    for (const ref of new Set(child.fields.filter((f) => f.kind === 'ref').map((f) => f.ref!))) api.options(ref).then((list) => { if (live) setOptions((o) => ({ ...o, [ref]: list })) }).catch(() => undefined)
+    return () => { live = false }
+  }, [child])
+  const fields = child.fields.filter((f) => !f.readOnly && f.name !== column && (f.editable))
+  const listFields = child.fields.filter((f) => f.list && f.name !== column)
+  const label = (f: FieldMeta, v: unknown) => (v === null || v === undefined || v === '' ? '—' : f.kind === 'bool' ? (v ? 'Có' : 'Không') : f.kind === 'ref' ? (options[f.ref!]?.find((o) => o.id === Number(v))?.label ?? String(v)) : String(v))
+  const save = async () => {
+    if (!editing) return
+    setBusy(true); setError('')
+    try {
+      const input: Row = {}
+      for (const f of fields) {
+        const v = editing.form[f.name]
+        if (editing.id === null) { if (v !== undefined && v !== '' && !(v === null && !f.nullable)) input[f.name] = v } else if (JSON.stringify(v ?? null) !== JSON.stringify(items.find((r) => r.id === editing.id)?.[f.name] ?? null)) input[f.name] = v === undefined ? null : v
+      }
+      if (editing.id === null) await api.create(child.key, { ...input, [column]: parentId })
+      else if (Object.keys(input).length) await api.update(child.key, editing.id, undefined, input)
+      setEditing(null); setReload((n) => n + 1)
+    } catch (e) { setError(errorText(e, Object.fromEntries(child.fields.map((f) => [f.name, f.label])))) } finally { setBusy(false) }
+  }
+  return (
+    <fieldset className="field child" disabled={busy}>
+      <legend>{child.label} ({items.length})</legend>
+      {items.length > 0 && <div className="scroll"><table><thead><tr>{listFields.map((f) => <th key={f.name}>{f.label}</th>)}<th /></tr></thead><tbody>
+        {items.map((row) => <tr key={String(row.id)}>{listFields.map((f) => <td key={f.name}>{label(f, row[f.name])}</td>)}<td>
+          {child.canUpdate && <button type="button" onClick={() => setEditing({ id: Number(row.id), form: { ...row } })}>Sửa</button>}{' '}
+          {child.canDelete && <button type="button" className="danger" onClick={() => { if (window.confirm('Xóa mục này?')) { setBusy(true); api.remove(child.key, Number(row.id), undefined).then(() => setReload((n) => n + 1)).catch((e) => setError(errorText(e))).finally(() => setBusy(false)) } }}>Xóa</button>}
+        </td></tr>)}</tbody></table></div>}
+      {!items.length && <p className="muted">Chưa có dữ liệu.</p>}
+      {editing && (
+        <div className="grid">
+          {fields.filter((f) => editing.id !== null || true).map((f) => (
+            <div key={f.name} className={f.kind === 'bool' ? 'field check' : 'field'}><label htmlFor={`c-${f.name}`}>{f.label}{f.required ? ' *' : ''}</label>
+              <SimpleInput field={f} value={editing.form[f.name]} options={options[f.ref ?? ''] ?? []} disabled={busy || (editing.id !== null && f.createOnly === true)} onChange={(v) => setEditing({ ...editing, form: { ...editing.form, [f.name]: v } })} /></div>))}
+          <div className="bar"><button type="button" onClick={save}>{editing.id === null ? 'Thêm' : 'Lưu'}</button><button type="button" onClick={() => setEditing(null)}>Hủy</button></div>
+        </div>)}
+      {!editing && child.canCreate && <button type="button" onClick={() => setEditing({ id: null, form: Object.fromEntries(child.fields.filter((f) => f.initial !== undefined).map((f) => [f.name, f.initial])) })}>+ Thêm {child.label.toLowerCase()}</button>}
+      {error && <p role="alert" className="error">{error}</p>}
+    </fieldset>
+  )
+}
+
+/** Variant group of a product: members, link another product (search by name/SKU), unlink. */
+function Variants({ productId, canEdit }: { productId: number; canEdit: boolean }) {
+  const [data, setData] = useState<{ group: string | null; items: { id: number; sku: string; name: string; price: number | null; color_name: string | null }[] }>({ group: null, items: [] })
+  const [q, setQ] = useState(''); const [term, setTerm] = useState(''); const [found, setFound] = useState<Row[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0)
+  useEffect(() => { const t = setTimeout(() => setTerm(q.trim()), 300); return () => clearTimeout(t) }, [q])
+  useEffect(() => { let live = true; api.variants(productId).then((d) => { if (live) setData(d) }).catch((e) => { if (live) setError(errorText(e)) }); return () => { live = false } }, [productId, reload])
+  useEffect(() => {
+    let live = true
+    if (term.length >= 2) api.list('products', { q: term, limit: 8 }).then((r) => { if (live) setFound(r.items.filter((p) => Number(p.id) !== productId)) }).catch(() => undefined)
+    return () => { live = false }
+  }, [term, productId])
+  const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(''); try { await fn(); setReload((n) => n + 1); setFound([]); setQ('') } catch (e) { setError(errorText(e)) } finally { setBusy(false) } }
+  return (
+    <fieldset className="field child" disabled={busy}>
+      <legend>Biến thể {data.group ? `(${data.group})` : ''}</legend>
+      {data.items.length ? <div className="scroll"><table><thead><tr><th>SKU</th><th>Tên</th><th>Màu</th><th>Giá</th><th /></tr></thead><tbody>
+        {data.items.map((v) => <tr key={v.id}><td>{v.sku}</td><td>{v.name}</td><td>{v.color_name ?? '—'}</td><td>{v.price === null ? '—' : new Intl.NumberFormat('vi-VN').format(v.price) + ' đ'}</td>
+          <td>{canEdit && v.id !== productId && <button type="button" className="danger" onClick={() => { if (window.confirm('Gỡ sản phẩm này khỏi nhóm biến thể?')) void run(() => api.unlinkVariant(productId, v.id)) }}>Gỡ</button>}</td></tr>)}</tbody></table></div> : <p className="muted">Chưa thuộc nhóm biến thể nào.</p>}
+      {canEdit && <div className="stack"><input type="search" aria-label="Tìm sản phẩm để liên kết biến thể" placeholder="Tìm theo tên hoặc SKU (từ 2 ký tự)" value={q} onChange={(e) => setQ(e.target.value)} />
+        {found.map((p) => <div key={String(p.id)} className="bar"><span>{String(p.sku)} — {String(p.name)}</span><button type="button" onClick={() => void run(() => api.linkVariant(productId, Number(p.id)))}>Liên kết</button></div>)}</div>}
       {error && <p role="alert" className="error">{error}</p>}
     </fieldset>
   )

@@ -5,7 +5,7 @@
 import { ApiError, type Context, type Db } from './core.ts'
 import type { Permission } from './permissions.ts'
 
-export type FieldKind = 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email'
+export type FieldKind = 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email' | 'url'
 export interface FieldDef {
   name: string
   label: string
@@ -81,6 +81,8 @@ export interface ResourceDef {
   requireVersion?: boolean
   /** The table has no `updated_at` column (product_sub_types, spec_options). */
   noUpdatedAt?: boolean
+  /** Rows belong to a parent record and are edited from the parent's screen (documents, spec values, ...). */
+  childOf?: { parent: string; column: string }
   /** Edited from inside another screen (e.g. product gallery) rather than from the navigation. */
   hideFromNav?: boolean
   create?: boolean
@@ -148,6 +150,12 @@ const userHook: WriteHook = async ({ mode, existing, input, ctx, tx, services })
     if (typeof input.password === 'string' || input.is_active === false) await tx.query('delete from dpg_app.admin_sessions where user_id = $1', [existing.id])
   }
   return { set }
+}
+/** Legacy addProductRelationship: a new relation goes to the end of the parent's list for that type. */
+const relationshipHook: WriteHook = async ({ mode, tx, input }) => {
+  if (mode !== 'create' || input.sort_order !== undefined) return undefined
+  const rows = await tx.query<{ n: string }>('select count(*) as n from dpg_app.product_relationships where parent_id = $1 and relationship_type = $2', [input.parent_id, input.relationship_type ?? 'component'])
+  return { set: { sort_order: Number(rows[0].n) } }
 }
 const customerHook: WriteHook = ({ mode }) => (mode === 'create' ? { set: { last_interacted_at: RAW_NOW } } : undefined)
 
@@ -498,6 +506,64 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'alt_text', label: 'Mô tả ảnh', kind: 'text', max: 300 },
       { name: 'image_type', label: 'Loại ảnh', kind: 'text', max: 20, nullable: false, min: 1, initial: 'gallery' },
       { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, list: true, initial: 0 },
+    ],
+  },
+
+  {
+    key: 'product-documents', label: 'Tài liệu sản phẩm', group: 'Sản phẩm', table: 'product_documents', noUpdatedAt: true, hideFromNav: true, childOf: { parent: 'products', column: 'product_id' },
+    read: 'products:read', write: 'documents:write', create: true, delete: 'hard', search: [], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
+    filters: [{ name: 'product_id', label: 'Sản phẩm', kind: 'int' }],
+    fields: [
+      { name: 'product_id', label: 'Sản phẩm', kind: 'int', required: true, createOnly: true, min: 1 },
+      { name: 'name', label: 'Tên tài liệu', kind: 'text', required: true, max: 200, list: true },
+      { name: 'url', label: 'Đường dẫn (https)', kind: 'url', required: true, max: 1000, list: true },
+      { name: 'source_url', label: 'Nguồn (https)', kind: 'url', max: 1000 },
+      { name: 'document_type', label: 'Loại', kind: 'text', max: 30, nullable: false, min: 1, list: true, initial: 'DOCUMENT' },
+      { name: 'file_ext', label: 'Định dạng', kind: 'text', max: 20 },
+      { name: 'file_size', label: 'Dung lượng (byte)', kind: 'int', min: 0, nullable: true },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, initial: 0 },
+    ],
+  },
+  {
+    key: 'product-spec-values', label: 'Thông số của sản phẩm', group: 'Sản phẩm', table: 'product_spec_values', hideFromNav: true, childOf: { parent: 'products', column: 'product_id' },
+    read: 'products:read', write: 'specifications:write', create: true, delete: 'hard', search: [], orderBy: 'sort_order asc, id asc', optionLabel: 'raw_key',
+    filters: [{ name: 'product_id', label: 'Sản phẩm', kind: 'int' }],
+    fields: [
+      { name: 'product_id', label: 'Sản phẩm', kind: 'int', required: true, createOnly: true, min: 1 },
+      { name: 'spec_definition_id', label: 'Thông số', kind: 'ref', ref: 'spec-definitions', required: true, list: true },
+      { name: 'option_id', label: 'Giá trị chọn sẵn', kind: 'ref', ref: 'spec-options', nullable: true, list: true },
+      { name: 'value_text', label: 'Giá trị (chữ)', kind: 'text', max: 500, list: true },
+      { name: 'value_number', label: 'Giá trị (số)', kind: 'money', min: -999_999_999, nullable: true },
+      { name: 'value_json', label: 'Giá trị (JSON)', kind: 'json', nullable: true },
+      { name: 'raw_key', label: 'Khóa gốc', kind: 'text', max: 200 },
+      { name: 'raw_value', label: 'Giá trị gốc', kind: 'textarea', max: 10000 },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, initial: 0 },
+    ],
+  },
+  {
+    key: 'product-taxon-assignments', label: 'Phân loại của sản phẩm', group: 'Sản phẩm', table: 'product_taxon_assignments', hideFromNav: true, childOf: { parent: 'products', column: 'product_id' },
+    read: 'products:read', write: 'taxonomy:write', create: true, delete: 'hard', search: [], orderBy: 'sort_order asc, id asc', optionLabel: 'taxon_id',
+    filters: [{ name: 'product_id', label: 'Sản phẩm', kind: 'int' }],
+    fields: [
+      { name: 'product_id', label: 'Sản phẩm', kind: 'int', required: true, createOnly: true, min: 1 },
+      { name: 'taxon_id', label: 'Phân loại', kind: 'ref', ref: 'catalog-taxons', required: true, list: true },
+      { name: 'is_primary', label: 'Phân loại chính', kind: 'bool', list: true },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, initial: 0 },
+    ],
+  },
+  {
+    key: 'product-relationships', label: 'Sản phẩm liên kết', group: 'Sản phẩm', table: 'product_relationships', noUpdatedAt: true, hideFromNav: true, childOf: { parent: 'products', column: 'parent_id' }, hook: relationshipHook,
+    read: 'products:read', write: 'products:write', create: true, delete: 'hard', search: [], orderBy: 'sort_order asc, id asc', optionLabel: 'child_sku',
+    filters: [{ name: 'parent_id', label: 'Sản phẩm cha', kind: 'int' }],
+    fields: [
+      { name: 'parent_id', label: 'Sản phẩm cha', kind: 'int', required: true, createOnly: true, min: 1 },
+      { name: 'child_id', label: 'ID sản phẩm con', kind: 'int', min: 1, nullable: true, list: true },
+      { name: 'child_sku', label: 'SKU sản phẩm con', kind: 'text', required: true, max: 200, list: true },
+      { name: 'relationship_type', label: 'Kiểu liên kết', kind: 'text', max: 50, nullable: false, min: 1, list: true, initial: 'component' },
+      { name: 'component_type', label: 'Loại thành phần', kind: 'text', max: 30, nullable: false, min: 1, initial: 'component' },
+      { name: 'quantity', label: 'Số lượng', kind: 'int', min: 1, max: 100000, nullable: true, list: true },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000 },
+      { name: 'resolution_status', label: 'Trạng thái liên kết', kind: 'text', max: 30, readOnly: true },
     ],
   },
 ]

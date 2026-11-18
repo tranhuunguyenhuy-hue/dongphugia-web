@@ -169,6 +169,12 @@ function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string
   if (method === 'GET' && path === '/assignees') return commerce.listAssignees(cd, ctx)
   if (method === 'GET' && path === '/dashboard') return commerce.dashboard(cd, ctx, search)
   if (method === 'POST' && path === '/products/bulk') return commerce.bulkProducts(cd, ctx, body)
+  const variants = path.match(/^\/products\/(\d{1,9})\/variants(?:\/(\d{1,9}))?$/)
+  if (variants) {
+    const pid = Number(variants[1])
+    if (variants[2] === undefined) return method === 'GET' ? commerce.listVariants(cd, ctx, pid) : method === 'POST' ? commerce.linkVariant(cd, ctx, pid, body) : undefined
+    return method === 'DELETE' ? commerce.unlinkVariant(cd, ctx, pid, Number(variants[2])) : undefined
+  }
   const m = path.match(/^\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|payment|assign|complete))?$/)
   if (!m) return undefined
   const [, kind, rawId, action] = m

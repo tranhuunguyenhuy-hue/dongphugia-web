@@ -59,8 +59,9 @@ RBAC, audit, the form metadata served at `/schema`, and the generated column-lev
 | Banners / Đối tác / Dự án | `/r/banners`, `/r/partners`, `/r/projects` | partner/project slug generated once (legacy behaviour) |
 | Users | `/r/users` | bcrypt cost 12 server-side, sessions revoked on password change/deactivation, last active admin protected |
 
-Not ported (explicit gaps, tracked for M5): product-level taxonomy assignments, spec values, documents, relationships (combo
-components) and variant linking inside the product editor; legacy "quick create product" modal; order creation (legacy has no UI for it).
+Product editor also covers: gallery, documents (https only), spec values, taxon assignments, relations (combo components) as child records, and variant link/unlink (legacy `variant_group` semantics).
+
+Not ported (explicit gaps, tracked for M5): the legacy "quick create product" modal and drag-reorder of the product list (sort order is editable per product); order creation (legacy has no UI for it); the PIM "pilot" screens.
 
 ## Owner action for hosted verification (TEST)
 Run **`supabase/m3-test/005_m3_test_admin_resources.sql`** in the SQL Editor of `dongphugia-staging` (ref `uybumsnyqpwcidjxmfsv`;

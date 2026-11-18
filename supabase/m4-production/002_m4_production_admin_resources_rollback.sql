@@ -25,10 +25,18 @@ revoke all on dpg_app.orders from dpg_admin_api;
 revoke all on dpg_app.origins from dpg_admin_api;
 revoke all on dpg_app.partners from dpg_admin_api;
 revoke all on sequence dpg_app.partners_id_seq from dpg_admin_api;
+revoke all on dpg_app.product_documents from dpg_admin_api;
+revoke all on sequence dpg_app.product_documents_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_images from dpg_admin_api;
 revoke all on sequence dpg_app.product_images_id_seq from dpg_admin_api;
+revoke all on dpg_app.product_relationships from dpg_admin_api;
+revoke all on sequence dpg_app.product_relationships_id_seq from dpg_admin_api;
+revoke all on dpg_app.product_spec_values from dpg_admin_api;
+revoke all on sequence dpg_app.product_spec_values_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_sub_types from dpg_admin_api;
 revoke all on sequence dpg_app.product_sub_types_id_seq from dpg_admin_api;
+revoke all on dpg_app.product_taxon_assignments from dpg_admin_api;
+revoke all on sequence dpg_app.product_taxon_assignments_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_types from dpg_admin_api;
 revoke all on sequence dpg_app.product_types_id_seq from dpg_admin_api;
 revoke all on dpg_app.products from dpg_admin_api;
@@ -87,13 +95,29 @@ begin
     ('partners','insert'),
     ('partners','update'),
     ('partners','delete'),
+    ('product_documents','select'),
+    ('product_documents','insert'),
+    ('product_documents','update'),
+    ('product_documents','delete'),
     ('product_images','select'),
     ('product_images','insert'),
     ('product_images','update'),
     ('product_images','delete'),
+    ('product_relationships','select'),
+    ('product_relationships','insert'),
+    ('product_relationships','update'),
+    ('product_relationships','delete'),
+    ('product_spec_values','select'),
+    ('product_spec_values','insert'),
+    ('product_spec_values','update'),
+    ('product_spec_values','delete'),
     ('product_sub_types','select'),
     ('product_sub_types','insert'),
     ('product_sub_types','update'),
+    ('product_taxon_assignments','select'),
+    ('product_taxon_assignments','insert'),
+    ('product_taxon_assignments','update'),
+    ('product_taxon_assignments','delete'),
     ('product_types','select'),
     ('product_types','insert'),
     ('product_types','update'),

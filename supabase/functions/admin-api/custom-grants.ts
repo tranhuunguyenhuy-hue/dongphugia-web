@@ -13,5 +13,7 @@ export const CUSTOM_GRANTS: ExtraGrant[] = [
   { table: 'quote_requests', select: QUOTE_READ, update: ['status', 'assigned_to', 'admin_notes', 'shipping_fee', 'vat_rate', 'customer_id', 'updated_at'] },
   // Completing a quote links/creates the customer (CSKH): the interaction timestamp is touched by that flow only.
   { table: 'customers', update: ['last_interacted_at'] },
+  // Variant groups (legacy link/unlink variant): the grouping column of products is touched only by those two flows.
+  { table: 'products', select: ['variant_group'], update: ['variant_group'] },
   { table: 'quote_items', select: ['id', 'quote_id', 'product_id', 'quantity', 'note', 'admin_quantity', 'admin_unit_price', 'product_sku_snapshot', 'product_name_snapshot', 'snapshot_at', 'list_price_snapshot', 'sale_price_snapshot'], update: ['admin_quantity', 'admin_unit_price'] },
 ]

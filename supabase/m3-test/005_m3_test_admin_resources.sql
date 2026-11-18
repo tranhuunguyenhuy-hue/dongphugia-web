@@ -83,26 +83,50 @@ grant insert (description, gradient_class, is_active, link_url, logo_url, name, 
 grant update (description, gradient_class, is_active, link_url, logo_url, name, sort_order, tier, updated_at) on dpg_app.partners to dpg_admin_api_test;
 grant delete on dpg_app.partners to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.partners_id_seq to dpg_admin_api_test;
+-- product_documents
+grant select (document_type, file_ext, file_size, id, name, product_id, sort_order, source_url, url) on dpg_app.product_documents to dpg_admin_api_test;
+grant insert (document_type, file_ext, file_size, name, product_id, sort_order, source_url, url) on dpg_app.product_documents to dpg_admin_api_test;
+grant update (document_type, file_ext, file_size, name, sort_order, source_url, url) on dpg_app.product_documents to dpg_admin_api_test;
+grant delete on dpg_app.product_documents to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.product_documents_id_seq to dpg_admin_api_test;
 -- product_images
 grant select (alt_text, id, image_type, image_url, product_id, sort_order) on dpg_app.product_images to dpg_admin_api_test;
 grant insert (alt_text, image_type, image_url, product_id, sort_order) on dpg_app.product_images to dpg_admin_api_test;
 grant update (alt_text, image_type, image_url, sort_order) on dpg_app.product_images to dpg_admin_api_test;
 grant delete on dpg_app.product_images to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.product_images_id_seq to dpg_admin_api_test;
+-- product_relationships
+grant select (child_id, child_sku, component_type, id, parent_id, quantity, relationship_type, resolution_status, sort_order) on dpg_app.product_relationships to dpg_admin_api_test;
+grant insert (child_id, child_sku, component_type, parent_id, quantity, relationship_type, sort_order) on dpg_app.product_relationships to dpg_admin_api_test;
+grant update (child_id, child_sku, component_type, quantity, relationship_type, sort_order) on dpg_app.product_relationships to dpg_admin_api_test;
+grant delete on dpg_app.product_relationships to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.product_relationships_id_seq to dpg_admin_api_test;
+-- product_spec_values
+grant select (id, option_id, product_id, raw_key, raw_value, sort_order, spec_definition_id, value_json, value_number, value_text) on dpg_app.product_spec_values to dpg_admin_api_test;
+grant insert (option_id, product_id, raw_key, raw_value, sort_order, spec_definition_id, value_json, value_number, value_text) on dpg_app.product_spec_values to dpg_admin_api_test;
+grant update (option_id, raw_key, raw_value, sort_order, spec_definition_id, updated_at, value_json, value_number, value_text) on dpg_app.product_spec_values to dpg_admin_api_test;
+grant delete on dpg_app.product_spec_values to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.product_spec_values_id_seq to dpg_admin_api_test;
 -- product_sub_types
 grant select (id, is_active, name, product_type_id, slug, sort_order) on dpg_app.product_sub_types to dpg_admin_api_test;
 grant insert (is_active, name, product_type_id, slug, sort_order) on dpg_app.product_sub_types to dpg_admin_api_test;
 grant update (is_active, name, product_type_id, slug, sort_order) on dpg_app.product_sub_types to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.product_sub_types_id_seq to dpg_admin_api_test;
+-- product_taxon_assignments
+grant select (id, is_primary, product_id, sort_order, taxon_id) on dpg_app.product_taxon_assignments to dpg_admin_api_test;
+grant insert (is_primary, product_id, sort_order, taxon_id) on dpg_app.product_taxon_assignments to dpg_admin_api_test;
+grant update (is_primary, sort_order, taxon_id, updated_at) on dpg_app.product_taxon_assignments to dpg_admin_api_test;
+grant delete on dpg_app.product_taxon_assignments to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.product_taxon_assignments_id_seq to dpg_admin_api_test;
 -- product_types
 grant select (description, filter_policy, id, is_active, name, slug, sort_order, subcategory_id) on dpg_app.product_types to dpg_admin_api_test;
 grant insert (description, filter_policy, is_active, name, slug, sort_order, subcategory_id) on dpg_app.product_types to dpg_admin_api_test;
 grant update (description, filter_policy, is_active, name, slug, sort_order, subcategory_id, updated_at) on dpg_app.product_types to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.product_types_id_seq to dpg_admin_api_test;
 -- products
-grant select (brand_id, category_id, color_id, description, display_name, features, hita_product_id, id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sku, slug, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
+grant select (brand_id, category_id, color_id, description, display_name, features, hita_product_id, id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sku, slug, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, variant_group, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
 grant insert (brand_id, category_id, color_id, description, display_name, features, hita_product_id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sku, slug, sort_order, source_url, specs, stock_status, subcategory_id, warranty_months) on dpg_app.products to dpg_admin_api_test;
-grant update (brand_id, category_id, color_id, description, display_name, features, hita_product_id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
+grant update (brand_id, category_id, color_id, description, display_name, features, hita_product_id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, variant_group, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
 grant delete on dpg_app.products to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.products_id_seq to dpg_admin_api_test;
 -- projects
@@ -174,13 +198,29 @@ begin
     ('partners','insert'),
     ('partners','update'),
     ('partners','delete'),
+    ('product_documents','select'),
+    ('product_documents','insert'),
+    ('product_documents','update'),
+    ('product_documents','delete'),
     ('product_images','select'),
     ('product_images','insert'),
     ('product_images','update'),
     ('product_images','delete'),
+    ('product_relationships','select'),
+    ('product_relationships','insert'),
+    ('product_relationships','update'),
+    ('product_relationships','delete'),
+    ('product_spec_values','select'),
+    ('product_spec_values','insert'),
+    ('product_spec_values','update'),
+    ('product_spec_values','delete'),
     ('product_sub_types','select'),
     ('product_sub_types','insert'),
     ('product_sub_types','update'),
+    ('product_taxon_assignments','select'),
+    ('product_taxon_assignments','insert'),
+    ('product_taxon_assignments','update'),
+    ('product_taxon_assignments','delete'),
     ('product_types','select'),
     ('product_types','insert'),
     ('product_types','update'),
