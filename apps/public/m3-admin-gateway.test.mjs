@@ -77,6 +77,7 @@ describe('Admin shell gateway', () => {
     expect(url).toBe(`${FN}/products/7?x=1&q=%27`)
     const verified = await verifyEnvelope(SECRET, { method: 'PATCH', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })
     expect(verified).toMatchObject({ ok: true, clientIp: '203.0.113.7', origin: ORIGIN, sessionToken: TOKEN })
+    expect(new Headers(init.headers).get('x-region')).toBe('ap-southeast-1')
     // a GET carries no origin marker and no body
     await handleAdminNext(browser('/admin-next/api/products?limit=5'), environment(), ctx)
     const get = calls[1]; const headers = new Headers(get.init.headers)

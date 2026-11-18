@@ -174,9 +174,13 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
     if (!verified.ok) throw new ApiError(401, verified.code ?? 'INVALID_SIGNATURE')
     // Mutations must carry the gateway-verified same-origin marker (CSRF defence in depth).
     if (request.method !== 'GET' && request.method !== 'HEAD' && (!deps.allowedOrigin || verified.origin !== deps.allowedOrigin)) throw new ApiError(403, 'ORIGIN_NOT_ALLOWED')
-    await recordNonce(deps, verified.nonce)
     const ctx: Context = { request_id, ip: verified.clientIp }
-    if (verified.sessionToken) ctx.session = await loadSession(deps, verified.sessionToken)
+    // Replay check and session lookup are independent: issue them together so the driver pipelines both in one round trip.
+    const [, session] = await Promise.all([
+      recordNonce(deps, verified.nonce),
+      verified.sessionToken ? loadSession(deps, verified.sessionToken) : Promise.resolve(undefined),
+    ])
+    ctx.session = session
 
     let result: { status: number; body: unknown }
     if (request.method === 'POST' && path === '/login') result = await login(deps, ctx, body)

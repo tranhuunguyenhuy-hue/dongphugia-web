@@ -108,7 +108,9 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
   afterAll(async () => {
     await apiPool?.end(); await owner?.end()
     const admin = new Client({ connectionString: integrationUrl }); await admin.connect()
-    await admin.query(`drop database if exists ${dbName} with (force)`); await admin.query(`drop role if exists ${apiRole}`); await admin.end()
+    await admin.query(`drop database if exists ${dbName} with (force)`)
+    // The cluster-level role may legitimately still own grants in another local database; ignore that.
+    await admin.query(`drop role if exists ${apiRole}`).catch(() => undefined); await admin.end()
   })
 
   const deps = () => ({
