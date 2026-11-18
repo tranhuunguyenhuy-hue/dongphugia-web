@@ -1,31 +1,30 @@
-# Current checkpoint — M3 paused for quota
+# Current checkpoint — M3 code complete (local/CI), hosted acceptance waiting on one Owner step
 
-Last accepted Agent report: [Issue #309 / 6944468351](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309#issuecomment-6944468351), 2026-11-17 VN. Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) and [active M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Verify newer comments/current branch before action.
+Updated 2026-11-18 (UTC) by Claude Code under the Owner delegation in [#360 comment 6988598277](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988598277). Working issue [#360](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360); milestone [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Latest status comments: #360 / 6989649031, #309 / 6989916507.
 
 ## Status
 
-- M1 DONE / OWNER UAT PASS on 15 Nov, [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307); Production Public PostgreSQL, reported 5,362 listing products and 10 published Blog posts. Prior severe failures preserved in closed issue; do not claim root cause of every incident was proven.
-- M2 DONE / OWNER UAT PASS on 17 Nov, [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308#issuecomment-6940948568); fixed Preview Public parity. Chromium acceptance passed; historical mobile WebKit 503 remains unresolved and automated rerun UNKNOWN.
-- M3 ACTIVE / PAUSED. M4 and M5 queued. Owner may resume the same agent or hand off to Claude; no other lane.
+- M1 and M2: DONE / Owner UAT PASS (unchanged).
+- M3 (G4 architecture: static SPA + same-origin gateway + Supabase Edge Function `admin-api` + narrow DB role): pilot gate PASS ([#360 / 6988532875](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988532875)); all 12 legacy Admin areas ported in PR #378 (merged, main `11b99a4`). Local/CI evidence: 49 PostgreSQL/definition tests, 10 gateway tests, browser e2e 18/18 PASS (`scripts/m3/local-e2e`). **Hosted acceptance: UNKNOWN.**
+- M4: package prepared (`supabase/m4-production/001+002` + rollbacks, tested on a Production-shaped database), **not executed**. M5: partial (publisher resilience, cache TTL 45 s); backlog open.
 
-## Source to resume
+## Blocked on the Owner (nothing else blocks M3 hosted acceptance)
 
-Branch `feat/m3-legacy-admin-preview`; Codex implementation checkpoint `867379b5f9797e441c91b5f10887accd2c6f6e1b`. The subsequent documentation-normalization commit must preserve this ancestor. Use branch HEAD, not main checkout for implementation. At checkpoint branch was pushed, clean, 10 commits ahead of main `00914b73fe6eed8dd78a8e8d8884bfa475c60870` and no PR. Local combined build/typecheck PASS at `6c03426c627855fbe4d4baf11d44c995f805c562`; focused regressions 26/26 PASS; Workerd local login/logout and Product/Blog persistence PASS on that artifact with harness fix `b4183ab`. Provenance preserved. WASM fixes `7ce0f72` / `9e6a136`, Blog raw writes `f20b5f6`. No hosted UAT or production change. These are Agent-reported prior local results, not tests on every later commit.
+1. Run `supabase/m3-test/005_m3_test_admin_resources.sql` in the SQL Editor of `dongphugia-staging` (ref `uybumsnyqpwcidjxmfsv`). The Supabase MCP DDL confirmation is never answered while the Owner is offline.
+2. Allow a temporary Cloudflare Access service token for the hosted acceptance run (revoked afterwards).
+3. For M4 (Production): set `dpg_control.target_contract.production_writes_allowed = true`; provide a Supabase token limited to project `bonxyxluzlxfkdetryoo` plus function/Worker secrets; create the first admin (Production `admin_users` is empty; hash only). Details: [runbook](../deploy/m3-admin-api-runbook.md).
 
-## Environment (last verified/reported, recheck before writes)
+## Environment (verify before writes)
 
-- Production Worker `dongphugia-v1-public-production`, source `87a0e4b6cd9997be8e195ce2bd9a6647608ee253`, deployment `ae4ddd11-df03-4462-8268-2af4d20b6084`, version `93b44508-afa2-42f8-b02b-acaeec7990f7`, domain https://www.dongphugia.vn. M3 must not change it.
-- M2 fixed Preview `staging`: https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev, deployment `ab789db6-fc80-4c81-a884-fdcbe6e6bfcb`, source `00914b73fe6eed8dd78a8e8d8884bfa475c60870`, snapshot checkpoint `fe25b6966d912ffb360a06962fcafe642a1eab18`. No M3 deployed.
-- Supabase Free organization `ymjvuwefhqqlymwlocqn`: Production `dongphugia-production` / `bonxyxluzlxfkdetryoo`; TEST `dongphugia-staging` / `uybumsnyqpwcidjxmfsv`. Both ACTIVE_HEALTHY in Singapore on 17 Nov; no hosted writes by M3.
-- TEST read-only inventory: 20,166,323 bytes DB; actual disk/WAL usage UNKNOWN. `dpg_app` 68 tables, `dpg_v1` 36, `dpg_control` 3; prior rows/grants/RLS; active Edge `order-intake` v7. Dedicated `dpg_admin_m3_test` and `dpg_public_m3_test` absent. Internal target contract still contains former display label: not a reason to mutate. **Shared schema reuse and write isolation NOT proven.** No verified dedicated Hyperdrive IDs or Preview Bunny destination.
-- Denylisted historical database ref `tlmgudfhsyzayiazuugf` is neither of the approved targets. Do not use it.
+- Production Worker `dongphugia-v1-public-production`: version `edcb15b2-bcb0-46d6-b0c6-31efb495a8c7` (deployment `116da805…`, source `e73fb13`), Public-only; rollback targets `5577b78d…` then `b179b339…`. **Unchanged by this work.**
+- Fixed Preview `staging`: runs main `a2468e1` (pilot UI + pilot function). Do **not** deploy the new function or publish the new SPA before `005` is applied: the new SPA no longer uses the pilot `/products` routes.
+- Supabase: Production `bonxyxluzlxfkdetryoo`; TEST `uybumsnyqpwcidjxmfsv` (function `admin-api` deployed from `a2468e1`). Production schema differs from TEST (no `products.version`; `audit_logs` has no `request_id/changed_fields`): handled by the M4 migration and portable audit rows.
 
-## Immediate next work (after Owner resume)
+## Next steps (in order)
 
-1. Confirm branch/head and latest #309 decision, preserve M2 recovery below; check Claude Cloud access to only required repo/TEST and GitHub Actions. Read-only identity/consumer assessment before any hosted action. Do not repeat local Workerd proof solely because agent changed.
-2. Resolve TEST namespace/role compatibility without reset, separate Public/Admin least-privilege grants, public/synthetic seed only, verify existing Auth/Edge/Worker consumers. Never reuse Production table/credential. Verify zero incremental cost, isolated Preview Hyperdrive/secrets/Access, query redaction and Bunny media destination. If destructive reset or incompatible reuse is necessary, stop that mutation and report minimal Owner decision.
-3. Finish one M3 integration PR, relevant CI, exact-source combined artifact and verified staging publisher; apply accepted gates, then deploy same fixed Preview only, no Production release.
-4. Hosted Admin login/logout, role denials, module CRUD/read-back, Public freshness using same TEST data, Public/mobile regression, media isolation and rollback evidence. Report PASS/FAIL/UNKNOWN, Owner UAT. M4 only after eligible GO.
+1. After Owner step 1: dispatch `m3-admin-api-deploy.yml`, publish staging with `v1-fixed-preview.yml publish-m3`, run hosted acceptance (≥100 first-attempt requests/surface, Chromium + WebKit × desktop/mobile, p95, Admin→Public freshness ≤ 60 s, replay/CSRF negatives, cleanup, token revocation). Report PASS/FAIL/UNKNOWN in #360/#309.
+2. Only after M3 technical acceptance and the Owner items for M4: backup (`runtime-backup.yml`), Production migrations, function deploy, Worker release with `/admin` → `/admin-next/` redirect and a non-Prisma upload path, verification and rollback readiness.
+3. M5 backlog: PLP `sort`/`price`/`page=1` URLs (product decision), legacy "quick create product" modal, CSP via response headers, hosted WebKit run.
 
 ## M2 recovery — time-sensitive
 
