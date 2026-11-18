@@ -5,13 +5,11 @@ import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
 import {readBoundedPublicAssetText} from './src/runtime/bounded-public-asset'
 import {serveCampaignLanding} from './src/runtime/campaign-landing'
+import {entryFreshness, isStorablePage, PAGE_CACHE_STALE_IF_ERROR_SECONDS, pageCacheKey, planPageCache} from './src/runtime/page-cache'
 
 import {
   assertPublicRuntime,
   classifyPublicApiRequest,
-  createCacheKey,
-  isAnonymousCacheCandidate,
-  isCacheableResponse,
   isForbiddenInternalControlRequest,
   isMalformedCataloguePagePath,
   PRIVATE_CACHE_CONTROL,
@@ -145,27 +143,49 @@ export default {
         'Cache-Control':PRIVATE_CACHE_CONTROL,...robotHeaders,...sourceIdentityHeader,
       }})
     }
-    // Production keeps its existing anonymous HTML cache. Preview and Staging
-    // always reflect the current published catalogue and never persist page
-    // responses in the local/deployment Worker Cache API.
-    const cacheCandidate = environment.APP_ENV === 'production' && isAnonymousCacheCandidate(request)
-    const cacheKey = cacheCandidate ? createCacheKey(request, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint()) : null
-    const workerCache = cacheKey ? await caches.open('dongphugia-public-v1') : null
+    // Cache-first for anonymous HTML (#360 P1). Production and the isolated TEST staging pilot only;
+    // Flight/RSC, cookies, unknown query parameters and non-GET requests always bypass (see page-cache.ts).
+    const cacheEnabled = environment.APP_ENV === 'production'
+      || (environment.APP_ENV === 'staging' && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true')
+    const plan = cacheEnabled ? planPageCache(request) : null
+    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint()) : null
+    const workerCache = cacheKey ? await caches.open('dongphugia-public-v2') : null
+    const edgeControl = plan ? `public, max-age=${plan.ttlSeconds}, must-revalidate` : PUBLIC_EDGE_CACHE_CONTROL
+    let staleEntry: Response | null = null
 
-    if (cacheKey && workerCache) {
+    if (cacheKey && workerCache && plan) {
       const cached = await workerCache.match(cacheKey)
       if (cached) {
-        return withHeaders(cached, {
-          ...sourceIdentityHeader,
-          'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
-          'CDN-Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
-          'X-DPG-Cache': 'HIT',
-          ...robotHeaders,
-        })
+        const freshness = entryFreshness(Number(cached.headers.get('x-dpg-cached-at')), Date.now(), plan.ttlSeconds)
+        if (freshness === 'fresh') {
+          return withHeaders(cached, {
+            ...sourceIdentityHeader,
+            'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
+            'CDN-Cache-Control': edgeControl,
+            'X-DPG-Cache': 'HIT',
+            ...robotHeaders,
+          })
+        }
+        if (freshness === 'stale-usable') staleEntry = cached
       }
     }
+    // A bounded stale copy is served only when rendering fails; it never masks a successful 404/redirect.
+    const serveStale = () => withHeaders(staleEntry!, {
+      ...sourceIdentityHeader,
+      'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
+      'CDN-Cache-Control': 'public, max-age=0, must-revalidate',
+      'X-DPG-Cache': 'STALE',
+      ...robotHeaders,
+    })
 
-    const rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
+    let rendered: Response
+    try {
+      rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
+    } catch (renderError) {
+      if (staleEntry) return serveStale()
+      throw renderError
+    }
+    if (staleEntry && rendered.status >= 500) return serveStale()
     if(environment.PUBLIC_DB_DIAGNOSTICS==='true'&&rendered.status>=500){
       const marker=rendered.headers.get('X-DPG-Render-Failure')??''
       const safeMarkers=new Set(['CROSS_REQUEST_IO','GLOBAL_SCOPE_IO','SUBREQUEST_LIMIT','CPU_LIMIT','MEMORY_LIMIT','NO_RESPONSE','STREAM_CLOSED','BODY_USED','NETWORK_LOST','ASSET_UNAVAILABLE','UNCLASSIFIED_EXCEPTION'])
@@ -176,7 +196,7 @@ export default {
         contentTypeClass,
         hasRenderFailureMarker:safeMarkers.has(marker),...(safeMarkers.has(marker)?{renderFailure:marker}:{})}))
     }
-    if (!cacheKey || !isCacheableResponse(rendered)) {
+    if (!cacheKey || !plan || !isStorablePage(rendered)) {
       return withHeaders(rendered, {
         ...sourceIdentityHeader,
         'Cache-Control': PRIVATE_CACHE_CONTROL,
@@ -187,7 +207,8 @@ export default {
 
     const stored = withHeaders(rendered.clone(), {
       ...sourceIdentityHeader,
-      'Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
+      'Cache-Control': `public, max-age=${plan.ttlSeconds + PAGE_CACHE_STALE_IF_ERROR_SECONDS}`,
+      'X-DPG-Cached-At': String(Date.now()),
       'X-DPG-Cache': 'STORED',
       ...robotHeaders,
     })
@@ -196,7 +217,7 @@ export default {
     return withHeaders(rendered, {
       ...sourceIdentityHeader,
       'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
-      'CDN-Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
+      'CDN-Cache-Control': edgeControl,
       'X-DPG-Cache': 'MISS',
       ...robotHeaders,
     })
