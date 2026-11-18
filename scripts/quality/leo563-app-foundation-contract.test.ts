@@ -80,7 +80,7 @@ describe('LEO-563 application foundation contract', () => {
     expect(publicRobots).toContain('Disallow: /')
     expect(publicProxy).toContain('s-maxage=300')
     expect(publicWorkerPolicy).toContain('public, max-age=${PUBLIC_EDGE_CACHE_SECONDS}, must-revalidate')
-    expect(publicWorker).toContain("caches.open('dongphugia-public-v1')")
+    expect(publicWorker).toContain("caches.open('dongphugia-public-v2')")
     expect(`${publicWorker}\n${publicWorkerPolicy}`).not.toContain('stale-while-revalidate')
     expect(adminConfig).toContain("Cache-Control', value: 'private, no-store'")
     expect(`${adminProxy}\n${adminSessionProxy}`).toContain("private, no-store")
