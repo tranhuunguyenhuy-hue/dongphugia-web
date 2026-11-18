@@ -36,3 +36,64 @@ Until step 2 is done the publisher uses a random secret, so the shell loads but 
 ## Rollback
 Worker: previous staging deployment (artifact preserved); function: `supabase functions delete admin-api`
 (TEST only); database: `004_m3_test_admin_api_rollback.sql`. Legacy `/admin` is untouched and remains available.
+
+---
+
+# Update — full module port (M3 batch 2, #360 delegation 6988598277)
+
+## What exists in `/admin-next` now
+One declarative definition per resource (`supabase/functions/admin-api/resources.ts`) drives validation, parameterised SQL,
+RBAC, audit, the form metadata served at `/schema`, and the generated column-level grants (`grants.ts` →
+`supabase/m3-test/005_*.sql`, drift-checked by a test). Dedicated handlers cover orders, quotes, dashboard (`commerce-handlers.ts`).
+
+| Legacy area | New screens / endpoints | Notes |
+|---|---|---|
+| Dashboard | `/dashboard` | KPIs, revenue by period, pending quotes/orders, top products. Revenue counts `completed` **and** `delivered` (legacy filtered on `delivered`, which no workflow produces) |
+| Products | `/r/products`, gallery, bulk toggle/feature/delete | `sku`/`slug` create-only (identity), `sale_price < list_price`, activation needs price (or "contact") + main image, optimistic `version` |
+| Categories | `/r/categories` | banner only (the only legacy write); subcategories read-only |
+| PIM | brands, taxons, product types/sub-types, spec definitions/options | no hard delete (legacy toggles `is_active`); spec options are create-only as in legacy |
+| Orders | `/orders`, `/orders/:id` | status, payment, assignment, builder with server-recomputed totals, A4 print; sales see/act on assigned orders only |
+| Quote requests | `/quotes`, `/quotes/:id` | status, assignment, builder, complete = customer found/created by phone (CSKH); A4 print |
+| Customers | `/r/customers` | create/edit, unique phone |
+| Blog | posts (TipTap editor, tags, publish rules, Publishing-Agent guard), tags | tag counters maintained transactionally |
+| Banners / Đối tác / Dự án | `/r/banners`, `/r/partners`, `/r/projects` | partner/project slug generated once (legacy behaviour) |
+| Users | `/r/users` | bcrypt cost 12 server-side, sessions revoked on password change/deactivation, last active admin protected |
+
+Not ported (explicit gaps, tracked for M5): product-level taxonomy assignments, spec values, documents, relationships (combo
+components) and variant linking inside the product editor; legacy "quick create product" modal; order creation (legacy has no UI for it).
+
+## Owner action for hosted verification (TEST)
+Run **`supabase/m3-test/005_m3_test_admin_resources.sql`** in the SQL Editor of `dongphugia-staging` (ref `uybumsnyqpwcidjxmfsv`;
+it carries the TEST target guard and is idempotent). Rollback: `005_…_rollback.sql`. Then (Claude can do these) dispatch
+`m3-admin-api-deploy.yml`, publish staging with `v1-fixed-preview.yml publish-m3`, and run the hosted acceptance.
+
+## Local end-to-end harness
+`scripts/m3/local-e2e/` rebuilds a Production-shaped PostgreSQL database (fixtures + 004 + 005), runs the Deno function and the
+real gateway with the built SPA, and drives Chromium (desktop + mobile) through every module. Run it with the commands in its README.
+
+## Driver parity rules learned the hard way
+postgres.js (Edge) ≠ node-pg (tests): bind JSON as `$n::text::jsonb` (postgres.js would double-encode a string bound to a jsonb
+parameter), never `select *` from a column-granted table, and give every parameter used in two typed contexts an explicit cast.
+
+# M4 package (Production Admin) — prepared, NOT executed
+
+Preconditions that only the Owner can satisfy (none are done):
+1. **Contract**: Production `dpg_control.target_contract.production_writes_allowed` is `false` today (read-only check). The M4
+   migration refuses to run until the Owner sets it to `true` (`M4_TARGET_GUARD_FAILED:production_writes_not_authorised`).
+2. **Backup** verified (existing `runtime-backup.yml` workflow) immediately before the migration.
+3. **Schema drift fixed by the migration** (verified read-only against Production): `products.version` is missing on Production
+   (present on TEST) → `001` adds it additively; Production `audit_logs` has no `request_id/changed_fields` → the API writes the
+   base columns and keeps that metadata in `new_value._meta`. Every other column the Admin queries use exists on Production.
+4. **First admin account**: Production `admin_users` is empty. The Owner creates the first admin (password never enters chat/repo):
+   hash locally with bcrypt cost 12 and insert only the hash.
+5. **Edge Function on the Production project** `bonxyxluzlxfkdetryoo`: a Supabase access token limited to that project
+   (Edge Functions + Secrets write) stored as a GitHub environment secret, plus function secrets `ADMIN_API_HMAC_SECRET`,
+   `ADMIN_API_ALLOWED_ORIGIN=https://www.dongphugia.vn`, `ADMIN_API_MEDIA_HOSTS=<production CDN host>`, `ADMIN_API_DB_ROLE=dpg_admin_api`.
+6. **Worker**: the Production artifact must add the gateway, the SPA assets, an `/admin` → `/admin-next/` redirect and an upload path that
+   does not depend on legacy Prisma code; `ADMIN_API_HMAC_SECRET` as a Worker secret and the Production approved function URL.
+
+Prepared artifacts (generated, drift-tested, applied successfully to a Production-shaped database including rollback + re-apply):
+`supabase/m4-production/001_m4_production_admin_api_base.sql`, `002_m4_production_admin_resources.sql` and their `_rollback.sql`.
+Regenerate/check: `npx tsx scripts/m4/generate-production-admin-migration.mts [--check]`.
+Rollback order: Worker (previous Production version `edcb15b2`/`5577b78d`), function delete, `002_rollback` then `001_rollback`
+(`products.version` is kept), restore from backup only for data loss (Worker rollback ≠ SQL rollback).

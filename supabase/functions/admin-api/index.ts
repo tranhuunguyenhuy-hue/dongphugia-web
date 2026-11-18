@@ -11,7 +11,9 @@ import { BCRYPT_ROUNDS, handleRequest, type Db } from './handlers.ts'
 
 const dedicatedUrl = Deno.env.get('ADMIN_API_DB_URL')
 const databaseUrl = dedicatedUrl ?? Deno.env.get('SUPABASE_DB_URL')
-const API_ROLE = 'dpg_admin_api_test'
+// TEST uses dpg_admin_api_test (default); Production sets ADMIN_API_DB_ROLE=dpg_admin_api. Only these two names are accepted.
+const configuredRole = Deno.env.get('ADMIN_API_DB_ROLE') ?? 'dpg_admin_api_test'
+const API_ROLE = configuredRole === 'dpg_admin_api' || configuredRole === 'dpg_admin_api_test' ? configuredRole : (() => { throw new Error('ADMIN_API_DB_ROLE_INVALID') })()
 const sql = databaseUrl
   ? postgres(databaseUrl, {
     // Two connections let concurrent requests in one isolate overlap instead of queueing behind a single socket.
