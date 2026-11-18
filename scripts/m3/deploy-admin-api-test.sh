@@ -6,8 +6,8 @@ REF=uybumsnyqpwcidjxmfsv
 test "$REF" != "bonxyxluzlxfkdetryoo"
 test "${#M3_ADMIN_API_HMAC_SECRET}" -ge 32 || { echo 'set M3_ADMIN_API_HMAC_SECRET (>=32 chars)'; exit 1; }
 cd "$(dirname "$0")/../.."
-supabase functions deploy admin-api --project-ref "$REF" --no-verify-jwt --use-api
-supabase secrets set --project-ref "$REF" \
+supabase functions deploy admin-api --project-ref "$REF" --no-verify-jwt --use-api --yes
+supabase secrets set --yes --project-ref "$REF" \
   "ADMIN_API_HMAC_SECRET=$M3_ADMIN_API_HMAC_SECRET" \
   "ADMIN_API_ALLOWED_ORIGIN=https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev" \
   "ADMIN_API_MEDIA_HOSTS=dpg-media-staging.b-cdn.net"

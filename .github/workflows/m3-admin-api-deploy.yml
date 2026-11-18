@@ -57,8 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           echo "::add-mask::$HMAC"
-          supabase functions deploy admin-api --project-ref "$TEST_PROJECT_REF" --no-verify-jwt --use-api
-          supabase secrets set --project-ref "$TEST_PROJECT_REF" \
+          supabase functions deploy admin-api --project-ref "$TEST_PROJECT_REF" --no-verify-jwt --use-api --yes
+          supabase secrets set --yes --project-ref "$TEST_PROJECT_REF" \
             "ADMIN_API_HMAC_SECRET=$HMAC" "ADMIN_API_ALLOWED_ORIGIN=$STAGING_ORIGIN" "ADMIN_API_MEDIA_HOSTS=$MEDIA_HOSTS"
           supabase functions list --project-ref "$TEST_PROJECT_REF" | tee /tmp/functions.txt
           grep -q 'admin-api' /tmp/functions.txt
