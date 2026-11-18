@@ -14,6 +14,8 @@ const ROUTES = [
 ]
 const MAX_BODY_BYTES = 200_000
 const UPSTREAM_TIMEOUT_MS = 8_000
+// The TEST project database lives in Singapore: run the Edge Function next to it instead of next to the caller.
+const ADMIN_API_REGION = 'ap-southeast-1'
 
 export function isAdminNextPath(pathname) {
   return pathname === ADMIN_NEXT_BASE || pathname.startsWith(`${ADMIN_NEXT_BASE}/`)
@@ -86,7 +88,7 @@ export async function handleAdminNext(request, environment, { sourceSha, staging
   let upstream
   try {
     upstream = await fetch(target, {
-      method: request.method, headers: { ...headers, ...(mutation ? { 'content-type': 'application/json' } : {}) },
+      method: request.method, headers: { ...headers, 'x-region': ADMIN_API_REGION, ...(mutation ? { 'content-type': 'application/json' } : {}) },
       body: mutation ? body : undefined, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS), redirect: 'manual',
     })
   } catch {
