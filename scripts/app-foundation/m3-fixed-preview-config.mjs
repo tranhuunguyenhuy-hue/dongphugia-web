@@ -9,7 +9,9 @@ const SOURCE_SHA = /^[a-f0-9]{40}$/
 const HYPERDRIVE_ID = /^[a-f0-9]{32}$/i
 // The Admin media key uses a non-`BUNNY_*` binding name: the combined Worker's process.env is populated from
 // every binding, and the shared Public guard rejects a `BUNNY_STORAGE_API_KEY` there at module init (CF 10021).
-const PREVIEW_SECRETS = ['ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET']
+const PREVIEW_SECRETS = ['ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'ADMIN_API_HMAC_SECRET']
+// Edge Function of the isolated TEST project ONLY (ref uybumsnyqpwcidjxmfsv). The Production ref must never appear.
+export const APPROVED_ADMIN_API_URL = 'https://uybumsnyqpwcidjxmfsv.supabase.co/functions/v1/admin-api'
 const PRODUCTION_MEDIA_HOSTS = new Set([
   'cdn.dongphugia.com.vn', 'cdn.dongphugia.vn', 'media.dongphugia.vn', 'dpg-products.b-cdn.net',
   'dpg-publishing-production.b-cdn.net', 'dpg-publishing-staging.b-cdn.net', 'sg.storage.bunnycdn.com.production',
@@ -78,6 +80,7 @@ export function createM3FixedPreviewConfig({
     ADMIN_TEST_DB_ROLE: 'dpg_admin_m3_test',
     PREVIEW_MEDIA_TARGET_ISOLATED: 'true',
     PREVIEW_TEST_DATABASE_ISOLATED: 'true',
+    ADMIN_API_URL: APPROVED_ADMIN_API_URL,
     BUNNY_STORAGE_ZONE_NAME: mediaTarget.storageZoneName,
     BUNNY_STORAGE_HOSTNAME: storageHostname,
     BUNNY_CDN_HOSTNAME: cdnHostname,
@@ -127,6 +130,8 @@ export function validateM3FixedPreviewConfig(config, expected) {
   assert.equal(config.previews.vars.PUBLIC_CATALOGUE_SOURCE, 'postgresql')
   assert.equal(config.previews.vars.ADMIN_TEST_DB_ROLE, 'dpg_admin_m3_test')
   assert.equal(config.previews.vars.PREVIEW_MEDIA_TARGET_ISOLATED, 'true')
+  assert.equal(config.previews.vars.ADMIN_API_URL, APPROVED_ADMIN_API_URL, 'M3_ADMIN_API_URL_NOT_APPROVED')
+  assert.ok(!config.previews.vars.ADMIN_API_URL.includes('bonxyxluzlxfkdetryoo'), 'M3_ADMIN_API_PRODUCTION_REF_FORBIDDEN')
   assert.equal(config.previews.vars.PREVIEW_TEST_DATABASE_ISOLATED, 'true', 'M3_PREVIEW_TEST_DATABASE_FLAG_REQUIRED')
   assert.equal(config.previews.vars.BUNNY_STORAGE_ZONE_NAME, APPROVED_PREVIEW_ZONE_NAME, 'M3_PREVIEW_MEDIA_ZONE_NAME_NOT_APPROVED')
   assert.equal(config.previews.vars.BUNNY_STORAGE_HOSTNAME, APPROVED_STORAGE_HOSTNAME, 'M3_PREVIEW_MEDIA_STORAGE_HOST_NOT_APPROVED')

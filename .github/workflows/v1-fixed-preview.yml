@@ -299,6 +299,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           M3_PREVIEW_BUNNY_STORAGE_API_KEY: ${{ secrets.M3_PREVIEW_BUNNY_STORAGE_API_KEY }}
+          M3_ADMIN_API_HMAC_SECRET: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
           GH_TOKEN: ${{ github.token }}
         run: npx --no-install tsx scripts/app-foundation/publish-m3-fixed-preview.mjs "$RUNNER_TEMP/m3-preview-artifact" "$GITHUB_SHA"
       - name: Upload sanitized hosted evidence

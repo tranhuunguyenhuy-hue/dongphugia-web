@@ -33,7 +33,7 @@ describe('M3 fixed Preview configuration', () => {
     const config = create()
 
     expect(validateM3FixedPreviewConfig(config, { sourceSha, publicHyperdriveId: publicId, adminHyperdriveId: adminId })).toBe(true)
-    expect(config.previews.secrets.required).toEqual(['ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET'])
+    expect(config.previews.secrets.required).toEqual(['ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'ADMIN_API_HMAC_SECRET'])
     expect(config.previews.observability).toMatchObject({
       enabled: true,
       redact_query_string: true,
