@@ -1,11 +1,17 @@
 import { withPublicReadScope } from './src/runtime/public-read-scope'
-import vinextHandler from 'vinext/server/fetch-handler'
 import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnostic-safety.mjs'
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
 import {readBoundedPublicAssetText} from './src/runtime/bounded-public-asset'
 import {serveCampaignLanding} from './src/runtime/campaign-landing'
-import {entryFreshness, isStorablePage, PAGE_CACHE_STALE_IF_ERROR_SECONDS, pageCacheKey, planPageCache} from './src/runtime/page-cache'
+import {entryFreshness, hasRenderErrorMarker, isStorablePage, pageCacheKey, planPageCache, remainingTtlSeconds} from './src/runtime/page-cache'
+
+// The SSR bundle is loaded only on a cache miss so cache hits never initialise it (#360 P1).
+type VinextHandler = typeof import('vinext/server/fetch-handler').default
+let vinextHandlerPromise: Promise<VinextHandler> | undefined
+const loadVinextHandler = () => (vinextHandlerPromise ??= import('vinext/server/fetch-handler')
+  .then(module => module.default)
+  .catch((error: unknown) => { vinextHandlerPromise = undefined; throw error }))
 
 import {
   assertPublicRuntime,
@@ -156,15 +162,16 @@ export default {
     if (cacheKey && workerCache && plan) {
       const cached = await workerCache.match(cacheKey)
       if (cached) {
-        const freshness = entryFreshness(Number(cached.headers.get('x-dpg-cached-at')), Date.now(), plan.ttlSeconds)
+        const cachedAt = Number(cached.headers.get('x-dpg-cached-at'))
+        const freshness = entryFreshness(cachedAt, Date.now(), plan.ttlSeconds, plan.staleSeconds)
         if (freshness === 'fresh') {
           return withHeaders(cached, {
             ...sourceIdentityHeader,
             'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
-            'CDN-Cache-Control': edgeControl,
+            'CDN-Cache-Control': `public, max-age=${remainingTtlSeconds(cachedAt, Date.now(), plan.ttlSeconds)}, must-revalidate`,
             'X-DPG-Cache': 'HIT',
             ...robotHeaders,
-          })
+          }, ['x-dpg-cached-at'])
         }
         if (freshness === 'stale-usable') staleEntry = cached
       }
@@ -176,10 +183,11 @@ export default {
       'CDN-Cache-Control': 'public, max-age=0, must-revalidate',
       'X-DPG-Cache': 'STALE',
       ...robotHeaders,
-    })
+    }, ['x-dpg-cached-at'])
 
     let rendered: Response
     try {
+      const vinextHandler = await loadVinextHandler()
       rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
     } catch (renderError) {
       if (staleEntry) return serveStale()
@@ -196,25 +204,28 @@ export default {
         contentTypeClass,
         hasRenderFailureMarker:safeMarkers.has(marker),...(safeMarkers.has(marker)?{renderFailure:marker}:{})}))
     }
-    if (!cacheKey || !plan || !isStorablePage(rendered)) {
+    if (!cacheKey || !plan || request.method !== 'GET' || !isStorablePage(rendered)) {
       return withHeaders(rendered, {
         ...sourceIdentityHeader,
         'Cache-Control': PRIVATE_CACHE_CONTROL,
         'X-DPG-Cache': 'BYPASS',
         // Non-sensitive reason code so cache behaviour is observable without logs.
-        'X-DPG-Cache-Reason': !cacheEnabled ? 'disabled' : !plan ? 'not-eligible' : 'not-storable',
+        'X-DPG-Cache-Reason': !cacheEnabled ? 'disabled' : !plan ? 'not-eligible' : request.method !== 'GET' ? 'head' : 'not-storable',
         ...robotHeaders,
       })
     }
 
     const stored = withHeaders(rendered.clone(), {
       ...sourceIdentityHeader,
-      'Cache-Control': `public, max-age=${plan.ttlSeconds + PAGE_CACHE_STALE_IF_ERROR_SECONDS}`,
+      'Cache-Control': `public, max-age=${plan.ttlSeconds + plan.staleSeconds}`,
       'X-DPG-Cached-At': String(Date.now()),
       'X-DPG-Cache': 'STORED',
       ...robotHeaders,
     })
-    context.waitUntil(workerCache!.put(cacheKey, stored))
+    // Buffer once off the response path; a body with a render-error marker or a broken stream is never stored.
+    context.waitUntil(stored.text().then(html => hasRenderErrorMarker(html)
+      ? undefined
+      : workerCache!.put(cacheKey, new Response(html, {status: stored.status, headers: stored.headers}))).catch(() => undefined))
 
     return withHeaders(rendered, {
       ...sourceIdentityHeader,

@@ -233,9 +233,10 @@ export function createCacheKey(request: Request, sourceCommit: string, catalogue
   return new Request(url.toString(), { method: 'GET' })
 }
 
-export function withHeaders(response: Response, headers: Record<string, string>) {
+export function withHeaders(response: Response, headers: Record<string, string>, remove: readonly string[] = []) {
   const nextHeaders = new Headers(response.headers)
   for (const [name, value] of Object.entries(headers)) nextHeaders.set(name, value)
+  for (const name of remove) nextHeaders.delete(name)
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

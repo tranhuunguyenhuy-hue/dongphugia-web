@@ -14,6 +14,8 @@ export type PageCacheClass='home'|'category'|'listing'|'product'|'blog'|'static'
 export const PAGE_CACHE_TTL_SECONDS=60
 export const STATIC_PAGE_CACHE_TTL_SECONDS=3600
 export const PAGE_CACHE_STALE_IF_ERROR_SECONDS=600
+/** Mutable catalogue/blog/home HTML is never served past its TTL (hidden/deleted content must not linger). */
+export const staleIfErrorSeconds=(cls:PageCacheClass)=>cls==='static'?PAGE_CACHE_STALE_IF_ERROR_SECONDS:0
 
 const FAMILIES=new Set(['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat'])
 const STATIC_PATHS=new Set(['/lien-he','/ve-chung-toi','/chinh-sach-bao-mat','/dieu-kien-giao-dich','/dieu-kien-kinh-doanh','/thong-tin-gia','/thong-tin-hang-hoa','/van-chuyen-giao-nhan'])
@@ -37,12 +39,15 @@ export function classifyPagePath(pathname:string):PageCacheClass|null{
   return null
 }
 
-export type PageCachePlan={cls:PageCacheClass;ttlSeconds:number;search:string}
+export type PageCachePlan={cls:PageCacheClass;ttlSeconds:number;staleSeconds:number;search:string}
 
 /** Returns the cache plan for a request, or null when it must not touch the HTML cache. */
 export function planPageCache(request:Request):PageCachePlan|null{
   if(request.method!=='GET'&&request.method!=='HEAD')return null
   for(const name of FORBIDDEN_HEADERS)if(request.headers.has(name))return null
+  // Only genuine HTML document requests share the HTML representation.
+  const accept=request.headers.get('accept')
+  if(accept&&!/text\/html|\*\/\*/i.test(accept))return null
   const url=new URL(request.url)
   if(url.searchParams.has('_rsc'))return null
   const cls=classifyPagePath(url.pathname)
@@ -55,7 +60,7 @@ export function planPageCache(request:Request):PageCachePlan|null{
     kept.set(key,value)
   }
   const search=[...kept].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&')
-  return {cls,ttlSeconds:cls==='static'?STATIC_PAGE_CACHE_TTL_SECONDS:PAGE_CACHE_TTL_SECONDS,search}
+  return {cls,ttlSeconds:cls==='static'?STATIC_PAGE_CACHE_TTL_SECONDS:PAGE_CACHE_TTL_SECONDS,staleSeconds:staleIfErrorSeconds(cls),search}
 }
 
 export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:string,catalogueCheckpoint:string|null){
@@ -71,12 +76,22 @@ export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:str
 }
 
 export type CacheFreshness='fresh'|'stale-usable'|'expired'
-export function entryFreshness(cachedAtMs:number,nowMs:number,ttlSeconds:number):CacheFreshness{
+export function entryFreshness(cachedAtMs:number,nowMs:number,ttlSeconds:number,staleSeconds=0):CacheFreshness{
   const age=(nowMs-cachedAtMs)/1000
   if(!Number.isFinite(age)||age<0)return 'expired'
   if(age<=ttlSeconds)return 'fresh'
-  return age<=ttlSeconds+PAGE_CACHE_STALE_IF_ERROR_SECONDS?'stale-usable':'expired'
+  return age<=ttlSeconds+staleSeconds?'stale-usable':'expired'
 }
+
+/** Seconds a downstream cache may still keep a HIT: never restarts the TTL on every hit. */
+export function remainingTtlSeconds(cachedAtMs:number,nowMs:number,ttlSeconds:number){
+  return Math.max(0,Math.floor(ttlSeconds-(nowMs-cachedAtMs)/1000))
+}
+
+// React/vinext render errors can still produce a 200 HTML shell with an error digest in the inline
+// Flight payload or the generic error page. Such responses are served once but never cached.
+const RENDER_ERROR_MARKER=/digest\\?":|(?:^|\n)[0-9a-f]+:E\{|This page couldn.t load/
+export const hasRenderErrorMarker=(html:string)=>RENDER_ERROR_MARKER.test(html)
 
 /** Only successful, cookie-free HTML is stored. Errors, redirects and 404 never are. */
 export function isStorablePage(response:Response){
