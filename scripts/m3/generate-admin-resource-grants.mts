@@ -12,7 +12,10 @@ const guard = /-- guard:begin\n([\s\S]*?)-- guard:end/.exec(guardSource)?.[1]
 if (!guard) throw new Error('GUARD_BLOCK_NOT_FOUND')
 
 export const TEST_OPTIONS = {
-  role: 'dpg_admin_api_test', policyPrefix: 'm3_admin_api_', guard, baseTables: [] as string[],
+  role: 'dpg_admin_api_test', policyPrefix: 'm3_admin_api_', guard,
+  baseTables: ['admin_users', 'categories', 'subcategories', 'brands'],
+  basePolicies: ['admin_users.select', 'admin_users.update', 'categories.select', 'subcategories.select', 'brands.select'],
+  rollbackRegrant: ['grant update (last_login_at) on dpg_app.admin_users to dpg_admin_api_test;'],
   title: 'M3 TEST-only (project uybumsnyqpwcidjxmfsv): column-level grants + RLS for the Admin resources served by `admin-api`.',
 }
 const { forward, rollback } = generateAdminResourceMigration(RESOURCES, TEST_OPTIONS)

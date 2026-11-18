@@ -89,11 +89,17 @@ export function buildInput(meta: ResourceMeta, form: Row, original: Row | null):
     const raw = form[f.name]
     let value: unknown
     if (f.kind === 'int') value = raw === '' || raw === null || raw === undefined ? null : Number(raw)
-    else if (f.kind === 'ref') value = raw === '' || raw === null || raw === undefined ? undefined : Number(raw)
+    else if (f.kind === 'ref') value = raw === '' || raw === null || raw === undefined ? (f.nullable ? null : undefined) : Number(raw)
     else if (f.kind === 'strings') value = Array.isArray(raw) ? raw : []
+    else if (f.kind === 'json') value = raw && typeof raw === 'object' ? raw : {}
+    else if (f.kind === 'money') value = raw === '' || raw === null || raw === undefined ? undefined : Number(raw)
     else if (f.kind === 'bool') value = Boolean(raw)
     else value = raw ?? ''
-    if (original) { if (!sameJson(value, f.kind === 'int' ? (original[f.name] ?? null) : f.kind === 'strings' ? (original[f.name] ?? []) : f.kind === 'bool' ? Boolean(original[f.name]) : (original[f.name] ?? ''))) input[f.name] = value }
+    if (original) {
+      if (value === undefined) continue
+      const before = f.kind === 'int' || f.kind === 'ref' ? (original[f.name] ?? null) : f.kind === 'strings' ? (original[f.name] ?? []) : f.kind === 'bool' ? Boolean(original[f.name]) : f.kind === 'json' ? (original[f.name] ?? {}) : (original[f.name] ?? '')
+      if (!sameJson(value, before)) input[f.name] = value
+    }
     else if (value !== undefined && value !== '' && value !== null) input[f.name] = value
   }
   for (const r of meta.relations) {
@@ -108,6 +114,7 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
   const creating = id === null
   const [original, setOriginal] = useState<Row | null>(null); const [form, setForm] = useState<Row>(() => initialRow(meta))
   const [options, setOptions] = useState<Record<string, Option[]>>({}); const [loaded, setLoaded] = useState(creating)
+  const [jsonText, setJsonText] = useState<Record<string, string>>({}); const [jsonError, setJsonError] = useState<Record<string, boolean>>({})
   const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [touched, setTouched] = useState<Set<string>>(() => new Set())
   const labels = Object.fromEntries([...meta.fields.map((f) => [f.name, f.label]), ...meta.relations.map((r) => [r.input, r.label])])
   const canEdit = creating ? meta.canCreate : meta.canUpdate
@@ -148,6 +155,13 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
             }} />
           </div>
         </div>)
+      case 'json': return <textarea {...common} rows={5} spellCheck={false} className="mono" value={jsonText[f.name] ?? JSON.stringify(value ?? {}, null, 2)} onChange={(e) => {
+        const text = e.target.value; setJsonText((j) => ({ ...j, [f.name]: text }))
+        try { const parsed = JSON.parse(text); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) { set(f.name, parsed); setJsonError((j) => ({ ...j, [f.name]: false })) } else throw new Error('shape') } catch { setJsonError((j) => ({ ...j, [f.name]: true })) }
+      }} />
+      case 'password': return <input {...common} type="password" autoComplete="new-password" minLength={8} maxLength={f.max ?? 200} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
+      case 'email': return <input {...common} type="email" autoComplete="off" maxLength={f.max} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
+      case 'money': return <input {...common} type="number" min={f.min ?? 0} step="1" value={value === null || value === undefined ? '' : String(value)} onChange={(e) => set(f.name, e.target.value)} />
       case 'datetime': return <input {...common} disabled value={value ? new Date(String(value)).toLocaleString('vi-VN') : ''} readOnly />
       default: return <input {...common} type={f.kind === 'link' ? 'text' : 'text'} maxLength={f.max} value={String(value ?? '')} onChange={(e) => { if (f.slugFrom) setTouched((t) => new Set(t).add(f.name)); set(f.name, e.target.value) }} />
     }
@@ -155,7 +169,10 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
   const version = original && meta.versioned ? Number(original.version) : undefined
   return (
     <form className="card" onSubmit={async (e) => {
-      e.preventDefault(); setBusy(true); setMessage(''); setError('')
+      e.preventDefault(); setMessage(''); setError('')
+      const badJson = meta.fields.filter((f) => jsonError[f.name]).map((f) => f.label)
+      if (badJson.length) { setError(`JSON không hợp lệ: ${badJson.join(', ')}.`); return }
+      setBusy(true)
       const body = buildInput(meta, form, original)
       if (!creating && !Object.keys(body).length) { setMessage('Không có thay đổi.'); setBusy(false); return }
       try {

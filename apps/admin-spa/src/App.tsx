@@ -3,6 +3,8 @@ import { api, errorText, uploadImage, type Product, type ProductRow, type Resour
 import { ResourceForm, ResourceList } from './Resource'
 
 const BASE = '/admin-next'
+// Same order as the legacy sidebar (Sản phẩm links first, then business, content, partners, system).
+const GROUP_ORDER = ['Sản phẩm', 'Kinh doanh', 'Nội dung', 'Đối tác & Dự án', 'Hệ thống']
 function useRoute() {
   const [path, setPath] = useState(() => window.location.pathname.slice(BASE.length) || '/')
   useEffect(() => { const on = () => setPath(window.location.pathname.slice(BASE.length) || '/'); window.addEventListener('popstate', on); return () => window.removeEventListener('popstate', on) }, [])
@@ -22,7 +24,8 @@ export function App() {
   const edit = path.match(/^\/products\/(\d+)$/)
   const resource = path.match(/^\/r\/([a-z][a-z0-9-]*)(?:\/(new|\d+))?$/)
   const meta = resource ? resources.find((r) => r.key === resource[1]) : undefined
-  const groups = [...new Set(resources.filter((r) => r.canCreate || r.canUpdate || r.canDelete).map((r) => r.group))]
+  const present = new Set(resources.filter((r) => r.inNav).map((r) => r.group))
+  const groups = [...GROUP_ORDER.filter((g) => present.has(g)), ...[...present].filter((g) => !GROUP_ORDER.includes(g))]
   const link = (to: string, label: string) => <a key={to} href={BASE + to} onClick={(e) => { e.preventDefault(); go(to) }} aria-current={path === to || path.startsWith(to + '/') ? 'page' : undefined}>{label}</a>
   let content
   if (edit) content = <ProductEditor id={Number(edit[1])} user={user} go={go} />
@@ -39,7 +42,7 @@ export function App() {
         <nav aria-label="Chức năng">
           {link('/products', 'Sản phẩm')}
           {groups.map((group) => (
-            <span key={group} className="group"><span className="muted">{group}:</span>{resources.filter((r) => r.group === group && (r.canCreate || r.canUpdate || r.canDelete)).map((r) => link(`/r/${r.key}`, r.label))}</span>
+            <span key={group} className="group"><span className="muted">{group}:</span>{resources.filter((r) => r.group === group && r.inNav).map((r) => link(`/r/${r.key}`, r.label))}</span>
           ))}
         </nav>
         <span className="muted">{user.name} · {user.role}</span>

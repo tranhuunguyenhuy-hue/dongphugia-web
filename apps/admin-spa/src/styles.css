@@ -24,3 +24,5 @@ button.danger{background:#fff;color:var(--danger);border-color:var(--danger)}
 .rte{border:1px solid var(--line);border-radius:8px;overflow:hidden}.toolbar{display:flex;gap:4px;flex-wrap:wrap;padding:6px;border-bottom:1px solid var(--line);background:var(--bg)}
 .tool{padding:4px 8px;background:#fff;color:var(--fg);border-color:var(--line);font-size:13px}.tool.on{background:var(--primary);color:#fff}
 .prose{min-height:300px;padding:12px 14px;outline:none}.prose img{max-width:100%;height:auto}.prose p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--muted);float:left;height:0;pointer-events:none}
+
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}

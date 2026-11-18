@@ -8,12 +8,12 @@ export type Product = ProductRow & {
 }
 export type Row = Record<string, unknown>
 export type FieldMeta = {
-  name: string; label: string; kind: 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref'
+  name: string; label: string; kind: 'text' | 'textarea' | 'html' | 'int' | 'bool' | 'enum' | 'link' | 'media' | 'datetime' | 'strings' | 'ref' | 'json' | 'password' | 'money' | 'email'
   required: boolean; max?: number; min?: number; options?: string[]; ref?: string; readOnly: boolean; list: boolean; slugFrom?: string; initial?: unknown
-  editable: boolean; upload?: { folder: string; profile: string }
+  nullable: boolean; editable: boolean; upload?: { folder: string; profile: string }
 }
 export type ResourceMeta = {
-  key: string; label: string; group: string; canCreate: boolean; canUpdate: boolean; canDelete: boolean; versioned: boolean; searchable: boolean
+  key: string; label: string; group: string; inNav: boolean; canCreate: boolean; canUpdate: boolean; canDelete: boolean; versioned: boolean; searchable: boolean
   fields: FieldMeta[]; relations: { input: string; label: string; ref: string }[]
   filters: { name: string; label: string; kind: 'bool' | 'int' | 'enum'; options?: string[] }[]
 }

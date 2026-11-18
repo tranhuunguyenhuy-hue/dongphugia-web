@@ -26,7 +26,11 @@ describe('resource definitions', () => {
       }
       for (const column of def.search) expect(def.fields.some((f) => f.name === column), `${def.key} search ${column}`).toBe(true)
       expect(def.fields.some((f) => f.name === def.optionLabel), `${def.key} optionLabel`).toBe(true)
-      for (const part of def.orderBy.split(',')) expect(part.trim(), def.key).toMatch(/^[a-z_][a-z0-9_]* (asc|desc)$/)
+      for (const part of def.orderBy.split(',')) {
+        expect(part.trim(), def.key).toMatch(/^[a-z_][a-z0-9_]* (asc|desc)$/)
+        const column = part.trim().split(' ')[0]
+        expect(column === 'id' || def.fields.some((f) => f.name === column && !f.virtual), `${def.key} order column ${column} must be a selectable field`).toBe(true)
+      }
       for (const filter of def.filters ?? []) expect(def.fields.some((f) => f.name === filter.name), `${def.key} filter ${filter.name}`).toBe(true)
       for (const relation of def.relations ?? []) {
         for (const id of [relation.table, relation.owner, relation.target, relation.input]) expect(id).toMatch(IDENT)
@@ -43,7 +47,10 @@ describe('resource definitions', () => {
     const guardSource = await readFile(path.join(root, 'supabase/m3-test/004_m3_test_admin_api.sql'), 'utf8')
     const guard = /-- guard:begin\n([\s\S]*?)-- guard:end/.exec(guardSource)![1]
     const { forward, rollback } = generateAdminResourceMigration(RESOURCES, {
-      role: 'dpg_admin_api_test', policyPrefix: 'm3_admin_api_', guard, baseTables: [],
+      role: 'dpg_admin_api_test', policyPrefix: 'm3_admin_api_', guard,
+      baseTables: ['admin_users', 'categories', 'subcategories', 'brands'],
+      basePolicies: ['admin_users.select', 'admin_users.update', 'categories.select', 'subcategories.select', 'brands.select'],
+      rollbackRegrant: ['grant update (last_login_at) on dpg_app.admin_users to dpg_admin_api_test;'],
       title: 'M3 TEST-only (project uybumsnyqpwcidjxmfsv): column-level grants + RLS for the Admin resources served by `admin-api`.',
     })
     expect(await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')).toBe(forward)
@@ -52,7 +59,9 @@ describe('resource definitions', () => {
 
   it('never grants price/identity/credential columns to the API role', async () => {
     const sql = await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')
-    expect(sql).not.toMatch(/password_hash|\bprice\b|list_price|\bsku\b/)
+    expect(sql).not.toMatch(/\bprice\b|list_price|\bsku\b/)
+    // The only credential column the API may write is admin_users.password_hash (hashed server-side); never selected.
+    expect(sql.split('\n').filter((line) => /password_hash/.test(line)).every((line) => /^grant (insert|update) \(.*\) on dpg_app\.admin_users /.test(line))).toBe(true)
     const writes = sql.split('\n').filter((line) => /^grant (insert|update) \(/.test(line))
     expect(writes.length).toBeGreaterThan(0)
     for (const line of writes) expect(line, line).not.toMatch(/\b(view_count|created_at|id)\b/)

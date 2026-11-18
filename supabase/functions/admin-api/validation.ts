@@ -67,8 +67,8 @@ export function isSafeLink(value: string): boolean {
   try { const url = new URL(value); return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password } catch { return false }
 }
 
-const isTextLike = (kind: FieldDef['kind']) => kind === 'text' || kind === 'textarea' || kind === 'html' || kind === 'link' || kind === 'media'
-const allowsNull = (field: FieldDef) => field.required ? false : field.nullable ?? (isTextLike(field.kind) || field.kind === 'strings' || field.kind === 'datetime')
+const isTextLike = (kind: FieldDef['kind']) => kind === 'text' || kind === 'textarea' || kind === 'html' || kind === 'link' || kind === 'media' || kind === 'email'
+export const allowsNull = (field: FieldDef) => field.required ? false : field.nullable ?? (isTextLike(field.kind) || field.kind === 'strings' || field.kind === 'datetime')
 
 /** Value schema for one writable field (before optional/nullable wrapping). */
 function valueSchema(field: FieldDef, allowedMediaHosts: readonly string[]): z.ZodType {
@@ -82,12 +82,16 @@ function valueSchema(field: FieldDef, allowedMediaHosts: readonly string[]): z.Z
       if (field.required || (field.min ?? 0) > 0) schema = (schema as z.ZodString).min(Math.max(1, field.min ?? 1))
       return schema
     }
+    case 'email': return z.string().trim().toLowerCase().email().max(field.max ?? 200)
     case 'int': return z.number().int().min(field.min ?? INT_MIN).max(field.max ?? INT_MAX)
     case 'bool': return z.boolean()
     case 'enum': return z.enum([...(field.options ?? [])] as [string, ...string[]])
     case 'datetime': return z.string().datetime({ offset: true })
     case 'strings': return z.array(z.string().trim().min(1).max(100)).max(field.max ?? 30)
     case 'ref': return z.number().int().min(1).max(INT_MAX)
+    case 'json': return z.record(z.string(), z.unknown()).refine((v) => JSON.stringify(v).length <= 20000, 'JSON_TOO_LARGE')
+    case 'password': return z.string().min(8).max(200)
+    case 'money': return z.number().finite().min(field.min ?? 0).max(field.max ?? 999_999_999_999)
   }
 }
 

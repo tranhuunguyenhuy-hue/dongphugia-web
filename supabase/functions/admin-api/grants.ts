@@ -12,6 +12,10 @@ export interface GrantOptions {
   title: string
   /** Tables whose privileges were already granted by an earlier migration (rollback keeps their SELECT). */
   baseTables?: readonly string[]
+  /** `table.command` policies created by an earlier migration: the rollback must not drop them. */
+  basePolicies?: readonly string[]
+  /** Statements that restore column privileges the earlier migration granted and the rollback's REVOKE removes. */
+  rollbackRegrant?: readonly string[]
 }
 
 type Command = 'select' | 'insert' | 'update' | 'delete'
@@ -30,9 +34,9 @@ export function collectGrants(resources: readonly ResourceDef[]): Map<string, Ta
   for (const def of resources) {
     const grant = entry(def.table)
     grant.select.add('id')
-    for (const field of def.fields) grant.select.add(field.name)
+    for (const field of def.fields) if (!field.virtual) grant.select.add(field.name)
     for (const name of def.existingColumns ?? []) grant.select.add(name)
-    const writable = def.fields.filter((field) => !field.readOnly).map((field) => field.name)
+    const writable = def.fields.filter((field) => !field.readOnly && !field.virtual).map((field) => field.name)
     if (def.write && def.create) {
       for (const name of writable) grant.insert.add(name)
       if (def.autoSlug) grant.insert.add(def.autoSlug.column)
@@ -45,7 +49,7 @@ export function collectGrants(resources: readonly ResourceDef[]): Map<string, Ta
       for (const name of writable) grant.update.add(name)
       for (const name of def.hookColumns ?? []) grant.update.add(name)
     }
-    if (canUpdate || softDelete) { grant.update.add('updated_at'); if (def.versioned) grant.update.add('version') }
+    if (canUpdate || softDelete) { if (!def.noUpdatedAt) grant.update.add('updated_at'); if (def.versioned) grant.update.add('version') }
     if (softDelete) grant.update.add('is_active')
     if (def.write && def.delete === 'hard') grant.delete = true
     for (const relation of def.relations ?? []) {
@@ -111,8 +115,10 @@ export function generateAdminResourceMigration(resources: readonly ResourceDef[]
       : `revoke all on dpg_app.${table} from ${role};`)
     if (tables.get(table)!.sequence) rollback.push(`revoke all on sequence dpg_app.${table}_id_seq from ${role};`)
   }
+  if (options.rollbackRegrant?.length) rollback.push(...options.rollbackRegrant)
+  const kept = (options.basePolicies ?? []).map((policy) => `'${policy}'`)
   rollback.push('do $$', 'declare spec record;', 'begin', '  for spec in select * from (values', specs.join(',\n'), '  ) as t(tbl,cmd) loop',
-    `    if spec.cmd <> 'select' or spec.tbl not in (${[...base].map((t) => `'${t}'`).join(', ') || "''"}) then`,
+    `    if ${kept.length ? `(spec.tbl||'.'||spec.cmd) <> all (array[${kept.join(', ')}])` : 'true'} then`,
     `      execute format('drop policy if exists %I on dpg_app.%I', '${options.policyPrefix}'||spec.cmd, spec.tbl);`,
     '    end if;', '  end loop;', 'end $$;', '')
   return { forward: forward.join('\n'), rollback: rollback.join('\n') }

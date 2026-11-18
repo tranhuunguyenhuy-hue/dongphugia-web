@@ -119,6 +119,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
   const deps = () => ({
     db: dbOf(apiPool), hmacSecret: SECRET, allowedOrigin: ORIGIN, allowedMediaHosts: 'media.example.test',
     verifyPassword: (plain: string, hash: string) => bcrypt.compare(plain, hash),
+    hashPassword: (plain: string) => bcrypt.hash(plain, 4),
   })
   async function call(method: string, route: string, body?: unknown, opts: { token?: string; ip?: string; origin?: string; headers?: Record<string, string>; nonce?: string; secret?: string } = {}) {
     const text = body === undefined ? '' : JSON.stringify(body)
@@ -233,7 +234,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
     for (const statement of [
       'update dpg_app.products set price = 1', 'update dpg_app.products set sku = \'x\'', 'update dpg_app.products set list_price = 1',
       'delete from dpg_app.products', 'insert into dpg_app.products(sku,name,slug,category_id) values (\'a\',\'b\',\'c\',1)',
-      'select * from dpg_app.orders', 'update dpg_app.admin_users set role = \'admin\'', 'update dpg_app.admin_users set password_hash = \'x\'',
+      'select * from dpg_app.orders', 'update dpg_app.admin_users set avatar_url = \'x\'', 'update dpg_app.admin_users set supabase_auth_user_id = null',
       'delete from dpg_app.admin_users', 'update dpg_app.categories set name = \'x\'', 'update dpg_app.audit_logs set action = \'x\'', 'delete from dpg_app.audit_logs',
       'select list_price from dpg_app.products',
     ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
@@ -253,7 +254,11 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-tags')).toMatchObject({ canCreate: true, canUpdate: false, canDelete: true })
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-categories')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
       expect(JSON.stringify(a.json.data)).not.toMatch(/blog:write|dpg_app|select |insert /)
-      for (const who of [manager, sale]) expect((await call('GET', '/schema', undefined, { token: who })).json.data.resources).toEqual([])
+      const keysOf = async (who: string) => (await call('GET', '/schema', undefined, { token: who })).json.data.resources.map((r: { key: string }) => r.key).sort()
+      expect(await keysOf(manager)).toEqual(['categories', 'customers', 'subcategories'])
+      expect(await keysOf(sale)).toEqual(['customers'])
+      expect((await call('GET', '/schema', undefined, { token: manager })).json.data.resources.find((r: { key: string }) => r.key === 'customers')).toMatchObject({ canCreate: true, canUpdate: true })
+      expect((await call('GET', '/schema', undefined, { token: sale })).json.data.resources[0]).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
     })
 
     it('enforces RBAC on every generic operation', async () => {
@@ -374,6 +379,116 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(project.json.data).toMatchObject({ tags: ['biet-thu', 'da-lat'], is_featured: true }); expect(project.json.data.slug).toMatch(/^biet-thu-da-lat-\d{10,}$/)
       expect((await call('PATCH', `/r/projects/${project.json.data.id}`, { input: { tags: [] } }, { token: t })).json.data.tags).toEqual([])
       expect(code(await call('PATCH', `/r/projects/${project.json.data.id}`, { input: { tags: [''] } }, { token: t }))).toBe('VALIDATION_FAILED')
+    })
+
+    it('limits categories to the banner and keeps taxonomy/PIM resources admin-only', async () => {
+      const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
+      expect(code(await call('GET', '/r/categories', undefined, { token: sale }))).toBe('FORBIDDEN')
+      expect((await call('GET', '/r/categories', undefined, { token: manager })).status).toBe(200)
+      expect(code(await call('PATCH', '/r/categories/1', { input: { banner_url: `${MEDIA}/c.webp` } }, { token: manager }))).toBe('FORBIDDEN')
+      for (const input of [{ name: 'Hack' }, { slug: 'hack' }, { is_active: false }, { banner_url: 'https://evil.example/c.webp' }]) {
+        expect(code(await call('PATCH', '/r/categories/1', { input }, { token: admin })), JSON.stringify(input)).toBe('VALIDATION_FAILED')
+      }
+      const set = await call('PATCH', '/r/categories/1', { input: { banner_url: `${MEDIA}/category-banners/c.webp` } }, { token: admin })
+      expect(set.json.data).toMatchObject({ name: 'Cat', banner_url: `${MEDIA}/category-banners/c.webp` })
+      expect((await call('PATCH', '/r/categories/1', { input: { banner_url: '' } }, { token: admin })).json.data.banner_url).toBeNull()
+      expect(code(await call('POST', '/r/categories', { input: { banner_url: `${MEDIA}/x.webp` } }, { token: admin }))).toBe('NOT_FOUND')
+      expect(code(await call('DELETE', '/r/categories/1', {}, { token: admin }))).toBe('NOT_FOUND')
+      await expect(apiPool.query("update dpg_app.categories set name='x'"), 'db').rejects.toThrow(/permission denied/)
+    })
+
+    it('manages brands, taxons, types and specifications without hard delete', async () => {
+      const t = await token('admin'), manager = await token('manager')
+      for (const route of ['/r/brands', '/r/catalog-taxons', '/r/product-types', '/r/spec-definitions']) expect(code(await call('GET', route, undefined, { token: manager })), route).toBe('FORBIDDEN')
+      const brand = await call('POST', '/r/brands', { input: { name: 'TOTO', slug: 'toto', origin_country: 'Nhật Bản', website_url: 'https://toto.example/' } }, { token: t })
+      expect(brand.status).toBe(201); expect(brand.json.data).toMatchObject({ slug: 'toto', is_active: true, is_featured: false, sort_order: 0 })
+      expect(code(await call('POST', '/r/brands', { input: { name: 'X', slug: 'x', website_url: 'javascript:alert(1)' } }, { token: t }))).toBe('VALIDATION_FAILED')
+      expect((await call('PATCH', `/r/brands/${brand.json.data.id}`, { input: { is_active: false, logo_url: `${MEDIA}/brands/toto.webp` } }, { token: t })).json.data).toMatchObject({ is_active: false, logo_url: `${MEDIA}/brands/toto.webp` })
+      expect((await call('GET', '/r/brands?is_active=false', undefined, { token: t })).json.data.total).toBe(1)
+      expect(code(await call('DELETE', `/r/brands/${brand.json.data.id}`, {}, { token: t }))).toBe('NOT_FOUND')
+
+      const root = await call('POST', '/r/catalog-taxons', { input: { name: 'Thiết bị', slug: 'thiet-bi', canonical_path: '/thiet-bi' } }, { token: t })
+      expect(root.json.data).toMatchObject({ parent_id: null, depth: 0, kind: 'type', status: 'active', is_indexable: true })
+      const child = await call('POST', '/r/catalog-taxons', { input: { name: 'Bồn cầu', slug: 'bon-cau', canonical_path: '/thiet-bi/bon-cau', depth: 1, parent_id: root.json.data.id } }, { token: t })
+      expect(child.json.data.parent_id).toBe(root.json.data.id)
+      expect(code(await call('POST', '/r/catalog-taxons', { input: { name: 'Mồ côi', slug: 'mo-coi', canonical_path: '/mo-coi', parent_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+      expect((await call('PATCH', `/r/catalog-taxons/${child.json.data.id}`, { input: { parent_id: null } }, { token: t })).json.data.parent_id).toBeNull()
+      expect(code(await call('PATCH', `/r/catalog-taxons/${child.json.data.id}`, { input: { depth: 11 } }, { token: t }))).toBe('VALIDATION_FAILED')
+
+      const type = await call('POST', '/r/product-types', { input: { subcategory_id: 1, name: 'Bồn cầu 1 khối', slug: 'bon-cau-1-khoi', filter_policy: { price: true } } }, { token: t })
+      expect(type.json.data).toMatchObject({ filter_policy: { price: true }, is_active: true })
+      for (const bad of [{ filter_policy: [1] }, { filter_policy: 'x' }, { subcategory_id: 'abc' }]) expect(code(await call('POST', '/r/product-types', { input: { subcategory_id: 1, name: 'n', slug: 's', ...bad } }, { token: t })), JSON.stringify(bad)).toBe('VALIDATION_FAILED')
+      expect(code(await call('POST', '/r/product-types', { input: { subcategory_id: 999, name: 'n', slug: 's' } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+      const sub = await call('POST', '/r/product-sub-types', { input: { product_type_id: type.json.data.id, name: 'Nắp êm', slug: 'nap-em' } }, { token: t })
+      expect(sub.status).toBe(201)
+      expect((await call('GET', `/r/product-sub-types?product_type_id=${type.json.data.id}`, undefined, { token: t })).json.data.total).toBe(1)
+
+      const spec = await call('POST', '/r/spec-definitions', { input: { key: 'color', label: 'Màu sắc', is_filterable: true, normalize_rule: { lower: true } } }, { token: t })
+      expect(spec.json.data).toMatchObject({ data_type: 'text', is_pdp_visible: true, normalize_rule: { lower: true } })
+      expect(code(await call('POST', '/r/spec-definitions', { input: { key: 'color', label: 'Trùng' } }, { token: t }))).toBe('DUPLICATE')
+      expect((await call('PATCH', `/r/spec-definitions/${spec.json.data.id}`, { input: { unit: 'mm', normalize_rule: {} } }, { token: t })).json.data).toMatchObject({ unit: 'mm', normalize_rule: {} })
+      const option = await call('POST', '/r/spec-options', { input: { spec_definition_id: spec.json.data.id, value: 'Trắng', slug: 'trang', aliases: ['white', 'trắng'] } }, { token: t })
+      expect(option.json.data).toMatchObject({ aliases: ['white', 'trắng'], is_active: true })
+      expect(code(await call('PATCH', `/r/spec-options/${option.json.data.id}`, { input: { value: 'Đen' } }, { token: t }))).toBe('NOT_FOUND') // legacy has no option update
+      expect(code(await call('POST', '/r/spec-options', { input: { spec_definition_id: spec.json.data.id, value: 'v', slug: 's', aliases: [''] } }, { token: t }))).toBe('VALIDATION_FAILED')
+    })
+
+    it('lets sale managers write customers, sale read only, and rejects duplicate phones', async () => {
+      const manager = await token('manager'), sale = await token('sale')
+      const created = await call('POST', '/r/customers', { input: { full_name: 'Nguyễn Văn A', phone: '0901234567', email: 'a@example.test' } }, { token: manager })
+      expect(created.status).toBe(201); expect(created.json.data).toMatchObject({ source: 'MANUAL', full_name: 'Nguyễn Văn A' }); expect(created.json.data.last_interacted_at).toBeTruthy()
+      expect(code(await call('POST', '/r/customers', { input: { full_name: 'Trùng', phone: '0901234567' } }, { token: manager }))).toBe('DUPLICATE')
+      expect((await call('PATCH', `/r/customers/${created.json.data.id}`, { input: { notes: 'VIP', source: 'FACEBOOK' } }, { token: manager })).json.data).toMatchObject({ notes: 'VIP', source: 'FACEBOOK' })
+      expect((await call('GET', '/r/customers?q=0901', undefined, { token: sale })).json.data.total).toBe(1)
+      expect(code(await call('POST', '/r/customers', { input: { full_name: 'X', phone: '0911111111' } }, { token: sale }))).toBe('FORBIDDEN')
+      expect(code(await call('PATCH', `/r/customers/${created.json.data.id}`, { input: { notes: 'x' } }, { token: sale }))).toBe('FORBIDDEN')
+      expect(code(await call('DELETE', `/r/customers/${created.json.data.id}`, {}, { token: manager }))).toBe('NOT_FOUND')
+    })
+
+    it('manages users: server-side bcrypt, no hash exposure, session revocation and last-admin protection', async () => {
+      const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
+      for (const who of [manager, sale]) { expect(code(await call('GET', '/r/users', undefined, { token: who }))).toBe('FORBIDDEN'); expect(code(await call('POST', '/r/users', { input: { email: 'x@example.test', name: 'X', password: 'password-123' } }, { token: who }))).toBe('FORBIDDEN') }
+      const weak = await call('POST', '/r/users', { input: { email: 'weak@example.test', name: 'Weak', password: 'short' } }, { token: admin })
+      expect(weak.json.error).toMatchObject({ code: 'VALIDATION_FAILED', fields: ['password'] }); expect(JSON.stringify(weak.json)).not.toContain('short')
+      expect(code(await call('POST', '/r/users', { input: { email: 'noo@example.test', name: 'No password' } }, { token: admin }))).toBe('VALIDATION_FAILED')
+      expect(code(await call('POST', '/r/users', { input: { email: 'bad-email', name: 'X', password: 'password-123' } }, { token: admin }))).toBe('VALIDATION_FAILED')
+      expect(code(await call('POST', '/r/users', { input: { email: 'x@example.test', name: 'X', password: 'password-123', role: 'owner' } }, { token: admin }))).toBe('VALIDATION_FAILED')
+      const created = await call('POST', '/r/users', { input: { email: 'New.User@Example.test', name: 'Người mới', role: 'sale_manager', password: 'password-123' } }, { token: admin })
+      expect(created.status).toBe(201); expect(created.json.data).toMatchObject({ email: 'new.user@example.test', role: 'sale_manager', is_active: true })
+      expect(JSON.stringify(created.json)).not.toMatch(/password|\$2[aby]\$/)
+      const hash = (await owner.query('select password_hash from dpg_app.admin_users where id=$1', [created.json.data.id])).rows[0].password_hash
+      expect(hash).toMatch(/^\$2[aby]\$/); expect(await bcrypt.compare('password-123', hash)).toBe(true)
+      expect(code(await call('POST', '/r/users', { input: { email: 'new.user@example.test', name: 'Trùng', password: 'password-123' } }, { token: admin }))).toBe('DUPLICATE')
+      expect((await loginAs('new.user@example.test', 'password-123', '10.4.4.1')).status).toBe(200)
+      expect(JSON.stringify((await call('GET', `/r/users/${created.json.data.id}`, undefined, { token: admin })).json)).not.toMatch(/password/)
+      expect((await call('GET', '/r/users?role=sale_manager&q=nguoi', undefined, { token: admin })).json.data.total).toBeGreaterThanOrEqual(0)
+
+      // password change and deactivation revoke the account's sessions
+      const victim = (await loginAs('new.user@example.test', 'password-123', '10.4.4.2')).json.data.token as string
+      expect((await call('GET', '/me', undefined, { token: victim })).status).toBe(200)
+      expect((await call('PATCH', `/r/users/${created.json.data.id}`, { input: { password: 'another-pass-456' } }, { token: admin })).status).toBe(200)
+      expect((await call('GET', '/me', undefined, { token: victim })).status).toBe(401)
+      expect((await loginAs('new.user@example.test', 'password-123', '10.4.4.3')).status).toBe(401)
+      expect((await loginAs('new.user@example.test', 'another-pass-456', '10.4.4.4')).status).toBe(200)
+      const second = (await loginAs('new.user@example.test', 'another-pass-456', '10.4.4.5')).json.data.token as string
+      expect((await call('PATCH', `/r/users/${created.json.data.id}`, { input: { is_active: false } }, { token: admin })).json.data.is_active).toBe(false)
+      expect((await call('GET', '/me', undefined, { token: second })).status).toBe(401)
+      expect((await loginAs('new.user@example.test', 'another-pass-456', '10.4.4.6')).status).toBe(401)
+
+      // the last active admin cannot be deactivated or demoted; with a second admin it can
+      const adminId = (await owner.query("select id from dpg_app.admin_users where email='admin@example.test'")).rows[0].id as number
+      expect(code(await call('PATCH', `/r/users/${adminId}`, { input: { is_active: false } }, { token: admin }))).toBe('LAST_ADMIN')
+      expect(code(await call('PATCH', `/r/users/${adminId}`, { input: { role: 'sale' } }, { token: admin }))).toBe('LAST_ADMIN')
+      const other = await call('POST', '/r/users', { input: { email: 'admin2@example.test', name: 'Admin 2', role: 'admin', password: 'password-123' } }, { token: admin })
+      expect((await call('PATCH', `/r/users/${other.json.data.id}`, { input: { role: 'sale' } }, { token: admin })).status).toBe(200) // admin2 may be demoted: admin@ stays active
+      expect((await call('PATCH', `/r/users/${adminId}`, { input: { name: 'Admin (đổi tên)' } }, { token: admin })).status).toBe(200)
+      await owner.query("update dpg_app.admin_users set name='Admin' where id=$1", [adminId])
+      // the API can never read or change hashes outside the password flow, nor delete accounts
+      await expect(apiPool.query('delete from dpg_app.admin_users'), 'delete users').rejects.toThrow(/permission denied/)
+      await expect(apiPool.query("update dpg_app.admin_users set avatar_url='x'"), 'avatar').rejects.toThrow(/permission denied/)
+      const audit = (await owner.query("select new_value, changed_fields from dpg_app.audit_logs where entity_type='users' and entity_id=$1 order by id", [created.json.data.id])).rows
+      expect(JSON.stringify(audit)).not.toMatch(/\$2[aby]\$|password-123|another-pass/)
+      expect(audit[1].changed_fields).toContain('password_hash')
     })
 
     it('database blocks anything outside the generated grants', async () => {

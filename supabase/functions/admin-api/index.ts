@@ -7,7 +7,7 @@
 // by the platform and is only used to connect; the role switch is enforced by the server for the whole session.
 import postgres from 'postgres'
 import bcrypt from 'bcryptjs'
-import { handleRequest, type Db } from './handlers.ts'
+import { BCRYPT_ROUNDS, handleRequest, type Db } from './handlers.ts'
 
 const dedicatedUrl = Deno.env.get('ADMIN_API_DB_URL')
 const databaseUrl = dedicatedUrl ?? Deno.env.get('SUPABASE_DB_URL')
@@ -38,6 +38,7 @@ Deno.serve((request) => {
     allowedOrigin: Deno.env.get('ADMIN_API_ALLOWED_ORIGIN') ?? '',
     allowedMediaHosts: Deno.env.get('ADMIN_API_MEDIA_HOSTS') ?? '',
     verifyPassword: (plain, hash) => bcrypt.compare(plain, hash),
+    hashPassword: (plain) => bcrypt.hash(plain, BCRYPT_ROUNDS),
   }).catch((error: unknown) => {
     console.error(JSON.stringify({ event: 'ADMIN_API_FAILURE', name: error instanceof Error ? error.name : 'unknown', sqlstate: (error as { code?: unknown })?.code ?? null }))
     return new Response(JSON.stringify({ error: { code: 'INTERNAL' } }), { status: 500, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } })

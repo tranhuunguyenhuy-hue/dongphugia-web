@@ -3,10 +3,10 @@
 // counters and the audit entry commit or roll back together.
 import { ApiError, mapDatabaseError, requirePermission, slugify, type Context, type Db } from './core.ts'
 import { can, type AdminRole } from './permissions.ts'
-import { resourceBodySchemas, resourceQuerySchema, parseAllowedMediaHosts } from './validation.ts'
-import { RESOURCES, resourceByKey, writableFields, type FieldDef, type ResourceDef, type Row, type SqlRaw } from './resources.ts'
+import { allowsNull, resourceBodySchemas, resourceQuerySchema, parseAllowedMediaHosts } from './validation.ts'
+import { RESOURCES, columnFields, resourceByKey, writableFields, type FieldDef, type ResourceDef, type Row, type SqlRaw } from './resources.ts'
 
-export interface ResourceDeps { db: Db; allowedMediaHosts?: string }
+export interface ResourceDeps { db: Db; allowedMediaHosts?: string; hashPassword?: (plain: string) => Promise<string> }
 type Result = { status: number; body: unknown }
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`)
@@ -30,7 +30,7 @@ const quote = (identifier: string) => {
 const T = (def: ResourceDef) => `dpg_app.${quote(def.table)}`
 
 function readableSelect(def: ResourceDef, alias = 't') {
-  const columns = ['id', ...def.fields.map((field) => field.name)].map((name) => `${alias}.${quote(name)}`)
+  const columns = ['id', ...columnFields(def).map((field) => field.name)].map((name) => `${alias}.${quote(name)}`)
   for (const relation of def.relations ?? []) {
     columns.push(`(select coalesce(json_agg(r.${quote(relation.target)} order by r.${quote(relation.target)}), '[]'::json) from dpg_app.${quote(relation.table)} r where r.${quote(relation.owner)} = ${alias}.id) as ${quote(relation.input)}`)
   }
@@ -40,14 +40,14 @@ function readableSelect(def: ResourceDef, alias = 't') {
 /** Field metadata for the SPA forms. Contains no permission strings or SQL. */
 export function resourceMeta(role: AdminRole) {
   return RESOURCES.filter((def) => can(role, def.read)).map((def) => ({
-    key: def.key, label: def.label, group: def.group,
+    key: def.key, label: def.label, group: def.group, inNav: Boolean(def.write),
     canCreate: Boolean(def.create && def.write && can(role, def.write)),
     canUpdate: Boolean(def.write && def.update !== false && can(role, def.write)),
     canDelete: Boolean(def.delete && can(role, def.remove ?? def.write ?? def.read) && def.write),
     versioned: Boolean(def.versioned), searchable: def.search.length > 0,
     fields: def.fields.map((field) => ({
       name: field.name, label: field.label, kind: field.kind, required: Boolean(field.required), max: field.max, min: field.min,
-      options: field.options, ref: field.ref, upload: field.upload, readOnly: Boolean(field.readOnly), list: Boolean(field.list), slugFrom: field.slugFrom, initial: field.initial,
+      options: field.options, ref: field.ref, upload: field.upload, readOnly: Boolean(field.readOnly), nullable: allowsNull(field), list: Boolean(field.list), slugFrom: field.slugFrom, initial: field.initial,
       editable: !field.readOnly && (!field.permission || can(role, field.permission)),
     })),
     relations: (def.relations ?? []).map((r) => ({ input: r.input, label: r.label, ref: r.ref })),
@@ -73,7 +73,7 @@ export async function listResource(deps: ResourceDeps, ctx: Context, def: Resour
   for (const filter of def.filters ?? []) {
     if (query[filter.name] !== undefined) { params.push(query[filter.name]); where.push(`t.${quote(filter.name)} = $${params.length}`) }
   }
-  const listColumns = ['id', ...def.fields.filter((field) => field.list).map((field) => field.name)].map((name) => `t.${quote(name)}`)
+  const listColumns = ['id', ...columnFields(def).filter((field) => field.list).map((field) => field.name)].map((name) => `t.${quote(name)}`)
   params.push(query.limit, (query.page - 1) * query.limit)
   const rows = await deps.db.query<Row>(
     `select ${listColumns.join(', ')}, count(*) over() as total from ${T(def)} t
@@ -95,6 +95,7 @@ async function loadRow(db: Db, def: ResourceDef, id: number, lock = false): Prom
   const select = [readableSelect(def), ...extra].join(', ')
   return (await db.query<Row>(`select ${select} from ${T(def)} t where t.id = $1${lock ? ' for update of t' : ''}`, [id]))[0]
 }
+const services = (deps: ResourceDeps) => ({ hashPassword: deps.hashPassword ?? (() => { throw new ApiError(500, 'INTERNAL') }) })
 const stripExtra = (row: Row): Row => Object.fromEntries(Object.entries(row).filter(([key]) => !key.startsWith('__')))
 const existingForHook = (row: Row): Row => {
   const out: Row = { ...stripExtra(row) }
@@ -112,6 +113,7 @@ export async function getResource(deps: ResourceDeps, ctx: Context, def: Resourc
 type Assignment = { column: string; expr: string; value?: unknown; bind: boolean }
 function assignment(field: FieldDef | undefined, column: string, value: unknown, nextParam: () => string): Assignment {
   if (isRaw(value)) return { column: quote(column), expr: value.raw, bind: false }
+  if (field?.kind === 'json' && value !== null) return { column: quote(column), expr: `${nextParam()}::jsonb`, value: JSON.stringify(value), bind: true }
   if (field?.kind === 'strings' && value !== null) return { column: quote(column), expr: `array(select jsonb_array_elements_text(${nextParam()}::jsonb))`, value: JSON.stringify(value), bind: true }
   return { column: quote(column), expr: nextParam(), value, bind: true }
 }
@@ -159,7 +161,7 @@ export async function createResource(deps: ResourceDeps, ctx: Context, def: Reso
   requireFieldPermissions(ctx, def, input)
   try {
     const id = await deps.db.transaction(async (tx) => {
-      const hook = await def.hook?.({ tx, mode: 'create', input, ctx })
+      const hook = await def.hook?.({ tx, mode: 'create', input, ctx, services: services(deps) })
       const sets: Record<string, unknown> = { ...(hook?.set ?? {}) }
       if (def.autoSlug) sets[def.autoSlug.column] = `${slugify(String(input[def.autoSlug.from] ?? ''))}-${Date.now()}`
       const params: unknown[] = []
@@ -198,7 +200,7 @@ export async function updateResource(deps: ResourceDeps, ctx: Context, def: Reso
       if (!raw) throw new ApiError(404, 'NOT_FOUND')
       const before = stripExtra(raw)
       if (def.versioned && expected_version !== undefined && Number(before.version) !== expected_version) throw new ApiError(409, 'VERSION_CONFLICT')
-      const hook = await def.hook?.({ tx, mode: 'update', existing: existingForHook(raw), input, ctx })
+      const hook = await def.hook?.({ tx, mode: 'update', existing: existingForHook(raw), input, ctx, services: services(deps) })
       const params: unknown[] = [id]
       const sets: string[] = []
       const push = (column: string, value: unknown, field?: FieldDef) => {
@@ -209,7 +211,7 @@ export async function updateResource(deps: ResourceDeps, ctx: Context, def: Reso
       const direct = writableFields(def).filter((field) => field.name in input && input[field.name] !== undefined)
       for (const field of direct) push(field.name, input[field.name], field)
       for (const [column, value] of Object.entries(hook?.set ?? {})) push(column, value)
-      sets.push('updated_at = now()')
+      if (!def.noUpdatedAt) sets.push('updated_at = now()')
       if (def.versioned) sets.push('version = coalesce(version, 0) + 1')
       await tx.query(`update ${T(def)} set ${sets.join(', ')} where id = $1`, params)
       await replaceRelations(tx, def, id, input, before)
@@ -234,7 +236,7 @@ export async function deleteResource(deps: ResourceDeps, ctx: Context, def: Reso
       if (!raw) throw new ApiError(404, 'NOT_FOUND')
       const before = stripExtra(raw)
       if (def.versioned && expected_version !== undefined && Number(before.version) !== expected_version) throw new ApiError(409, 'VERSION_CONFLICT')
-      const hook = await def.hook?.({ tx, mode: 'delete', existing: existingForHook(raw), input: {}, ctx })
+      const hook = await def.hook?.({ tx, mode: 'delete', existing: existingForHook(raw), input: {}, ctx, services: services(deps) })
       let result: 'deleted' | 'unpublished' | 'deactivated'
       if (hook?.instead || def.delete === 'soft') {
         const params: unknown[] = [id]
@@ -244,7 +246,7 @@ export async function deleteResource(deps: ResourceDeps, ctx: Context, def: Reso
           if (isRaw(value)) sets.push(`${quote(column)} = ${value.raw}`)
           else { params.push(value); sets.push(`${quote(column)} = $${params.length}`) }
         }
-        sets.push('updated_at = now()')
+        if (!def.noUpdatedAt) sets.push('updated_at = now()')
         if (def.versioned) sets.push('version = coalesce(version, 0) + 1')
         await tx.query(`update ${T(def)} set ${sets.join(', ')} where id = $1`, params)
         result = hook?.instead ? 'unpublished' : 'deactivated'

@@ -11,6 +11,7 @@ export interface Deps {
   allowedOrigin: string
   allowedMediaHosts?: string
   verifyPassword(plain: string, hash: string): Promise<boolean>
+  hashPassword?(plain: string): Promise<string>
   now?: () => number
   sessionHours?: number
 }
@@ -149,7 +150,7 @@ async function patchProduct(deps: Deps, ctx: Context, id: number, body: string) 
 
 async function dispatchResource(deps: Deps, ctx: Context, method: string, key: string, tail: string | undefined, search: URLSearchParams, body: string) {
   const def = findResource(key)
-  const rd = { db: deps.db, allowedMediaHosts: deps.allowedMediaHosts }
+  const rd = { db: deps.db, allowedMediaHosts: deps.allowedMediaHosts, hashPassword: deps.hashPassword }
   if (tail === 'options') { if (method === 'GET') return optionsResource(rd, ctx, def); throw new ApiError(404, 'NOT_FOUND') }
   if (tail === undefined) {
     if (method === 'GET') return listResource(rd, ctx, def, search)
