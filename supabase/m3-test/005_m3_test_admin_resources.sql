@@ -60,23 +60,35 @@ grant usage, select on sequence dpg_app.catalog_taxons_id_seq to dpg_admin_api_t
 -- categories
 grant select (banner_url, id, is_active, name, slug, sort_order) on dpg_app.categories to dpg_admin_api_test;
 grant update (banner_url, updated_at) on dpg_app.categories to dpg_admin_api_test;
+-- colors
+grant select (hex_code, id, name, slug) on dpg_app.colors to dpg_admin_api_test;
 -- customers
 grant select (created_at, email, full_name, id, last_interacted_at, notes, phone, source) on dpg_app.customers to dpg_admin_api_test;
 grant insert (email, full_name, last_interacted_at, notes, phone, source) on dpg_app.customers to dpg_admin_api_test;
 grant update (email, full_name, last_interacted_at, notes, phone, source, updated_at) on dpg_app.customers to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.customers_id_seq to dpg_admin_api_test;
+-- materials
+grant select (id, name, slug, sort_order) on dpg_app.materials to dpg_admin_api_test;
 -- order_items
 grant select (id, order_id, product_id, product_name, product_sku, quantity, total_price, unit_price) on dpg_app.order_items to dpg_admin_api_test;
 grant update (quantity, total_price, unit_price) on dpg_app.order_items to dpg_admin_api_test;
 -- orders
 grant select (assigned_at, assigned_to, created_at, customer_address, customer_email, customer_name, customer_phone, discount, id, note, order_number, payment_method, payment_status, shipping_fee, status, subtotal, total, updated_at, vat_rate) on dpg_app.orders to dpg_admin_api_test;
 grant update (assigned_at, assigned_to, discount, note, payment_status, shipping_fee, status, subtotal, total, updated_at, vat_rate) on dpg_app.orders to dpg_admin_api_test;
+-- origins
+grant select (id, name, slug) on dpg_app.origins to dpg_admin_api_test;
 -- partners
 grant select (description, gradient_class, id, is_active, link_url, logo_url, name, slug, sort_order, tier) on dpg_app.partners to dpg_admin_api_test;
 grant insert (description, gradient_class, is_active, link_url, logo_url, name, slug, sort_order, tier) on dpg_app.partners to dpg_admin_api_test;
 grant update (description, gradient_class, is_active, link_url, logo_url, name, sort_order, tier, updated_at) on dpg_app.partners to dpg_admin_api_test;
 grant delete on dpg_app.partners to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.partners_id_seq to dpg_admin_api_test;
+-- product_images
+grant select (alt_text, id, image_type, image_url, product_id, sort_order) on dpg_app.product_images to dpg_admin_api_test;
+grant insert (alt_text, image_type, image_url, product_id, sort_order) on dpg_app.product_images to dpg_admin_api_test;
+grant update (alt_text, image_type, image_url, sort_order) on dpg_app.product_images to dpg_admin_api_test;
+grant delete on dpg_app.product_images to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.product_images_id_seq to dpg_admin_api_test;
 -- product_sub_types
 grant select (id, is_active, name, product_type_id, slug, sort_order) on dpg_app.product_sub_types to dpg_admin_api_test;
 grant insert (is_active, name, product_type_id, slug, sort_order) on dpg_app.product_sub_types to dpg_admin_api_test;
@@ -87,6 +99,12 @@ grant select (description, filter_policy, id, is_active, name, slug, sort_order,
 grant insert (description, filter_policy, is_active, name, slug, sort_order, subcategory_id) on dpg_app.product_types to dpg_admin_api_test;
 grant update (description, filter_policy, is_active, name, slug, sort_order, subcategory_id, updated_at) on dpg_app.product_types to dpg_admin_api_test;
 grant usage, select on sequence dpg_app.product_types_id_seq to dpg_admin_api_test;
+-- products
+grant select (brand_id, category_id, color_id, description, display_name, features, hita_product_id, id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sku, slug, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
+grant insert (brand_id, category_id, color_id, description, display_name, features, hita_product_id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sku, slug, sort_order, source_url, specs, stock_status, subcategory_id, warranty_months) on dpg_app.products to dpg_admin_api_test;
+grant update (brand_id, category_id, color_id, description, display_name, features, hita_product_id, image_main_url, is_active, is_combo, is_featured, is_home_featured, is_master, is_promotion, list_price, listing_visibility, material_id, name, online_discount_amount, origin_id, original_price, pdp_visibility, price, price_display, product_sub_type, product_sub_type_id, product_type, product_type_id, publication_status, sale_price, search_visibility, sellable_status, seo_description, seo_indexing, seo_title, sitemap_include, sort_order, source_url, specs, stock_status, subcategory_id, updated_at, version, warranty_months) on dpg_app.products to dpg_admin_api_test;
+grant delete on dpg_app.products to dpg_admin_api_test;
+grant usage, select on sequence dpg_app.products_id_seq to dpg_admin_api_test;
 -- projects
 grant select (category, description, id, is_active, is_featured, location, slug, sort_order, tags, thumbnail_url, title) on dpg_app.projects to dpg_admin_api_test;
 grant insert (category, description, is_active, is_featured, location, slug, sort_order, tags, thumbnail_url, title) on dpg_app.projects to dpg_admin_api_test;
@@ -142,23 +160,34 @@ begin
     ('catalog_taxons','update'),
     ('categories','select'),
     ('categories','update'),
+    ('colors','select'),
     ('customers','select'),
     ('customers','insert'),
     ('customers','update'),
+    ('materials','select'),
     ('order_items','select'),
     ('order_items','update'),
     ('orders','select'),
     ('orders','update'),
+    ('origins','select'),
     ('partners','select'),
     ('partners','insert'),
     ('partners','update'),
     ('partners','delete'),
+    ('product_images','select'),
+    ('product_images','insert'),
+    ('product_images','update'),
+    ('product_images','delete'),
     ('product_sub_types','select'),
     ('product_sub_types','insert'),
     ('product_sub_types','update'),
     ('product_types','select'),
     ('product_types','insert'),
     ('product_types','update'),
+    ('products','select'),
+    ('products','insert'),
+    ('products','update'),
+    ('products','delete'),
     ('projects','select'),
     ('projects','insert'),
     ('projects','update'),

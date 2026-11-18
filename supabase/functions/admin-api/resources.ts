@@ -19,6 +19,8 @@ export interface FieldDef {
   ref?: string
   /** Returned to the client but never written by the API. */
   readOnly?: boolean
+  /** Writable on create only (identity fields such as SKU and slug never change afterwards). */
+  createOnly?: boolean
   /** Input-only property that is not a column (e.g. `password`): never selected, granted or audited by name. */
   virtual?: boolean
   /** Shown as a list column. */
@@ -79,6 +81,8 @@ export interface ResourceDef {
   requireVersion?: boolean
   /** The table has no `updated_at` column (product_sub_types, spec_options). */
   noUpdatedAt?: boolean
+  /** Edited from inside another screen (e.g. product gallery) rather than from the navigation. */
+  hideFromNav?: boolean
   create?: boolean
   /** Rows can be edited (default true when `write` is set). */
   update?: boolean
@@ -146,6 +150,22 @@ const userHook: WriteHook = async ({ mode, existing, input, ctx, tx, services })
   return { set }
 }
 const customerHook: WriteHook = ({ mode }) => (mode === 'create' ? { set: { last_interacted_at: RAW_NOW } } : undefined)
+
+/** Product rules (mirrors src/lib/product-actions.ts): a sale price needs a higher list price, and a product can only be
+ * activated with a price (unless it is "contact for quote") and a main image. Identity (sku/slug) is create-only. */
+const PRICE_FIELDS = ['price', 'list_price', 'sale_price', 'stock_status', 'image_main_url', 'is_active']
+const asNumber = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value))
+const productHook: WriteHook = ({ mode, existing, input }) => {
+  if (mode === 'delete') return undefined
+  const final: Record<string, unknown> = { ...(existing ?? {}), ...input }
+  const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
+  if (sale !== null && (list === null || sale >= list)) throw new ApiError(400, 'SALE_PRICE_INVALID', ['sale_price', 'list_price'])
+  if (final.is_active === true && (mode === 'create' || PRICE_FIELDS.some((field) => field in input))) {
+    if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
+    if (typeof final.image_main_url !== 'string' || final.image_main_url.trim() === '') throw new ApiError(400, 'IMAGE_REQUIRED', ['image_main_url'])
+  }
+  return undefined
+}
 
 export const RESOURCES: ResourceDef[] = [
   {
@@ -402,6 +422,82 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'is_active', label: 'Hoạt động', kind: 'bool', list: true, initial: true },
       { name: 'password', label: 'Mật khẩu (bắt buộc khi tạo; để trống khi sửa nếu không đổi)', kind: 'password', required: true, virtual: true },
       { name: 'last_login_at', label: 'Đăng nhập gần nhất', kind: 'datetime', readOnly: true, list: true },
+    ],
+  },
+
+  { key: 'origins', label: 'Xuất xứ', group: 'Sản phẩm', table: 'origins', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
+    fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 100, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 100 }] },
+  { key: 'colors', label: 'Màu sắc', group: 'Sản phẩm', table: 'colors', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
+    fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 50, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 50 }, { name: 'hex_code', label: 'Mã màu', kind: 'text', max: 7 }] },
+  { key: 'materials', label: 'Chất liệu', group: 'Sản phẩm', table: 'materials', read: 'products:read', search: ['name'], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
+    fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 100, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 100 }, { name: 'sort_order', label: 'Thứ tự', kind: 'int' }] },
+  {
+    key: 'products', label: 'Sản phẩm', group: 'Sản phẩm', table: 'products',
+    read: 'products:read', write: 'products:write', remove: 'products:delete', create: true, delete: 'hard', versioned: true, requireVersion: true, hook: productHook,
+    search: ['name', 'sku', 'slug'], orderBy: 'id desc', optionLabel: 'name',
+    filters: [
+      { name: 'is_active', label: 'Đang bán', kind: 'bool' }, { name: 'is_featured', label: 'Nổi bật', kind: 'bool' }, { name: 'category_id', label: 'Danh mục', kind: 'int' },
+      { name: 'brand_id', label: 'Thương hiệu', kind: 'int' }, { name: 'publication_status', label: 'Xuất bản', kind: 'enum', options: ['draft', 'public'] },
+    ],
+    fields: [
+      { name: 'sku', label: 'SKU', kind: 'text', required: true, max: 100, list: true, createOnly: true },
+      { name: 'name', label: 'Tên sản phẩm', kind: 'text', required: true, max: 500, list: true },
+      { name: 'display_name', label: 'Tên hiển thị', kind: 'text', max: 500 },
+      { name: 'slug', label: 'Slug (không đổi sau khi tạo)', kind: 'text', required: true, max: 500, createOnly: true, slugFrom: 'name' },
+      { name: 'category_id', label: 'Danh mục', kind: 'ref', ref: 'categories', required: true, list: true },
+      { name: 'subcategory_id', label: 'Danh mục con', kind: 'ref', ref: 'subcategories', nullable: true },
+      { name: 'brand_id', label: 'Thương hiệu', kind: 'ref', ref: 'brands', nullable: true, list: true },
+      { name: 'origin_id', label: 'Xuất xứ', kind: 'ref', ref: 'origins', nullable: true },
+      { name: 'color_id', label: 'Màu sắc', kind: 'ref', ref: 'colors', nullable: true },
+      { name: 'material_id', label: 'Chất liệu', kind: 'ref', ref: 'materials', nullable: true },
+      { name: 'product_type_id', label: 'Loại sản phẩm', kind: 'ref', ref: 'product-types', nullable: true },
+      { name: 'product_sub_type_id', label: 'Phân loại phụ', kind: 'ref', ref: 'product-sub-types', nullable: true },
+      { name: 'product_type', label: 'Loại (văn bản cũ)', kind: 'text', max: 50 },
+      { name: 'product_sub_type', label: 'Phân loại phụ (văn bản cũ)', kind: 'text', max: 50 },
+      { name: 'price', label: 'Giá bán', kind: 'money', nullable: true, permission: 'commerce:write' },
+      { name: 'price_display', label: 'Hiển thị giá', kind: 'text', max: 50, nullable: false, min: 1, list: true, initial: 'Liên hệ báo giá', permission: 'commerce:write' },
+      { name: 'original_price', label: 'Giá gốc', kind: 'money', min: 0.01, nullable: true, permission: 'commerce:write' },
+      { name: 'list_price', label: 'Giá niêm yết', kind: 'money', min: 0.01, nullable: true, permission: 'commerce:write' },
+      { name: 'sale_price', label: 'Giá khuyến mãi', kind: 'money', min: 0.01, nullable: true, permission: 'commerce:write' },
+      { name: 'online_discount_amount', label: 'Giảm giá online', kind: 'money', nullable: true, permission: 'commerce:write' },
+      { name: 'stock_status', label: 'Tồn kho', kind: 'enum', options: ['in_stock', 'out_of_stock', 'discontinued', 'pre_order', 'contact'], initial: 'in_stock' },
+      { name: 'warranty_months', label: 'Bảo hành (tháng)', kind: 'int', min: 1, max: 600, nullable: true },
+      { name: 'image_main_url', label: 'Ảnh chính', kind: 'media', max: 1000, upload: { folder: 'products', profile: 'product' } },
+      { name: 'description', label: 'Mô tả', kind: 'html', max: 200000 },
+      { name: 'features', label: 'Đặc điểm nổi bật', kind: 'html', max: 100000 },
+      { name: 'specs', label: 'Thông số (JSON)', kind: 'json', initial: {} },
+      { name: 'is_active', label: 'Đang bán', kind: 'bool', list: true, initial: true, permission: 'visibility:write' },
+      { name: 'is_featured', label: 'Nổi bật', kind: 'bool', list: true },
+      { name: 'is_home_featured', label: 'Nổi bật trang chủ', kind: 'bool' },
+      { name: 'is_promotion', label: 'Khuyến mãi', kind: 'bool' },
+      { name: 'is_combo', label: 'Combo', kind: 'bool' },
+      { name: 'is_master', label: 'Sản phẩm chính', kind: 'bool', initial: true },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, initial: 0 },
+      { name: 'publication_status', label: 'Xuất bản', kind: 'enum', options: ['draft', 'public'], list: true, permission: 'visibility:write' },
+      { name: 'pdp_visibility', label: 'Trang sản phẩm', kind: 'enum', options: ['public', 'hidden'], permission: 'visibility:write' },
+      { name: 'listing_visibility', label: 'Danh sách', kind: 'enum', options: ['default', 'low_priority', 'hidden'], permission: 'visibility:write' },
+      { name: 'search_visibility', label: 'Tìm kiếm', kind: 'enum', options: ['visible', 'hidden'], permission: 'visibility:write' },
+      { name: 'sellable_status', label: 'Trạng thái bán', kind: 'enum', options: ['sellable', 'not_sellable', 'discontinued'], permission: 'visibility:write' },
+      { name: 'seo_indexing', label: 'Index SEO', kind: 'enum', options: ['index', 'noindex'], permission: 'seo:write' },
+      { name: 'sitemap_include', label: 'Đưa vào sitemap', kind: 'bool', permission: 'seo:write' },
+      { name: 'source_url', label: 'URL nguồn', kind: 'link', max: 1000 },
+      { name: 'hita_product_id', label: 'Mã Hita', kind: 'text', max: 100 },
+      { name: 'seo_title', label: 'SEO title', kind: 'text', max: 200, permission: 'seo:write' },
+      { name: 'seo_description', label: 'SEO description', kind: 'textarea', max: 500, permission: 'seo:write' },
+      { name: 'updated_at', label: 'Cập nhật', kind: 'datetime', readOnly: true, list: true },
+      { name: 'version', label: 'Phiên bản', kind: 'int', readOnly: true },
+    ],
+  },
+  {
+    key: 'product-images', label: 'Ảnh sản phẩm', group: 'Sản phẩm', table: 'product_images', noUpdatedAt: true, hideFromNav: true,
+    read: 'products:read', write: 'products:write', create: true, delete: 'hard', search: [], orderBy: 'sort_order asc, id asc', optionLabel: 'image_url',
+    filters: [{ name: 'product_id', label: 'Sản phẩm', kind: 'int' }],
+    fields: [
+      { name: 'product_id', label: 'Sản phẩm', kind: 'int', required: true, createOnly: true, min: 1 },
+      { name: 'image_url', label: 'Ảnh', kind: 'media', required: true, max: 1000, list: true, upload: { folder: 'products', profile: 'product' } },
+      { name: 'alt_text', label: 'Mô tả ảnh', kind: 'text', max: 300 },
+      { name: 'image_type', label: 'Loại ảnh', kind: 'text', max: 20, nullable: false, min: 1, initial: 'gallery' },
+      { name: 'sort_order', label: 'Thứ tự', kind: 'int', min: -100000, max: 100000, list: true, initial: 0 },
     ],
   },
 ]

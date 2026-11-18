@@ -21,7 +21,7 @@ const ROUTES = [
   { method: 'GET', pattern: /^\/(dashboard|assignees)$/ },
   { method: 'GET', pattern: /^\/(orders|quotes)$/ }, { method: 'GET', pattern: /^\/(orders|quotes)\/\d{1,9}$/ }, { method: 'PATCH', pattern: /^\/(orders|quotes)\/\d{1,9}$/ },
   { method: 'PATCH', pattern: /^\/orders\/\d{1,9}\/(status|payment|assign)$/ }, { method: 'PATCH', pattern: /^\/quotes\/\d{1,9}\/(status|assign)$/ },
-  { method: 'POST', pattern: /^\/quotes\/\d{1,9}\/complete$/ },
+  { method: 'POST', pattern: /^\/quotes\/\d{1,9}\/complete$/ }, { method: 'POST', pattern: /^\/products\/bulk$/ },
 ]
 const MAX_BODY_BYTES = 600_000
 const UPSTREAM_TIMEOUT_MS = 8_000

@@ -49,7 +49,7 @@ export function collectGrants(resources: readonly ResourceDef[], extra: readonly
     const canUpdate = Boolean(def.write && def.update !== false)
     const softDelete = Boolean(def.write && def.delete === 'soft')
     if (canUpdate) {
-      for (const name of writable) grant.update.add(name)
+      for (const field of def.fields) if (!field.readOnly && !field.virtual && !field.createOnly) grant.update.add(field.name)
       for (const name of def.hookColumns ?? []) grant.update.add(name)
     }
     if (canUpdate || softDelete) { if (!def.noUpdatedAt) grant.update.add('updated_at'); if (def.versioned) grant.update.add('version') }

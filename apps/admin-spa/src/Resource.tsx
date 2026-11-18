@@ -1,7 +1,7 @@
 // Generic CRUD screens driven by the resource metadata served by the function (/schema). The server is the single
 // source of truth for fields, validation limits, permissions and options; this file only renders them.
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { api, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
+import { api, ApiError, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
 
 const RichText = lazy(() => import('./RichText'))
 const BASE = '/admin-next'
@@ -22,6 +22,7 @@ function Cell({ field, value }: { field: FieldMeta; value: unknown }) {
 export function ResourceList({ meta, go }: { meta: ResourceMeta; go: (to: string) => void }) {
   const [q, setQ] = useState(''); const [term, setTerm] = useState(''); const [page, setPage] = useState(1); const [filters, setFilters] = useState<Record<string, string>>({})
   const [data, setData] = useState<{ items: Row[]; total: number }>({ items: [], total: 0 }); const [error, setError] = useState(''); const [loadedFor, setLoadedFor] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(() => new Set()); const [notice, setNotice] = useState(''); const [reload, setReload] = useState(0)
   const filterKey = JSON.stringify(filters); const requestKey = `${term}|${page}|${filterKey}`; const loading = loadedFor !== requestKey
   useEffect(() => { const t = setTimeout(() => { setTerm(q.trim()); setPage(1) }, 300); return () => clearTimeout(t) }, [q])
   useEffect(() => {
@@ -30,8 +31,18 @@ export function ResourceList({ meta, go }: { meta: ResourceMeta; go: (to: string
       .then((r) => { if (live) { setData({ items: r.items, total: r.total }); setError(''); setLoadedFor(key) } })
       .catch((err) => { if (live) { setError(errorText(err)); setLoadedFor(key) } })
     return () => { live = false }
-  }, [meta.key, term, page, filterKey])
+  }, [meta.key, term, page, filterKey, reload])
   const columns = meta.fields.filter((f) => f.list); const pages = Math.max(1, Math.ceil(data.total / 20))
+  const bulk = meta.key === 'products' && meta.canUpdate
+  const runBulk = async (action: string) => {
+    if (!selected.size) return
+    if (action === 'delete' && !window.confirm(`Xóa ${selected.size} sản phẩm? Thao tác không thể hoàn tác.`)) return
+    try {
+      const result = await api.bulkProducts([...selected], action)
+      setNotice(`Đã cập nhật ${result.updated} sản phẩm${result.skipped.length ? `; bỏ qua ${result.skipped.length} (${[...new Set(result.skipped.map((s) => errorText(new ApiError(400, s.reason))))].join(' ')})` : '.'}`)
+      setSelected(new Set()); setReload((n) => n + 1)
+    } catch (err) { setError(errorText(err)) }
+  }
   return (
     <section className="card">
       <div className="bar">
@@ -49,13 +60,17 @@ export function ResourceList({ meta, go }: { meta: ResourceMeta; go: (to: string
           </label>
         ))}
       </div>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && <p role="alert" className="error">{error}</p>}{notice && <p role="status" className="ok">{notice}</p>}
+      {bulk && <div className="bar" role="toolbar" aria-label="Thao tác hàng loạt"><span className="muted">Đã chọn {selected.size}</span>
+        {[['activate', 'Bán'], ['deactivate', 'Ngừng bán'], ['feature', 'Nổi bật'], ['unfeature', 'Bỏ nổi bật']].map(([a, l]) => <button key={a} type="button" disabled={!selected.size} onClick={() => runBulk(a)}>{l}</button>)}
+        {meta.canDelete && <button type="button" className="danger" disabled={!selected.size} onClick={() => runBulk('delete')}>Xóa</button>}</div>}
       <div className="scroll">
         <table>
-          <thead><tr><th>ID</th>{columns.map((f) => <th key={f.name}>{f.label}</th>)}</tr></thead>
+          <thead><tr>{bulk && <th><input type="checkbox" aria-label="Chọn tất cả" checked={data.items.length > 0 && data.items.every((r) => selected.has(Number(r.id)))} onChange={(e) => setSelected(e.target.checked ? new Set(data.items.map((r) => Number(r.id))) : new Set())} /></th>}<th>ID</th>{columns.map((f) => <th key={f.name}>{f.label}</th>)}</tr></thead>
           <tbody>
             {data.items.map((row) => (
               <tr key={String(row.id)}>
+                {bulk && <td><input type="checkbox" aria-label={`Chọn ${row.id}`} checked={selected.has(Number(row.id))} onChange={(e) => setSelected((cur) => { const next = new Set(cur); if (e.target.checked) next.add(Number(row.id)); else next.delete(Number(row.id)); return next })} /></td>}
                 <td><a href={`${BASE}/r/${meta.key}/${row.id}`} onClick={(e) => { e.preventDefault(); go(`/r/${meta.key}/${row.id}`) }}>{String(row.id)}</a></td>
                 {columns.map((f, i) => <td key={f.name}>{i === 0
                   ? <a href={`${BASE}/r/${meta.key}/${row.id}`} onClick={(e) => { e.preventDefault(); go(`/r/${meta.key}/${row.id}`) }}><Cell field={f} value={row[f.name]} /></a>
@@ -92,7 +107,7 @@ export function buildInput(meta: ResourceMeta, form: Row, original: Row | null):
     else if (f.kind === 'ref') value = raw === '' || raw === null || raw === undefined ? (f.nullable ? null : undefined) : Number(raw)
     else if (f.kind === 'strings') value = Array.isArray(raw) ? raw : []
     else if (f.kind === 'json') value = raw && typeof raw === 'object' ? raw : {}
-    else if (f.kind === 'money') value = raw === '' || raw === null || raw === undefined ? undefined : Number(raw)
+    else if (f.kind === 'money') value = raw === '' || raw === null || raw === undefined ? (f.nullable ? null : undefined) : Number(raw)
     else if (f.kind === 'bool') value = Boolean(raw)
     else value = raw ?? ''
     if (original) {
@@ -133,11 +148,11 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
     return next
   })
   const input = (f: FieldMeta) => {
-    const value = form[f.name]; const disabled = !canEdit || !f.editable || f.readOnly || busy
+    const value = form[f.name]; const disabled = !canEdit || !f.editable || f.readOnly || busy || (!creating && f.createOnly === true)
     const common = { id: `f-${f.name}`, disabled }
     switch (f.kind) {
       case 'textarea': return <textarea {...common} rows={4} maxLength={f.max} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
-      case 'html': return <Suspense fallback={<p className="muted">Đang tải trình soạn thảo…</p>}><RichText value={String(value ?? '')} disabled={disabled} onChange={(html) => set(f.name, html)} /></Suspense>
+      case 'html': return <Suspense fallback={<p className="muted">Đang tải trình soạn thảo…</p>}><RichText value={String(value ?? '')} disabled={disabled} folder={meta.key === 'products' ? 'products' : 'blog'} onChange={(html) => set(f.name, html)} /></Suspense>
       case 'int': return <input {...common} type="number" min={f.min} max={f.max} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => set(f.name, e.target.value)} />
       case 'bool': return <input {...common} type="checkbox" checked={Boolean(value)} onChange={(e) => set(f.name, e.target.checked)} />
       case 'enum': return <select {...common} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)}>{creating && <option value="">—</option>}{(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}</select>
@@ -203,6 +218,7 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
         </fieldset>
       ))}
       {error && <p role="alert" className="error">{error}</p>}{message && <p role="status" className="ok">{message}</p>}
+      {meta.key === 'products' && !creating && <Gallery productId={id} canEdit={meta.canUpdate} mainUrl={String(form.image_main_url ?? '')} onSetMain={(url) => set('image_main_url', url)} />}
       <div className="bar">
         {canEdit ? <button disabled={busy}>{busy ? 'Đang xử lý…' : creating ? 'Tạo' : 'Lưu'}</button> : <p className="muted">Vai trò của bạn chỉ có quyền xem.</p>}
         {!creating && meta.canDelete && <button type="button" className="danger" disabled={busy} onClick={async () => {
@@ -212,5 +228,39 @@ export function ResourceForm({ meta, id, go }: { meta: ResourceMeta; id: number 
         }}>Xóa</button>}
       </div>
     </form>
+  )
+}
+
+/** Product gallery (product_images): upload through the legacy route, order, delete, promote to main image. */
+function Gallery({ productId, canEdit, mainUrl, onSetMain }: { productId: number; canEdit: boolean; mainUrl: string; onSetMain: (url: string) => void }) {
+  const [items, setItems] = useState<Row[]>([]); const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [reload, setReload] = useState(0)
+  useEffect(() => {
+    let live = true
+    api.list('product-images', { product_id: productId, limit: 50 }).then((r) => { if (live) setItems(r.items) }).catch((e) => { if (live) setError(errorText(e)) })
+    return () => { live = false }
+  }, [productId, reload])
+  const run = async (fn: () => Promise<unknown>) => { setBusy(true); setError(''); try { await fn(); setReload((n) => n + 1) } catch (e) { setError(errorText(e)) } finally { setBusy(false) } }
+  return (
+    <fieldset className="field gallery" disabled={busy}>
+      <legend>Thư viện ảnh</legend>
+      <div className="chips">
+        {items.map((img) => (
+          <figure key={String(img.id)} className="shot">
+            <img src={String(img.image_url)} alt={String(img.alt_text ?? '')} width={96} height={96} />
+            <figcaption>
+              <input type="number" aria-label="Thứ tự" disabled={!canEdit} defaultValue={Number(img.sort_order ?? 0)} onBlur={(e) => { const next = Number(e.target.value); if (Number.isInteger(next) && next !== Number(img.sort_order)) void run(() => api.update('product-images', Number(img.id), undefined, { sort_order: next })) }} />
+              {canEdit && <><button type="button" disabled={mainUrl === img.image_url} onClick={() => onSetMain(String(img.image_url))}>Ảnh chính</button>
+                <button type="button" className="danger" onClick={() => { if (window.confirm('Xóa ảnh này?')) void run(() => api.remove('product-images', Number(img.id), undefined)) }}>Xóa</button></>}
+            </figcaption>
+          </figure>))}
+        {!items.length && <span className="muted">Chưa có ảnh trong thư viện.</span>}
+      </div>
+      {canEdit && <input type="file" aria-label="Thêm ảnh vào thư viện" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => {
+        const file = e.target.files?.[0]; e.target.value = ''; if (!file) return
+        void run(async () => { const url = await uploadImage(file, 'products', 'product'); await api.create('product-images', { product_id: productId, image_url: url, sort_order: items.length }) })
+      }} />}
+      <p className="muted">Ảnh chính được lưu cùng sản phẩm: chọn «Ảnh chính» rồi nhấn Lưu.</p>
+      {error && <p role="alert" className="error">{error}</p>}
+    </fieldset>
   )
 }

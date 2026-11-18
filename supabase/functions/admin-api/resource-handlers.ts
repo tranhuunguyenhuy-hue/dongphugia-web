@@ -40,14 +40,14 @@ function readableSelect(def: ResourceDef, alias = 't') {
 /** Field metadata for the SPA forms. Contains no permission strings or SQL. */
 export function resourceMeta(role: AdminRole) {
   return RESOURCES.filter((def) => can(role, def.read)).map((def) => ({
-    key: def.key, label: def.label, group: def.group, inNav: Boolean(def.write),
+    key: def.key, label: def.label, group: def.group, inNav: Boolean(def.write) && !def.hideFromNav,
     canCreate: Boolean(def.create && def.write && can(role, def.write)),
     canUpdate: Boolean(def.write && def.update !== false && can(role, def.write)),
     canDelete: Boolean(def.delete && can(role, def.remove ?? def.write ?? def.read) && def.write),
     versioned: Boolean(def.versioned), searchable: def.search.length > 0,
     fields: def.fields.map((field) => ({
       name: field.name, label: field.label, kind: field.kind, required: Boolean(field.required), max: field.max, min: field.min,
-      options: field.options, ref: field.ref, upload: field.upload, readOnly: Boolean(field.readOnly), nullable: allowsNull(field), list: Boolean(field.list), slugFrom: field.slugFrom, initial: field.initial,
+      options: field.options, ref: field.ref, upload: field.upload, createOnly: Boolean(field.createOnly), readOnly: Boolean(field.readOnly), nullable: allowsNull(field), list: Boolean(field.list), slugFrom: field.slugFrom, initial: field.initial,
       editable: !field.readOnly && (!field.permission || can(role, field.permission)),
     })),
     relations: (def.relations ?? []).map((r) => ({ input: r.input, label: r.label, ref: r.ref })),
@@ -208,7 +208,7 @@ export async function updateResource(deps: ResourceDeps, ctx: Context, def: Reso
         if (a.bind) params.push(a.value)
         sets.push(`${a.column} = ${a.expr}`)
       }
-      const direct = writableFields(def).filter((field) => field.name in input && input[field.name] !== undefined)
+      const direct = writableFields(def).filter((field) => !field.createOnly && field.name in input && input[field.name] !== undefined)
       for (const field of direct) push(field.name, input[field.name], field)
       for (const [column, value] of Object.entries(hook?.set ?? {})) push(column, value)
       if (!def.noUpdatedAt) sets.push('updated_at = now()')

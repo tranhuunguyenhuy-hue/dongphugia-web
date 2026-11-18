@@ -16,16 +16,23 @@ revoke all on sequence dpg_app.brands_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.catalog_taxons from dpg_admin_api_test;
 revoke all on sequence dpg_app.catalog_taxons_id_seq from dpg_admin_api_test;
 revoke insert, update, delete on dpg_app.categories from dpg_admin_api_test;
+revoke all on dpg_app.colors from dpg_admin_api_test;
 revoke all on dpg_app.customers from dpg_admin_api_test;
 revoke all on sequence dpg_app.customers_id_seq from dpg_admin_api_test;
+revoke all on dpg_app.materials from dpg_admin_api_test;
 revoke all on dpg_app.order_items from dpg_admin_api_test;
 revoke all on dpg_app.orders from dpg_admin_api_test;
+revoke all on dpg_app.origins from dpg_admin_api_test;
 revoke all on dpg_app.partners from dpg_admin_api_test;
 revoke all on sequence dpg_app.partners_id_seq from dpg_admin_api_test;
+revoke all on dpg_app.product_images from dpg_admin_api_test;
+revoke all on sequence dpg_app.product_images_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.product_sub_types from dpg_admin_api_test;
 revoke all on sequence dpg_app.product_sub_types_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.product_types from dpg_admin_api_test;
 revoke all on sequence dpg_app.product_types_id_seq from dpg_admin_api_test;
+revoke all on dpg_app.products from dpg_admin_api_test;
+revoke all on sequence dpg_app.products_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.projects from dpg_admin_api_test;
 revoke all on sequence dpg_app.projects_id_seq from dpg_admin_api_test;
 revoke all on dpg_app.quote_items from dpg_admin_api_test;
@@ -66,23 +73,34 @@ begin
     ('catalog_taxons','update'),
     ('categories','select'),
     ('categories','update'),
+    ('colors','select'),
     ('customers','select'),
     ('customers','insert'),
     ('customers','update'),
+    ('materials','select'),
     ('order_items','select'),
     ('order_items','update'),
     ('orders','select'),
     ('orders','update'),
+    ('origins','select'),
     ('partners','select'),
     ('partners','insert'),
     ('partners','update'),
     ('partners','delete'),
+    ('product_images','select'),
+    ('product_images','insert'),
+    ('product_images','update'),
+    ('product_images','delete'),
     ('product_sub_types','select'),
     ('product_sub_types','insert'),
     ('product_sub_types','update'),
     ('product_types','select'),
     ('product_types','insert'),
     ('product_types','update'),
+    ('products','select'),
+    ('products','insert'),
+    ('products','update'),
+    ('products','delete'),
     ('projects','select'),
     ('projects','insert'),
     ('projects','update'),

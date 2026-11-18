@@ -61,7 +61,8 @@ describe('resource definitions', () => {
 
   it('never grants price/identity/credential columns to the API role', async () => {
     const sql = await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')
-    expect(sql).not.toMatch(/\bprice\b|\blist_price\b|\bsku\b/)
+    // Price columns are writable only through the products resource (admin); identity columns are never updatable.
+    expect(sql).not.toMatch(/grant update \([^)]*\b(sku|slug|created_at|id)\b[^)]*\) on dpg_app\.products /)
     // The only credential column the API may write is admin_users.password_hash (hashed server-side); never selected.
     expect(sql.split('\n').filter((line) => /password_hash/.test(line)).every((line) => /^grant (insert|update) \(.*\) on dpg_app\.admin_users /.test(line))).toBe(true)
     const writes = sql.split('\n').filter((line) => /^grant (insert|update) \(/.test(line))

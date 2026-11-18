@@ -232,11 +232,9 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
 
   it('cannot touch anything outside its grants (database-enforced least privilege)', async () => {
     for (const statement of [
-      'update dpg_app.products set price = 1', 'update dpg_app.products set sku = \'x\'', 'update dpg_app.products set list_price = 1',
-      'delete from dpg_app.products', 'insert into dpg_app.products(sku,name,slug,category_id) values (\'a\',\'b\',\'c\',1)',
+      'update dpg_app.products set sku = \'x\'', 'update dpg_app.products set slug = \'x\'', 'update dpg_app.products set created_at = now()', 'update dpg_app.products set id = 999',
       'select * from dpg_app.orders', 'update dpg_app.admin_users set avatar_url = \'x\'', 'update dpg_app.admin_users set supabase_auth_user_id = null',
       'delete from dpg_app.admin_users', 'update dpg_app.categories set name = \'x\'', 'update dpg_app.audit_logs set action = \'x\'', 'delete from dpg_app.audit_logs',
-      'select list_price from dpg_app.products',
     ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
   })
 
@@ -255,10 +253,11 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-categories')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
       expect(JSON.stringify(a.json.data)).not.toMatch(/blog:write|dpg_app|select |insert /)
       const keysOf = async (who: string) => (await call('GET', '/schema', undefined, { token: who })).json.data.resources.map((r: { key: string }) => r.key).sort()
-      expect(await keysOf(manager)).toEqual(['categories', 'customers', 'subcategories'])
-      expect(await keysOf(sale)).toEqual(['customers'])
+      expect(await keysOf(manager)).toEqual(['categories', 'colors', 'customers', 'materials', 'origins', 'product-images', 'products', 'subcategories'])
+      expect(await keysOf(sale)).toEqual(['colors', 'customers', 'materials', 'origins', 'product-images', 'products'])
       expect((await call('GET', '/schema', undefined, { token: manager })).json.data.resources.find((r: { key: string }) => r.key === 'customers')).toMatchObject({ canCreate: true, canUpdate: true })
-      expect((await call('GET', '/schema', undefined, { token: sale })).json.data.resources[0]).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
+      expect((await call('GET', '/schema', undefined, { token: sale })).json.data.resources.find((r: { key: string }) => r.key === 'products')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false, inNav: true })
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'product-images').inNav).toBe(false)
     })
 
     it('enforces RBAC on every generic operation', async () => {
@@ -616,6 +615,85 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
           "update dpg_app.quote_requests set name = 'x'", "update dpg_app.quote_requests set phone = 'x'", 'delete from dpg_app.quote_requests', "insert into dpg_app.quote_requests(name, phone) values ('x','y')",
           'select owner_id from dpg_app.quote_requests', "update dpg_app.quote_items set product_id = 1", 'delete from dpg_app.quote_items', 'update dpg_app.quote_items set list_price_snapshot = 1',
         ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
+      })
+    })
+
+    describe('products', () => {
+      const code2 = code
+      it('creates products with identity fixed afterwards, price rules and activation guards', async () => {
+        const t = await token('admin'), sale = await token('sale')
+        const base = { sku: 'NEW-1', name: 'Bồn cầu mới', slug: 'bon-cau-moi', category_id: 1, price_display: 'Liên hệ báo giá' }
+        expect(code2(await call('POST', '/r/products', { input: base }, { token: sale }))).toBe('FORBIDDEN')
+        const created = await call('POST', '/r/products', { input: { ...base, is_active: false, brand_id: 1, origin_id: 1, specs: { color: 'white' }, description: '<p>Mô tả</p>' } }, { token: t })
+        expect(created.status).toBe(201); expect(created.json.data).toMatchObject({ sku: 'NEW-1', slug: 'bon-cau-moi', is_active: false, version: 1, specs: { color: 'white' }, stock_status: 'in_stock' })
+        const id = created.json.data.id
+        expect(code2(await call('POST', '/r/products', { input: { ...base } }, { token: t }))).toBe('DUPLICATE')
+        expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'NEW-2', slug: 'new-2', is_active: true } }, { token: t }))).toBe('PRICE_REQUIRED')
+        expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'NEW-3', slug: 'new-3', is_active: true, price: 1000 } }, { token: t }))).toBe('IMAGE_REQUIRED')
+        const ok = await call('POST', '/r/products', { input: { ...base, sku: 'NEW-4', slug: 'new-4', is_active: true, price: 1000, image_main_url: `${MEDIA}/products/a.webp` } }, { token: t })
+        expect(ok.status).toBe(201)
+        expect((await call('POST', '/r/products', { input: { ...base, sku: 'NEW-5', slug: 'new-5', is_active: true, stock_status: 'contact', image_main_url: `${MEDIA}/products/b.webp` } }, { token: t })).status).toBe(201) // "contact for quote" needs no price
+        expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'NEW-6', slug: 'new-6', list_price: 100, sale_price: 100 } }, { token: t }))).toBe('SALE_PRICE_INVALID')
+        expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'NEW-7', slug: 'new-7', sale_price: 50 } }, { token: t }))).toBe('SALE_PRICE_INVALID')
+        for (const bad of [{ category_id: 'x' }, { price: -1 }, { stock_status: 'lost' }, { image_main_url: 'https://evil.example/x.webp' }, { version: 3 }, { source_url: 'javascript:alert(1)' }, { specs: [] }, { description: '<script>alert(1)</script>' }]) {
+          expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'BAD', slug: 'bad', ...bad } }, { token: t })), JSON.stringify(bad)).toBe('VALIDATION_FAILED')
+        }
+        expect(code2(await call('POST', '/r/products', { input: { ...base, sku: 'FK', slug: 'fk', category_id: 999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+
+        // sku/slug are create-only; price edits keep the pricing invariants; optimistic version applies
+        for (const input of [{ sku: 'X' }, { slug: 'x' }]) expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 1, input }, { token: t }))).toBe('VALIDATION_FAILED')
+        const priced = await call('PATCH', `/r/products/${id}`, { expected_version: 1, input: { price: 2500000, list_price: 3000000, sale_price: 2500000, price_display: '2.500.000đ' } }, { token: t })
+        expect(priced.json.data).toMatchObject({ price: '2500000', version: 2, price_display: '2.500.000đ' })
+        expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { sale_price: 3000000 } }, { token: t }))).toBe('SALE_PRICE_INVALID')
+        expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { is_active: true } }, { token: t }))).toBe('IMAGE_REQUIRED')
+        expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 1, input: { name: 'Stale' } }, { token: t }))).toBe('VERSION_CONFLICT')
+        const cleared = await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { sale_price: null, list_price: null, brand_id: null, description: '' } }, { token: t })
+        expect(cleared.json.data).toMatchObject({ sale_price: null, list_price: null, brand_id: null, description: null, version: 3 })
+        // identity and untouched columns stay as they were
+        expect((await owner.query('select sku, slug from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ sku: 'NEW-1', slug: 'bon-cau-moi' })
+        expect((await call('GET', '/r/products?q=bon-cau-moi&category_id=1&is_active=false', undefined, { token: t })).json.data.total).toBe(1)
+        const audit = (await owner.query("select action, changed_fields from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows
+        expect(audit.map((a) => a.action)).toEqual(['products.create', 'products.update', 'products.update'])
+        expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: sale }))).toBe('FORBIDDEN')
+        expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: t }))).toBe('VALIDATION_FAILED') // version required
+        expect((await call('DELETE', `/r/products/${id}`, { expected_version: 3 }, { token: t })).json.data.result).toBe('deleted')
+        expect(code2(await call('DELETE', '/r/products/1', { expected_version: 1 }, { token: t }))).not.toBe('NOT_FOUND')
+      })
+
+      it('applies bulk product actions with the activation guard and audit', async () => {
+        const t = await token('admin'), sale = await token('sale')
+        await owner.query("update dpg_app.products set is_active=false, image_main_url=null, price=null, list_price=null, sale_price=null where id in (10, 11, 12)")
+        await owner.query("update dpg_app.products set image_main_url='https://media.example.test/p.webp', price=900 where id=11")
+        expect(code2(await call('POST', '/products/bulk', { ids: [10], action: 'activate' }, { token: sale }))).toBe('FORBIDDEN')
+        for (const bad of [{ ids: [], action: 'activate' }, { ids: [1], action: 'drop' }, { ids: Array.from({ length: 101 }, (_, i) => i + 1), action: 'feature' }, { ids: [1], action: 'feature', extra: 1 }]) {
+          expect(code2(await call('POST', '/products/bulk', bad, { token: t })), JSON.stringify(bad)).toBe('VALIDATION_FAILED')
+        }
+        const activated = await call('POST', '/products/bulk', { ids: [10, 11, 12, 99999], action: 'activate' }, { token: t })
+        expect(activated.json.data.updated).toBe(1)
+        expect(activated.json.data.skipped).toEqual(expect.arrayContaining([{ id: 10, reason: 'PRICE_REQUIRED' }, { id: 12, reason: 'PRICE_REQUIRED' }, { id: 99999, reason: 'NOT_FOUND' }]))
+        expect((await owner.query('select id, is_active from dpg_app.products where id in (10,11,12) order by id')).rows.map((r) => r.is_active)).toEqual([false, true, false])
+        expect((await call('POST', '/products/bulk', { ids: [10, 11], action: 'feature' }, { token: t })).json.data.updated).toBe(2)
+        expect((await owner.query('select count(*) from dpg_app.products where id in (10,11) and is_featured')).rows[0].count).toBe('2')
+        expect((await call('POST', '/products/bulk', { ids: [10, 11], action: 'deactivate' }, { token: t })).json.data.updated).toBe(2)
+        const audits = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and action like 'products.bulk_%' and entity_id=11 order by id")).rows.map((r) => r.action)
+        expect(audits).toEqual(['products.bulk_activate', 'products.bulk_feature', 'products.bulk_deactivate'])
+        expect(code2(await call('POST', '/products/bulk', { ids: [10], action: 'delete' }, { token: sale }))).toBe('FORBIDDEN')
+        expect((await call('POST', '/products/bulk', { ids: [12], action: 'delete' }, { token: t })).json.data.updated).toBe(1)
+      })
+
+      it('manages gallery images and lookups', async () => {
+        const t = await token('admin'), sale = await token('sale')
+        const img = await call('POST', '/r/product-images', { input: { product_id: 2, image_url: `${MEDIA}/products/g1.webp`, alt_text: 'Góc nhìn 1', sort_order: 1 } }, { token: t })
+        expect(img.status).toBe(201); expect(img.json.data).toMatchObject({ product_id: 2, image_type: 'gallery', sort_order: 1 })
+        expect(code2(await call('POST', '/r/product-images', { input: { product_id: 2, image_url: 'https://evil.example/g.webp' } }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect(code2(await call('POST', '/r/product-images', { input: { product_id: 9999, image_url: `${MEDIA}/products/g2.webp` } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+        expect(code2(await call('PATCH', `/r/product-images/${img.json.data.id}`, { input: { product_id: 3 } }, { token: t }))).toBe('VALIDATION_FAILED')
+        expect((await call('PATCH', `/r/product-images/${img.json.data.id}`, { input: { sort_order: 0, alt_text: '' } }, { token: t })).json.data).toMatchObject({ sort_order: 0, alt_text: null })
+        expect((await call('GET', '/r/product-images?product_id=2', undefined, { token: sale })).json.data.total).toBe(1)
+        expect(code2(await call('POST', '/r/product-images', { input: { product_id: 2, image_url: `${MEDIA}/products/g3.webp` } }, { token: sale }))).toBe('FORBIDDEN')
+        expect((await call('DELETE', `/r/product-images/${img.json.data.id}`, {}, { token: t })).json.data.result).toBe('deleted')
+        for (const key of ['origins', 'colors', 'materials']) expect((await call('GET', `/r/${key}/options`, undefined, { token: sale })).json.data.items.length).toBeGreaterThan(0)
+        expect(code2(await call('POST', '/r/colors', { input: { name: 'x' } }, { token: t }))).toBe('NOT_FOUND')
       })
     })
 

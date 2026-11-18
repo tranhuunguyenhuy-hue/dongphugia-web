@@ -1,4 +1,4 @@
-import { type AdminRole, type Permission } from './permissions.ts'
+import { getPermissions, type AdminRole, type Permission } from './permissions.ts'
 import { ApiError, requirePermission as requirePerm, type Context, type Db, type Session } from './core.ts'
 import * as commerce from './commerce-handlers.ts'
 import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
@@ -91,7 +91,7 @@ async function login(deps: Deps, ctx: Context, body: string) {
     await tx.query('delete from dpg_app.admin_api_login_attempts where key_hash = $1', [emailKey])
     return rows[0].expires_at
   })
-  return { status: 200, body: { data: { token, expires_at: expires, user: { id: user.id, email: user.email, name: user.name, role: user.role } } } }
+  return { status: 200, body: { data: { token, expires_at: expires, user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: getPermissions(user.role) } } } }
 }
 
 const PRODUCT_COLUMNS = `p.id, p.sku, p.name, p.display_name, p.slug, p.category_id, p.subcategory_id, p.brand_id, p.price, p.price_display,
@@ -171,6 +171,7 @@ function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string
   const cd = { db: deps.db }
   if (method === 'GET' && path === '/assignees') return commerce.listAssignees(cd, ctx)
   if (method === 'GET' && path === '/dashboard') return commerce.dashboard(cd, ctx, search)
+  if (method === 'POST' && path === '/products/bulk') return commerce.bulkProducts(cd, ctx, body)
   const m = path.match(/^\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|payment|assign|complete))?$/)
   if (!m) return undefined
   const [, kind, rawId, action] = m
@@ -221,7 +222,7 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
       result = { status: 200, body: { data: { ok: true } } }
     } else if (request.method === 'GET' && path === '/me') {
       if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
-      result = { status: 200, body: { data: { id: ctx.session.userId, email: ctx.session.email, name: ctx.session.name, role: ctx.session.role } } }
+      result = { status: 200, body: { data: { id: ctx.session.userId, email: ctx.session.email, name: ctx.session.name, role: ctx.session.role, permissions: getPermissions(ctx.session.role) } } }
     } else if (request.method === 'GET' && path === '/schema') {
       if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
       result = { status: 200, body: { data: { resources: resourceMeta(ctx.session.role) } } }

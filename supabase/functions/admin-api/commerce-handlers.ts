@@ -338,3 +338,41 @@ export async function dashboard(deps: Deps, ctx: Context, search: URLSearchParam
     top_sold: sold.map((r) => ({ ...r, total_sold: Number(r.total_sold) })), top_quoted: quoted.map((r) => ({ ...r, quote_count: Number(r.quote_count) })),
   } } }
 }
+
+// ---------------------------------------------------------------------------------------------------- products (bulk)
+const BULK_ACTIONS = ['activate', 'deactivate', 'feature', 'unfeature', 'delete'] as const
+
+/** Bulk toggles/delete over the product list. Activation keeps the same guard as the single editor (price + main image). */
+export async function bulkProducts(deps: Deps, ctx: Context, body: string): Promise<Result> {
+  const { ids, action } = validate(z.object({ ids: z.array(z.number().int().min(1).max(2_147_483_647)).min(1).max(100), action: z.enum(BULK_ACTIONS) }).strict(), parseJson(body))
+  const unique = [...new Set(ids)]
+  requirePermission(ctx, action === 'delete' ? 'products:delete' : 'products:write')
+  if (action === 'activate' || action === 'deactivate') requirePermission(ctx, 'visibility:write')
+  try {
+    const result = await deps.db.transaction(async (tx) => {
+      const rows = await tx.query<Row>('select id, price, list_price, sale_price, stock_status, image_main_url from dpg_app.products where id = any($1) for update', [unique])
+      const found = new Set(rows.map((r) => Number(r.id)))
+      const skipped: { id: number; reason: string }[] = unique.filter((id) => !found.has(id)).map((id) => ({ id, reason: 'NOT_FOUND' }))
+      let targets = rows.map((r) => Number(r.id))
+      if (action === 'activate') {
+        const blocked = new Map<number, string>()
+        for (const r of rows) {
+          if (r.stock_status !== 'contact' && !num(r.price) && !num(r.list_price) && !num(r.sale_price)) blocked.set(Number(r.id), 'PRICE_REQUIRED')
+          else if (typeof r.image_main_url !== 'string' || r.image_main_url.trim() === '') blocked.set(Number(r.id), 'IMAGE_REQUIRED')
+        }
+        for (const [id, reason] of blocked) skipped.push({ id, reason })
+        targets = targets.filter((id) => !blocked.has(id))
+      }
+      if (targets.length) {
+        if (action === 'delete') await tx.query('delete from dpg_app.products where id = any($1)', [targets])
+        else {
+          const column = action === 'activate' || action === 'deactivate' ? 'is_active' : 'is_featured'
+          await tx.query(`update dpg_app.products set ${column} = $2::boolean, updated_at = now(), version = coalesce(version, 0) + 1 where id = any($1)`, [targets, action === 'activate' || action === 'feature'])
+        }
+        for (const id of targets) await audit(tx, ctx, 'products', `bulk_${action}`, id, null, null, action === 'delete' ? [] : [action === 'activate' || action === 'deactivate' ? 'is_active' : 'is_featured'])
+      }
+      return { updated: targets.length, skipped }
+    })
+    return { status: 200, body: { data: result } }
+  } catch (error) { throw error instanceof ApiError ? error : mapDatabaseError(error) ?? error }
+}
