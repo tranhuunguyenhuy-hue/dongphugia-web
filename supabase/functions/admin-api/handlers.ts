@@ -1,11 +1,10 @@
-import { can, type AdminRole, type Permission } from './permissions.ts'
+import { type AdminRole, type Permission } from './permissions.ts'
+import { ApiError, requirePermission as requirePerm, type Context, type Db, type Session } from './core.ts'
+import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
 import { listQuerySchema, loginSchema, parseAllowedMediaHosts, productPatchSchema, VISIBILITY_FIELDS } from './validation.ts'
 
-export interface Db {
-  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>
-  transaction<R>(fn: (tx: Db) => Promise<R>): Promise<R>
-}
+export type { Db }
 export interface Deps {
   db: Db
   hmacSecret: string
@@ -15,8 +14,6 @@ export interface Deps {
   now?: () => number
   sessionHours?: number
 }
-type Session = { sessionId: number; userId: number; email: string; name: string; role: AdminRole }
-type Context = { request_id: string; ip: string; session?: Session }
 
 export const BCRYPT_ROUNDS = 12
 // Fixed bcrypt cost-12 hash of a random string: compared when the user does not exist so timing does not reveal accounts.
@@ -24,11 +21,8 @@ export const DUMMY_HASH = '$2b$12$YrzAo1leV4oBh05MG3I6w.mfRzPakIhnKnKGI7Hsin8gZt
 const LOGIN_WINDOW_MINUTES = 15
 const MAX_EMAIL_FAILURES = 5
 const MAX_IP_FAILURES = 20
-const BODY_LIMIT = 200_000
+const BODY_LIMIT = 600_000
 
-class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string) { super(code) }
-}
 const json = (body: unknown, status: number, request_id: string, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-request-id': request_id, ...headers } })
 
@@ -38,10 +32,7 @@ function route(request: Request) {
   return { path: full.split('?')[0], route: full, search: url.searchParams }
 }
 
-function requirePermission(ctx: Context, permission: Permission) {
-  if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
-  if (!can(ctx.session.role, permission)) throw new ApiError(403, 'FORBIDDEN')
-}
+const requirePermission = (ctx: Context, permission: Permission) => { requirePerm(ctx, permission) }
 
 async function readBody(request: Request): Promise<string> {
   const text = await request.text()
@@ -156,6 +147,22 @@ async function patchProduct(deps: Deps, ctx: Context, id: number, body: string) 
   return { status: 200, body: { data: changed } }
 }
 
+async function dispatchResource(deps: Deps, ctx: Context, method: string, key: string, tail: string | undefined, search: URLSearchParams, body: string) {
+  const def = findResource(key)
+  const rd = { db: deps.db, allowedMediaHosts: deps.allowedMediaHosts }
+  if (tail === 'options') { if (method === 'GET') return optionsResource(rd, ctx, def); throw new ApiError(404, 'NOT_FOUND') }
+  if (tail === undefined) {
+    if (method === 'GET') return listResource(rd, ctx, def, search)
+    if (method === 'POST') return createResource(rd, ctx, def, body)
+    throw new ApiError(404, 'NOT_FOUND')
+  }
+  const id = Number(tail)
+  if (method === 'GET') return getResource(rd, ctx, def, id)
+  if (method === 'PATCH') return updateResource(rd, ctx, def, id, body)
+  if (method === 'DELETE') return deleteResource(rd, ctx, def, id, body)
+  throw new ApiError(404, 'NOT_FOUND')
+}
+
 async function recordNonce(deps: Deps, nonce: string) {
   const rows = await deps.db.query<{ nonce: string }>(
     `insert into dpg_app.admin_api_nonces (nonce, expires_at) values ($1, now() + ($2 || ' seconds')::interval)
@@ -190,16 +197,21 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
     } else if (request.method === 'GET' && path === '/me') {
       if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
       result = { status: 200, body: { data: { id: ctx.session.userId, email: ctx.session.email, name: ctx.session.name, role: ctx.session.role } } }
+    } else if (request.method === 'GET' && path === '/schema') {
+      if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
+      result = { status: 200, body: { data: { resources: resourceMeta(ctx.session.role) } } }
     } else if (request.method === 'GET' && path === '/products') result = await listProducts(deps, ctx, search)
     else {
       const match = path.match(/^\/products\/(\d{1,9})$/)
+      const generic = path.match(/^\/r\/([a-z][a-z0-9-]{1,40})(?:\/(options|\d{1,9}))?$/)
       if (match && request.method === 'GET') result = await getProduct(deps, ctx, Number(match[1]))
       else if (match && request.method === 'PATCH') result = await patchProduct(deps, ctx, Number(match[1]), body)
+      else if (generic) result = await dispatchResource(deps, ctx, request.method, generic[1], generic[2], search, body)
       else throw new ApiError(404, 'NOT_FOUND')
     }
     return json(result.body, result.status, request_id)
   } catch (error) {
-    if (error instanceof ApiError) return json({ error: { code: error.code, request_id } }, error.status, request_id)
+    if (error instanceof ApiError) return json({ error: { code: error.code, request_id, ...(error.fields?.length ? { fields: error.fields } : {}) } }, error.status, request_id)
     console.error(JSON.stringify({ event: 'ADMIN_API_ERROR', request_id, name: error instanceof Error ? error.name : 'unknown', sqlstate: (error as { code?: unknown })?.code ?? null, detail: error instanceof Error ? error.message.slice(0, 160) : '' }))
     return json({ error: { code: 'INTERNAL', request_id } }, 500, request_id)
   }

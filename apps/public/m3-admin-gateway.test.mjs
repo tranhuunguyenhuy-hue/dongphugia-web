@@ -44,6 +44,25 @@ describe('Admin shell gateway', () => {
     expect((await handleAdminNext(new Request(ORIGIN + '/admin-next/products', { method: 'POST' }), env, ctx)).status).toBe(405)
   })
 
+  it('allows only well-formed generic resource routes and signs them like any other request', async () => {
+    stubUpstream(json({ data: { items: [] } }))
+    const env = environment()
+    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/partners/3']]) {
+      const init = method === 'GET' ? {} : { method, body: '{}' }
+      expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(200)
+    }
+    expect(calls).toHaveLength(7)
+    const { url, init } = calls[6]
+    expect(url).toBe(`${FN}/r/partners/3`)
+    expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
+    calls.length = 0
+    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890']]) {
+      const init = method === 'GET' ? {} : { method, body: '{}' }
+      expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(404)
+    }
+    expect(calls).toHaveLength(0)
+  })
+
   it('rejects unknown routes/methods and cross-site mutations before contacting the function', async () => {
     stubUpstream(json({ data: {} }))
     const env = environment()
@@ -54,7 +73,7 @@ describe('Admin shell gateway', () => {
       expect(r.status).toBe(403); expect((await r.json()).error.code).toBe('ORIGIN_NOT_ALLOWED')
     }
     expect((await handleAdminNext(browser('/admin-next/api/logout', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } }), env, ctx)).status).toBe(415)
-    expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'PATCH', body: 'x'.repeat(200_001) }), env, ctx)).status).toBe(413)
+    expect((await handleAdminNext(browser('/admin-next/api/products/1', { method: 'PATCH', body: 'x'.repeat(600_001) }), env, ctx)).status).toBe(413)
     expect(calls).toHaveLength(0)
   })
 

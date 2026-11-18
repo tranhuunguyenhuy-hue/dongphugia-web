@@ -11,8 +11,14 @@ const APPROVED_FUNCTION_URL = /^https:\/\/uybumsnyqpwcidjxmfsv\.supabase\.co\/fu
 const ROUTES = [
   { method: 'POST', pattern: /^\/login$/ }, { method: 'POST', pattern: /^\/logout$/ }, { method: 'GET', pattern: /^\/me$/ },
   { method: 'GET', pattern: /^\/products$/ }, { method: 'GET', pattern: /^\/products\/\d{1,9}$/ }, { method: 'PATCH', pattern: /^\/products\/\d{1,9}$/ },
+  // Generic resources (blog, banners, ...): the function owns the resource registry and RBAC; the gateway only checks shape.
+  { method: 'GET', pattern: /^\/schema$/ },
+  { method: 'GET', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}$/ }, { method: 'POST', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}$/ },
+  { method: 'GET', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}\/options$/ },
+  { method: 'GET', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}\/\d{1,9}$/ }, { method: 'PATCH', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}\/\d{1,9}$/ },
+  { method: 'DELETE', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}\/\d{1,9}$/ },
 ]
-const MAX_BODY_BYTES = 200_000
+const MAX_BODY_BYTES = 600_000
 const UPSTREAM_TIMEOUT_MS = 8_000
 // The TEST project database lives in Singapore: run the Edge Function next to it instead of next to the caller.
 const ADMIN_API_REGION = 'ap-southeast-1'

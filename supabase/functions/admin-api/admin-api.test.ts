@@ -100,6 +100,9 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
     const sql = (await readFile(path.join(root, 'supabase/m3-test/004_m3_test_admin_api.sql'), 'utf8')).replace(/-- guard:begin[\s\S]*?-- guard:end\n/, '')
     await owner.query(`drop role if exists ${apiRole}`).catch(() => undefined)
     await owner.query(sql)
+    // Generic Admin resources: real table shapes + the generated grants/policies (guard needs the TEST-only schema).
+    await owner.query(await readFile(path.join(root, 'supabase/functions/admin-api/test-fixtures/resources.sql'), 'utf8'))
+    await owner.query((await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')).replace(/-- guard:begin[\s\S]*?-- guard:end\n/, ''))
     await owner.query(`alter role ${apiRole} password '${apiPassword}'`)
     const apiUrl = new URL(superUrl); apiUrl.username = apiRole; apiUrl.password = apiPassword
     apiPool = new Pool({ connectionString: apiUrl.toString(), max: 4 })
@@ -234,6 +237,153 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       'delete from dpg_app.admin_users', 'update dpg_app.categories set name = \'x\'', 'update dpg_app.audit_logs set action = \'x\'', 'delete from dpg_app.audit_logs',
       'select list_price from dpg_app.products',
     ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
+  })
+
+  describe('generic Admin resources', () => {
+    const MEDIA = 'https://media.example.test'
+    const code = (r: { json: any }) => r.json.error?.code
+
+    it('serves role-filtered form metadata without internals', async () => {
+      expect((await call('GET', '/schema')).status).toBe(401)
+      const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
+      const a = await call('GET', '/schema', undefined, { token: admin })
+      const resources = a.json.data.resources as { key: string }[]
+      expect(resources.map((r) => r.key)).toEqual(expect.arrayContaining(['blog-posts', 'blog-tags', 'banners', 'partners', 'projects']))
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-posts')).toMatchObject({ canCreate: true, canUpdate: true, canDelete: true, versioned: true })
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-tags')).toMatchObject({ canCreate: true, canUpdate: false, canDelete: true })
+      expect(a.json.data.resources.find((r: { key: string }) => r.key === 'blog-categories')).toMatchObject({ canCreate: false, canUpdate: false, canDelete: false })
+      expect(JSON.stringify(a.json.data)).not.toMatch(/blog:write|dpg_app|select |insert /)
+      for (const who of [manager, sale]) expect((await call('GET', '/schema', undefined, { token: who })).json.data.resources).toEqual([])
+    })
+
+    it('enforces RBAC on every generic operation', async () => {
+      const manager = await token('manager'), sale = await token('sale'), admin = await token('admin')
+      for (const route of ['/r/banners', '/r/blog-posts', '/r/blog-tags', '/r/partners/options']) expect((await call('GET', route)).status).toBe(401)
+      for (const who of [manager, sale]) {
+        expect(code(await call('GET', '/r/banners', undefined, { token: who }))).toBe('FORBIDDEN')
+        expect(code(await call('POST', '/r/banners', { input: { image_url: `${MEDIA}/a.webp` } }, { token: who }))).toBe('FORBIDDEN')
+        expect(code(await call('PATCH', '/r/blog-posts/1', { expected_version: 1, input: { title: 'x' } }, { token: who }))).toBe('FORBIDDEN')
+        expect(code(await call('DELETE', '/r/projects/1', {}, { token: who }))).toBe('FORBIDDEN')
+      }
+      expect(code(await call('GET', '/r/unknown-thing', undefined, { token: admin }))).toBe('NOT_FOUND')
+      expect(code(await call('POST', '/r/blog-categories', { input: { name: 'x' } }, { token: admin }))).toBe('NOT_FOUND') // read-only resource
+      expect(code(await call('DELETE', '/r/blog-categories/1', {}, { token: admin }))).toBe('NOT_FOUND')
+    })
+
+    it('creates tags, rejects duplicates and deactivates instead of deleting', async () => {
+      const t = await token('admin')
+      const created = await call('POST', '/r/blog-tags', { input: { name: 'Phòng tắm', slug: 'phong-tam' } }, { token: t })
+      expect(created.status).toBe(201); expect(created.json.data).toMatchObject({ name: 'Phòng tắm', slug: 'phong-tam', post_count: 0, is_active: true })
+      expect(code(await call('POST', '/r/blog-tags', { input: { name: 'Khác', slug: 'phong-tam' } }, { token: t }))).toBe('DUPLICATE')
+      expect(code(await call('PATCH', `/r/blog-tags/${created.json.data.id}`, { input: { name: 'Đổi' } }, { token: t }))).toBe('NOT_FOUND')
+      const removed = await call('DELETE', `/r/blog-tags/${created.json.data.id}`, {}, { token: t })
+      expect(removed.json.data).toMatchObject({ ok: true, result: 'deactivated' })
+      expect((await owner.query('select is_active from dpg_app.blog_tags where id=$1', [created.json.data.id])).rows[0].is_active).toBe(false)
+      const options = await call('GET', '/r/blog-categories/options', undefined, { token: t })
+      expect(options.json.data.items).toEqual(expect.arrayContaining([expect.objectContaining({ label: 'Tin tức' })]))
+    })
+
+    it('runs the blog post lifecycle: tags, versions, publish dates, publishing rules, audit', async () => {
+      const t = await token('admin')
+      const mk = async (name: string, slug: string) => (await call('POST', '/r/blog-tags', { input: { name, slug } }, { token: t })).json.data.id as number
+      const tagA = await mk('Tag A', 'tag-a'), tagB = await mk('Tag B', 'tag-b')
+      const base = { title: 'Bài đầu', slug: 'bai-dau', category_id: 1, content: '<p>Xin chào</p>', thumbnail_url: `${MEDIA}/blog/a.webp`, tag_ids: [tagA, tagB] }
+      const created = await call('POST', '/r/blog-posts', { input: { ...base, status: 'published' } }, { token: t })
+      expect(created.status).toBe(201)
+      const post = created.json.data
+      expect(post).toMatchObject({ title: 'Bài đầu', status: 'published', version: 1, tag_ids: [tagA, tagB] }); expect(post.published_at).toBeTruthy()
+      const counts = async () => Object.fromEntries((await owner.query('select id, post_count from dpg_app.blog_tags where id = any($1)', [[tagA, tagB]])).rows.map((r) => [r.id, r.post_count]))
+      expect(await counts()).toEqual({ [tagA]: 1, [tagB]: 1 })
+
+      const list = await call('GET', '/r/blog-posts?status=published&q=bai-dau', undefined, { token: t })
+      expect(list.json.data).toMatchObject({ total: 1, page: 1 }); expect(list.json.data.items[0]).toMatchObject({ id: post.id, title: 'Bài đầu' })
+      expect((await call('GET', '/r/blog-posts?q=' + encodeURIComponent('%'), undefined, { token: t })).json.data.total).toBe(0)
+      expect(code(await call('GET', '/r/blog-posts?status=bogus', undefined, { token: t }))).toBe('VALIDATION_FAILED')
+      expect(code(await call('GET', '/r/blog-posts?sort=id', undefined, { token: t }))).toBe('VALIDATION_FAILED')
+
+      const invalid: [string, unknown][] = [
+        ['missing title', { ...base, title: undefined, slug: 'a1' }], ['unknown key', { ...base, slug: 'a2', hacked: 1 }],
+        ['bad status', { ...base, slug: 'a3', status: 'archived' }], ['script', { ...base, slug: 'a4', content: '<p>x</p><script>alert(1)</script>' }],
+        ['js link', { ...base, slug: 'a5', content: '<a href="javascript:alert(1)">x</a>' }], ['foreign media', { ...base, slug: 'a6', thumbnail_url: 'https://evil.example/a.webp' }],
+        ['readonly field', { ...base, slug: 'a7', view_count: 99 }], ['version via input', { ...base, slug: 'a8', version: 9 }],
+        ['too many tags', { ...base, slug: 'a9', tag_ids: Array.from({ length: 51 }, (_, i) => i + 1) }],
+      ]
+      for (const [label, input] of invalid) expect(code(await call('POST', '/r/blog-posts', { input }, { token: t })), label).toBe('VALIDATION_FAILED')
+      expect(code(await call('POST', '/r/blog-posts', { input: { ...base, slug: 'bai-dau' } }, { token: t }))).toBe('DUPLICATE')
+      expect(code(await call('POST', '/r/blog-posts', { input: { ...base, slug: 'cat-sai', category_id: 999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+      expect(code(await call('POST', '/r/blog-posts', { input: { ...base, slug: 'tag-sai', tag_ids: [tagA, 9999] } }, { token: t }))).toBe('REFERENCE_CONFLICT')
+      expect(Number((await owner.query("select count(*) from dpg_app.blog_posts where slug in ('cat-sai','tag-sai')")).rows[0].count)).toBe(0) // rolled back
+
+      expect(code(await call('PATCH', `/r/blog-posts/${post.id}`, { input: { title: 'No version' } }, { token: t }))).toBe('VALIDATION_FAILED')
+      const edited = await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 1, input: { title: 'Bài đã sửa', tag_ids: [tagB] } }, { token: t })
+      expect(edited.status).toBe(200); expect(edited.json.data).toMatchObject({ title: 'Bài đã sửa', version: 2, tag_ids: [tagB] })
+      expect(await counts()).toEqual({ [tagA]: 0, [tagB]: 1 })
+      expect(code(await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 1, input: { title: 'Stale' } }, { token: t }))).toBe('VERSION_CONFLICT')
+      expect(code(await call('PATCH', '/r/blog-posts/999999', { expected_version: 1, input: { title: 'x' } }, { token: t }))).toBe('NOT_FOUND')
+
+      const draft = await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 2, input: { status: 'draft' } }, { token: t })
+      expect(draft.json.data).toMatchObject({ status: 'draft', published_at: null, version: 3 })
+      expect((await owner.query('select first_published_at from dpg_app.blog_posts where id=$1', [post.id])).rows[0].first_published_at).not.toBeNull()
+      const again = await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 3, input: { status: 'published' } }, { token: t })
+      expect(again.json.data.published_at).toBeTruthy()
+      const publishedAt = again.json.data.published_at
+      const keep = await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 4, input: { is_featured: true, seo_title: 'SEO' } }, { token: t })
+      expect(keep.json.data).toMatchObject({ is_featured: true, seo_title: 'SEO', version: 5 }); expect(new Date(keep.json.data.published_at).getTime()).toBe(new Date(publishedAt).getTime())
+
+      // Publishing-Agent posts: content/media stay behind the Publishing API, metadata edits and unpublish are allowed.
+      await owner.query('update dpg_app.blog_posts set publishing_identity_id = gen_random_uuid() where id=$1', [post.id])
+      expect(code(await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 5, input: { content: '<p>Đổi</p>' } }, { token: t }))).toBe('PUBLISHING_MANAGED')
+      const meta = await call('PATCH', `/r/blog-posts/${post.id}`, { expected_version: 5, input: { seo_title: 'SEO 2' } }, { token: t })
+      expect(meta.status).toBe(200)
+      const unpublished = await call('DELETE', `/r/blog-posts/${post.id}`, { expected_version: 6 }, { token: t })
+      expect(unpublished.json.data).toMatchObject({ ok: true, result: 'unpublished' })
+      expect((await owner.query('select status, published_at, version from dpg_app.blog_posts where id=$1', [post.id])).rows[0]).toMatchObject({ status: 'draft', published_at: null, version: 7 })
+      await owner.query('update dpg_app.blog_posts set publishing_identity_id = null where id=$1', [post.id])
+      expect(code(await call('DELETE', `/r/blog-posts/${post.id}`, { expected_version: 6 }, { token: t }))).toBe('VERSION_CONFLICT')
+      expect(code(await call('DELETE', `/r/blog-posts/${post.id}`, {}, { token: t }))).toBe('VALIDATION_FAILED')
+      expect((await call('DELETE', `/r/blog-posts/${post.id}`, { expected_version: 7 }, { token: t })).json.data).toMatchObject({ result: 'deleted' })
+      expect(Number((await owner.query('select count(*) from dpg_app.blog_posts where id=$1', [post.id])).rows[0].count)).toBe(0)
+      expect(await counts()).toEqual({ [tagA]: 0, [tagB]: 0 })
+      const actions = (await owner.query("select action from dpg_app.audit_logs where entity_type='blog-posts' and entity_id=$1 order by id", [post.id])).rows.map((r) => r.action)
+      expect(actions).toEqual(['blog-posts.create', 'blog-posts.update', 'blog-posts.update', 'blog-posts.update', 'blog-posts.update', 'blog-posts.update', 'blog-posts.unpublish', 'blog-posts.delete'])
+    })
+
+    it('manages banners with link and media validation', async () => {
+      const t = await token('admin'); const image = `${MEDIA}/banners/b.webp`
+      for (const link of ['javascript:alert(1)', '//evil.example/x', 'ftp://x.example', 'data:text/html,x']) {
+        expect(code(await call('POST', '/r/banners', { input: { image_url: image, link_url: link } }, { token: t })), link).toBe('VALIDATION_FAILED')
+      }
+      expect(code(await call('POST', '/r/banners', { input: { image_url: 'https://evil.example/b.webp' } }, { token: t }))).toBe('VALIDATION_FAILED')
+      expect(code(await call('POST', '/r/banners', { input: { title: 'No image' } }, { token: t }))).toBe('VALIDATION_FAILED')
+      const created = await call('POST', '/r/banners', { input: { image_url: image, link_url: '/thiet-bi-ve-sinh', title: 'Khuyến mãi' } }, { token: t })
+      expect(created.status).toBe(201); expect(created.json.data).toMatchObject({ link_url: '/thiet-bi-ve-sinh', is_active: true, sort_order: 0 })
+      const edited = await call('PATCH', `/r/banners/${created.json.data.id}`, { input: { sort_order: 5, link_url: '', is_active: false } }, { token: t })
+      expect(edited.json.data).toMatchObject({ sort_order: 5, link_url: null, is_active: false })
+      expect((await call('DELETE', `/r/banners/${created.json.data.id}`, {}, { token: t })).json.data.result).toBe('deleted')
+      expect(code(await call('GET', `/r/banners/${created.json.data.id}`, undefined, { token: t }))).toBe('NOT_FOUND')
+    })
+
+    it('generates partner/project slugs once and stores tag arrays', async () => {
+      const t = await token('admin')
+      const partner = await call('POST', '/r/partners', { input: { name: 'Công ty ABC' } }, { token: t })
+      expect(partner.json.data.slug).toMatch(/^cong-ty-abc-\d{10,}$/); expect(partner.json.data).toMatchObject({ tier: 'Vàng', is_active: true })
+      expect(code(await call('POST', '/r/partners', { input: { name: 'X', slug: 'x' } }, { token: t }))).toBe('VALIDATION_FAILED')
+      const renamed = await call('PATCH', `/r/partners/${partner.json.data.id}`, { input: { name: 'Công ty ABC mới' } }, { token: t })
+      expect(renamed.json.data).toMatchObject({ name: 'Công ty ABC mới', slug: partner.json.data.slug })
+      const project = await call('POST', '/r/projects', { input: { title: 'Biệt thự Đà Lạt', tags: ['biet-thu', 'da-lat'], is_featured: true } }, { token: t })
+      expect(project.json.data).toMatchObject({ tags: ['biet-thu', 'da-lat'], is_featured: true }); expect(project.json.data.slug).toMatch(/^biet-thu-da-lat-\d{10,}$/)
+      expect((await call('PATCH', `/r/projects/${project.json.data.id}`, { input: { tags: [] } }, { token: t })).json.data.tags).toEqual([])
+      expect(code(await call('PATCH', `/r/projects/${project.json.data.id}`, { input: { tags: [''] } }, { token: t }))).toBe('VALIDATION_FAILED')
+    })
+
+    it('database blocks anything outside the generated grants', async () => {
+      for (const statement of [
+        'update dpg_app.blog_posts set view_count = 9', 'update dpg_app.blog_posts set created_at = now()', 'select created_at from dpg_app.blog_posts',
+        'delete from dpg_app.blog_categories', "insert into dpg_app.blog_categories(name,slug) values ('x','y')", "update dpg_app.blog_categories set name='x'",
+        "update dpg_app.blog_tags set name='x'", 'delete from dpg_app.blog_tags', "insert into dpg_app.blog_tags(name,slug,post_count) values ('x','z',5)",
+        "update dpg_app.partners set slug='x'", 'update dpg_app.banners set brand_id = 1', 'update dpg_app.projects set created_at = now()',
+      ]) await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
+    })
   })
 
   it('fails closed without configuration', async () => {

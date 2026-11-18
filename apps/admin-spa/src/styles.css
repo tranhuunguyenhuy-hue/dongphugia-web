@@ -14,4 +14,13 @@ button:disabled{opacity:.5;cursor:default}.top button,.bar button{background:#ff
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);font-size:14px}
 .error{color:var(--danger);margin:0}.ok{color:var(--ok);margin:0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
 .image{display:flex;gap:16px;align-items:center}.image img,.ph{width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}.ph{display:grid;place-items:center;color:var(--muted);font-size:12px}
-@media (max-width:640px){th:nth-child(2),td:nth-child(2),th:nth-child(5),td:nth-child(5){display:none}}
+@media (max-width:640px){.products th:nth-child(2),.products td:nth-child(2),.products th:nth-child(5),.products td:nth-child(5){display:none}}
+.scroll{overflow-x:auto}.thumb{object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.top nav{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center}.top nav a{text-decoration:none;padding:4px 8px;border-radius:6px}.top nav a[aria-current=page]{background:var(--bg);font-weight:600}.top nav .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.field{display:grid;gap:4px}.field>label,fieldset legend{font-weight:600;font-size:13px}.field.check{display:flex;gap:8px;align-items:center}.field.check>label{order:2}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:0}.chips{display:flex;flex-wrap:wrap;gap:6px 14px}.chip{font-weight:400}
+.stack{display:grid;gap:8px;flex:1}label.inline{display:flex;gap:6px;align-items:center}label.inline select{width:auto}
+button.danger{background:#fff;color:var(--danger);border-color:var(--danger)}
+.rte{border:1px solid var(--line);border-radius:8px;overflow:hidden}.toolbar{display:flex;gap:4px;flex-wrap:wrap;padding:6px;border-bottom:1px solid var(--line);background:var(--bg)}
+.tool{padding:4px 8px;background:#fff;color:var(--fg);border-color:var(--line);font-size:13px}.tool.on{background:var(--primary);color:#fff}
+.prose{min-height:300px;padding:12px 14px;outline:none}.prose img{max-width:100%;height:auto}.prose p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--muted);float:left;height:0;pointer-events:none}

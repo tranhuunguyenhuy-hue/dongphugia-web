@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, errorText, uploadImage, type Product, type ProductRow, type User } from './api'
+import { api, errorText, uploadImage, type Product, type ProductRow, type ResourceMeta, type User } from './api'
+import { ResourceForm, ResourceList } from './Resource'
 
 const BASE = '/admin-next'
 function useRoute() {
@@ -12,20 +13,39 @@ function useRoute() {
 export function App() {
   const { path, go } = useRoute()
   const [user, setUser] = useState<User | null | undefined>(undefined)
+  const [resources, setResources] = useState<ResourceMeta[]>([])
   useEffect(() => { api.me().then(setUser).catch(() => setUser(null)) }, [])
+  useEffect(() => { if (user) api.schema().then(setResources).catch(() => setResources([])) }, [user])
   useEffect(() => { if (user === null && path !== '/login') go('/login'); if (user && (path === '/' || path === '/login')) go('/products') }, [user, path, go])
   if (user === undefined) return <p className="center muted">Đang tải…</p>
   if (!user) return <Login onDone={setUser} />
   const edit = path.match(/^\/products\/(\d+)$/)
+  const resource = path.match(/^\/r\/([a-z][a-z0-9-]*)(?:\/(new|\d+))?$/)
+  const meta = resource ? resources.find((r) => r.key === resource[1]) : undefined
+  const groups = [...new Set(resources.filter((r) => r.canCreate || r.canUpdate || r.canDelete).map((r) => r.group))]
+  const link = (to: string, label: string) => <a key={to} href={BASE + to} onClick={(e) => { e.preventDefault(); go(to) }} aria-current={path === to || path.startsWith(to + '/') ? 'page' : undefined}>{label}</a>
+  let content
+  if (edit) content = <ProductEditor id={Number(edit[1])} user={user} go={go} />
+  else if (resource) {
+    if (!meta) content = <section className="card"><p className="muted">{resources.length ? 'Không tìm thấy hoặc không có quyền truy cập.' : 'Đang tải…'}</p></section>
+    else if (resource[2] === 'new') content = <ResourceForm key={`${meta.key}:new`} meta={meta} id={null} go={go} />
+    else if (resource[2]) content = <ResourceForm key={`${meta.key}:${resource[2]}`} meta={meta} id={Number(resource[2])} go={go} />
+    else content = <ResourceList key={meta.key} meta={meta} go={go} />
+  } else content = <ProductList go={go} />
   return (
     <div className="shell">
       <header className="top">
         <strong>Đông Phú Gia · Quản trị</strong>
-        <nav><a href={BASE + '/products'} onClick={(e) => { e.preventDefault(); go('/products') }}>Sản phẩm</a></nav>
+        <nav aria-label="Chức năng">
+          {link('/products', 'Sản phẩm')}
+          {groups.map((group) => (
+            <span key={group} className="group"><span className="muted">{group}:</span>{resources.filter((r) => r.group === group && (r.canCreate || r.canUpdate || r.canDelete)).map((r) => link(`/r/${r.key}`, r.label))}</span>
+          ))}
+        </nav>
         <span className="muted">{user.name} · {user.role}</span>
         <button onClick={async () => { await api.logout().catch(() => undefined); setUser(null); go('/login') }}>Đăng xuất</button>
       </header>
-      <main>{edit ? <ProductEditor id={Number(edit[1])} user={user} go={go} /> : <ProductList go={go} />}</main>
+      <main>{content}</main>
     </div>
   )
 }
@@ -59,7 +79,7 @@ function ProductList({ go }: { go: (to: string) => void }) {
   }, [term, page])
   const pages = Math.max(1, Math.ceil(total / 20))
   return (
-    <section className="card">
+    <section className="card products">
       <div className="bar"><h1>Sản phẩm ({total})</h1><input type="search" placeholder="Tìm theo tên hoặc SKU" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       {error && <p role="alert" className="error">{error}</p>}
       <table>
