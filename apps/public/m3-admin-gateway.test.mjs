@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleAdminNext, isAdminNextPath } from './m3-admin-gateway.mjs'
-import { verifyEnvelope, routeOf } from '../../supabase/functions/admin-api/envelope.mjs'
+import { readFileSync } from 'node:fs'
+import { verifyEnvelope, routeOf } from './m3-admin-envelope.mjs'
 
 const ORIGIN = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
 const FN = 'https://uybumsnyqpwcidjxmfsv.supabase.co/functions/v1/admin-api'
@@ -25,6 +26,10 @@ function stubUpstream(response) {
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
 describe('Admin shell gateway', () => {
+  it('uses an envelope byte-identical to the function copy (single source of truth)', () => {
+    expect(readFileSync('apps/public/m3-admin-envelope.mjs', 'utf8')).toBe(readFileSync('supabase/functions/admin-api/envelope.mjs', 'utf8'))
+  })
+
   it('only owns /admin-next', () => {
     expect(isAdminNextPath('/admin-next')).toBe(true); expect(isAdminNextPath('/admin-next/products/1')).toBe(true)
     expect(isAdminNextPath('/admin')).toBe(false); expect(isAdminNextPath('/admin-nextx')).toBe(false)

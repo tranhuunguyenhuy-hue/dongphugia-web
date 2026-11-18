@@ -223,7 +223,7 @@ async function main() {
   // `inline-import` marker and are removed because the modules are inlined right before the dispatch source.
   const INLINE_IMPORT = /^import .*\/\/ inline-import\r?\n/gm
   const [envelopeSource, gatewaySource, rawDispatchSource] = await Promise.all([
-    readFile(path.join(repositoryRoot, 'supabase/functions/admin-api/envelope.mjs'), 'utf8'),
+    readFile(path.join(repositoryRoot, 'apps/public/m3-admin-envelope.mjs'), 'utf8'),
     readFile(path.join(repositoryRoot, 'apps/public/m3-admin-gateway.mjs'), 'utf8'),
     readFile(path.join(repositoryRoot, 'apps/public/m3-combined-dispatch.mjs'), 'utf8'),
   ])

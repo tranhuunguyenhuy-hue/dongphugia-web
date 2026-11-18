@@ -1,8 +1,8 @@
 // Same-origin gateway for the static Admin shell (M3 G4 pilot). Runs inside the combined staging Worker:
 // it does NO rendering and NO database access; it validates the browser request, signs it and forwards it to the
 // Supabase Edge Function `admin-api` (TEST project only). Source is concatenated into worker.mjs by the builder, so
-// this file may only import the envelope module (inlined by the builder via the marker below).
-import { routeOf, signEnvelope } from '../../supabase/functions/admin-api/envelope.mjs' // inline-import
+// this file may only import ./m3-admin-envelope.mjs (a byte-identical copy of the function's envelope, enforced by a test).
+import { routeOf, signEnvelope } from './m3-admin-envelope.mjs' // inline-import
 
 export const ADMIN_NEXT_BASE = '/admin-next'
 const API_PREFIX = `${ADMIN_NEXT_BASE}/api`
