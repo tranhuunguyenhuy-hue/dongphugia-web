@@ -140,20 +140,20 @@ async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCatego
   's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+categoryClause+
   ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.name LIMIT 100',values,
   'category-listing-counts')
- // Homepage brand choices are derived from its bounded first-listing card
- // previews. Only a single category-root page consumes this SQL facet; avoid a
- // global DISTINCT scan across every listing while assembling the homepage.
- const brands=categoryFilter
-  ?await readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
+ // Brand facets (single-category page only) and the first-listing preview are independent
+ // once the listing counts are known: run them together instead of three serial round-trips.
+ const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
+ const brandsPromise=categoryFilter
+  ?readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
     ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values,
     'category-brand-facets')
-  :[]
- const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
+  :Promise.resolve([] as Brand[])
+ brandsPromise.catch(()=>undefined) // awaited below; avoids an unhandled rejection when no category matches
  const result=await Promise.all(categorySlugs.map(async (slug): Promise<SnapshotCategory | null>=>{
   const byCategory=rows.filter(r=>r.category_slug===slug)
   if(!byCategory.length)return null
   const listings=byCategory.map(r=>({slug:r.listing_slug,name:r.listing_name,thumbnail_url:null,totalCount:Number(r.total_count)}))
-  const first=await getLiveListingPreview(slug,listings[0].slug)
+  const [first,brands]=await Promise.all([getLiveListingPreview(slug,listings[0].slug),brandsPromise])
   return {slug,name:byCategory[0].category_name,listings,
    homeProducts:first.slice(0,8),
    featuredProducts:first.filter(p=>p.is_featured).slice(0,8),
@@ -248,4 +248,29 @@ export async function getLiveVariantSiblings(group:string,currentId:number){
  const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+FROM+' WHERE '+PUBLIC+
   ' AND p.variant_group=$1 AND p.id<>$2 ORDER BY p.id LIMIT 8',[group,currentId])
  return rows.map(mapLiveProduct)
+}
+
+// Sitemap data (#360): bounded shards, same public/visibility predicates as every Public page,
+// so draft/inactive/non-public products can never be listed.
+export const SITEMAP_PRODUCTS_PER_SHARD=2000
+export async function getLiveSitemapProductCount():Promise<number>{
+ const rows=await readPublicRows<{n:number|string}>('SELECT count(p.id) AS n'+FROM+' WHERE '+PUBLIC,[],'other')
+ return Number(rows[0]?.n??0)
+}
+export async function getLiveSitemapProducts(shard:number):Promise<{path:string;lastmod:string|null}[]>{
+ if(!Number.isSafeInteger(shard)||shard<1||shard>1000)return []
+ const rows=await readPublicRows<{category_slug:string;listing_slug:string;slug:string;updated_at:Date|string|null}>(
+  'SELECT c.slug AS category_slug,s.slug AS listing_slug,p.slug,p.updated_at'+FROM+' WHERE '+PUBLIC+
+  ' ORDER BY p.id LIMIT '+SITEMAP_PRODUCTS_PER_SHARD+' OFFSET $1',[(shard-1)*SITEMAP_PRODUCTS_PER_SHARD],'other')
+ return rows.filter(r=>[r.category_slug,r.listing_slug,r.slug].every(v=>SLUG.test(v))).map(r=>({
+  path:'/'+r.category_slug+'/'+r.listing_slug+'/'+r.slug,
+  lastmod:r.updated_at?new Date(r.updated_at).toISOString():null,
+ }))
+}
+export async function getLiveSitemapListings():Promise<{path:string}[]>{
+ const rows=await readPublicRows<Count>('SELECT c.slug AS category_slug,c.name AS category_name,s.slug AS listing_slug,'+
+  's.name AS listing_name,count(p.id) AS total_count'+FROM+' WHERE '+PUBLIC+' AND '+LIST+
+  ' GROUP BY c.slug,c.name,s.slug,s.name HAVING count(p.id)>0 ORDER BY c.slug,s.slug LIMIT 500',[],'category-listing-counts')
+ return [...new Set(rows.map(r=>'/'+r.category_slug))].map(path=>({path}))
+  .concat(rows.map(r=>({path:'/'+r.category_slug+'/'+r.listing_slug})))
 }
