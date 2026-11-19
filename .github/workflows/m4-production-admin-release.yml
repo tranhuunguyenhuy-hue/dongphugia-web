@@ -1,0 +1,252 @@
+name: M4 Production Admin release
+
+# Separate, explicit release lane for the accepted Admin (static SPA + same-origin gateway + dedicated upload) on top of the
+# unchanged canonical Public Worker. The Public-only lane (`v1-worker-release.yml`) is untouched and remains the rollback tool.
+# Builds the exact main SHA once, verifies the packaged artifact against the Production PostgreSQL read-only role and, only for
+# operation=publish, deploys it to the existing Production Worker with the Admin secrets passed atomically (--secrets-file),
+# then smokes the real domain. No automatic rollback: the recorded previous version is restored by a separate explicit command.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+      operation:
+        description: verify = build and test the packaged artifact only; publish = also deploy to Production
+        required: true
+        type: choice
+        options: [verify, publish]
+        default: verify
+      rollback_version_id:
+        description: Publish only. Cloudflare version id that is active right now (the recorded Public rollback target)
+        required: false
+        type: string
+      owner_ready_confirmed:
+        description: Publish only. true = backup verified, production_writes_allowed set, 001/002 verified, function deployed and fail-closed, first admin created
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-production-worker-release
+  cancel-in-progress: false
+
+env:
+  APP_ENV: production
+  APP_BUILD_TARGET: public
+  APP_ORIGIN: https://www.dongphugia.vn
+  BUILD_SOURCE_SHA: ${{ github.sha }}
+  WRANGLER_SEND_METRICS: 'false'
+  PUBLIC_CATALOGUE_SOURCE: postgresql
+  # Production media target for uploads (names only; the storage key is a Worker secret). Overridable by repository variables.
+  M4_MEDIA_ZONE: ${{ vars.M4_PRODUCTION_MEDIA_ZONE_NAME || 'dpg-products' }}
+  M4_MEDIA_STORAGE_HOST: ${{ vars.M4_PRODUCTION_MEDIA_STORAGE_HOST || 'sg.storage.bunnycdn.com' }}
+
+jobs:
+  release:
+    name: Build, verify and optionally publish the Production Admin Worker
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    environment: Production
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify protected main, exact SHA and publish prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ '${{ inputs.operation }}' = 'publish' ]; then
+            test '${{ inputs.owner_ready_confirmed }}' = 'true' || { echo 'M4_RELEASE status=FAIL reason=owner_ready_confirmation_required'; exit 1; }
+            [[ '${{ inputs.rollback_version_id }}' =~ ^[a-f0-9-]{36}$ ]] || { echo 'M4_RELEASE status=FAIL reason=rollback_version_id_required'; exit 1; }
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/public/package-lock.json
+      - name: Install locked toolchains
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+          if [ -f apps/admin-spa/package-lock.json ]; then npm ci --prefix apps/admin-spa; fi
+      - name: Run the M4 unit and contract tests
+        run: npx vitest run scripts/m4 apps/public/m3-admin-gateway.test.mjs apps/public/m3-combined-dispatch.test.mjs supabase/functions/admin-api/production-migration.test.ts
+      - name: Build the actual Public Worker and assemble the Public release
+        shell: bash
+        env:
+          V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
+        run: |
+          set -euo pipefail
+          test "$V1_PUBLIC_HYPERDRIVE_ID" = '905f5791e9d84cf285f7533b92d03f49'
+          cp apps/public/wrangler.production.jsonc apps/public/wrangler.jsonc
+          node scripts/app-foundation/configure-v1-m1-worker-source.mjs apps/public/wrangler.jsonc "$PUBLIC_CATALOGUE_SOURCE" "$V1_PUBLIC_HYPERDRIVE_ID"
+          npm run build:public-worker
+          npm run app:assemble-public-worker -- --repository-root . --server-dir apps/public/dist/server --assets-dir apps/public/dist/client --output "$RUNNER_TEMP/v1-release" --source-sha "$GITHUB_SHA"
+      - name: Add the Admin (SPA, dispatch, upload, Images binding) to the release
+        run: |
+          set -euo pipefail
+          npx tsx scripts/m4/build-production-admin-worker.mts --release-dir "$RUNNER_TEMP/v1-release" --source-sha "$GITHUB_SHA" --media-zone "$M4_MEDIA_ZONE" --media-storage-host "$M4_MEDIA_STORAGE_HOST"
+      - name: Confirm exact target, bindings and Wrangler dry-run
+        shell: bash
+        env:
+          V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
+        run: |
+          set -euo pipefail
+          node - "$RUNNER_TEMP/v1-release/wrangler.json" <<'NODE'
+          const x = JSON.parse(require('fs').readFileSync(process.argv[2], 'utf8'));
+          const fail = (m) => { console.error(`M4_IDENTITY_FAIL:${m}`); process.exit(1) };
+          if (x.name !== 'dongphugia-v1-public-production') fail('name');
+          if (x.main !== 'worker/m4-entry.mjs') fail('main');
+          const v = x.vars ?? {};
+          if (v.APP_ENV !== 'production' || v.APP_BUILD_TARGET !== 'public' || v.APP_ORIGIN !== 'https://www.dongphugia.vn' || v.PREVIEW_NOINDEX === 'true') fail('vars');
+          if (v.PUBLIC_CATALOGUE_SOURCE !== 'postgresql') fail('source');
+          if (v.ADMIN_API_URL !== 'https://bonxyxluzlxfkdetryoo.supabase.co/functions/v1/admin-api') fail('function-url');
+          if (v.BUNNY_CDN_HOSTNAME !== 'cdn.dongphugia.com.vn') fail('cdn');
+          if (Object.keys(v).some((n) => /(SECRET|PASSWORD|TOKEN|PRIVATE_KEY|CREDENTIAL|DATABASE_URL|API_KEY|_KEY$)/i.test(n))) fail('secret-like-var');
+          if (x.hyperdrive?.length !== 1 || x.hyperdrive[0].binding !== 'PUBLIC_DB' || x.hyperdrive[0].id !== process.env.V1_PUBLIC_HYPERDRIVE_ID) fail('hyperdrive');
+          if (x.images?.binding !== 'IMAGES') fail('images');
+          if (x.preview_urls !== true) fail('preview_urls');
+          console.log('M4_WORKER_IDENTITY_PASS');
+          NODE
+          cd "$RUNNER_TEMP/v1-release"
+          node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" deploy --dry-run --config wrangler.json
+      - name: Verify the packaged Worker (Public parity from PostgreSQL, Admin fail-closed without secrets)
+        id: packaged
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'd54f3402b9d112ab64d6135e0e3f1fb1'
+          diag="$RUNNER_TEMP/m4-packaged"; mkdir -p "$diag"
+          node - "$RUNNER_TEMP/v1-release/wrangler.json" "$RUNNER_TEMP/v1-release/wrangler.packaged-smoke.json" <<'NODE'
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          cfg.name = `dpg-m4-packaged-smoke-${process.env.GITHUB_RUN_ID}`;
+          cfg.workers_dev = false; cfg.preview_urls = false;
+          cfg.vars = { ...cfg.vars, PUBLIC_DB_DIAGNOSTICS: 'true' };
+          delete cfg.images; // remote dev has no Images transform to exercise; the real config was dry-run above
+          fs.writeFileSync(process.argv[3], JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+          NODE
+          WRANGLER_LOG_PATH="$diag/wrangler-internal.log" node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" dev \
+            --remote --config "$RUNNER_TEMP/v1-release/wrangler.packaged-smoke.json" --host www.dongphugia.vn --upstream-protocol https \
+            --ip 127.0.0.1 --port 8793 --show-interactive-dev-session=false > "$diag/wrangler.log" 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in {1..90}; do
+            status="$(curl --silent --noproxy '*' --output /dev/null --write-out '%{http_code}' --max-time 5 http://127.0.0.1:8793/api/health || true)"
+            [ "$status" = '200' ] && { ready=1; break; }
+            kill -0 "$worker_pid" 2>/dev/null || { echo 'M4_PACKAGED status=FAIL reason=worker_exited'; tail -n 20 "$diag/wrangler.log" | sed -E 's/[A-Za-z0-9_-]{32,}/***/g'; exit 1; }
+            sleep 1
+          done
+          test "$ready" -eq 1
+          node scripts/app-foundation/public-postgres-release-smoke.mjs http://127.0.0.1:8793 "$GITHUB_SHA" local
+          node scripts/m4/admin-smoke.mjs http://127.0.0.1:8793 unconfigured "$GITHUB_SHA"
+      - name: Verify the active version equals the recorded rollback target before publishing
+        id: rollback
+        if: inputs.operation == 'publish'
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          EXPECTED_VERSION: ${{ inputs.rollback_version_id }}
+        run: |
+          set -euo pipefail
+          wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
+          node "$wrangler" deployments list --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/m4-before.json"
+          node - "$RUNNER_TEMP/m4-before.json" <<'NODE'
+          const fs = require('fs');
+          const doc = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const list = Array.isArray(doc) ? doc : (doc.deployments ?? doc.result?.deployments);
+          const current = list?.reduce((latest, item) => !latest || item.created_on > latest.created_on ? item : latest, null);
+          const active = current?.versions?.filter((v) => v.percentage === 100) ?? [];
+          if (active.length !== 1 || active[0].version_id !== process.env.EXPECTED_VERSION) { console.error('M4_ROLLBACK_TARGET_MISMATCH'); process.exit(1); }
+          console.log(`M4_ROLLBACK_TARGET version=${active[0].version_id}`);
+          NODE
+          curl --fail --silent --show-error --max-time 20 https://www.dongphugia.vn/api/health -o "$RUNNER_TEMP/m4-health-before.json"
+          echo "version_id=$EXPECTED_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Publish with the Admin secrets passed atomically
+        id: deploy
+        if: inputs.operation == 'publish'
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ADMIN_API_HMAC_SECRET: ${{ secrets.ADMIN_API_HMAC_SECRET }}
+          ADMIN_PRODUCTION_MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = 'd54f3402b9d112ab64d6135e0e3f1fb1'
+          test "${#ADMIN_API_HMAC_SECRET}" -ge 32 || { echo 'M4_RELEASE status=FAIL reason=hmac_missing_or_short'; exit 1; }
+          echo "::add-mask::$ADMIN_API_HMAC_SECRET"
+          [ -z "$ADMIN_PRODUCTION_MEDIA_KEY" ] || echo "::add-mask::$ADMIN_PRODUCTION_MEDIA_KEY"
+          umask 077
+          node -e "const s={ADMIN_API_HMAC_SECRET:process.env.ADMIN_API_HMAC_SECRET};if(process.env.ADMIN_PRODUCTION_MEDIA_KEY)s.ADMIN_PRODUCTION_MEDIA_KEY=process.env.ADMIN_PRODUCTION_MEDIA_KEY;require('fs').writeFileSync(process.argv[1],JSON.stringify(s),{mode:0o600})" "$RUNNER_TEMP/m4-secrets.json"
+          echo "M4_RELEASE media_key_present=$([ -n "$ADMIN_PRODUCTION_MEDIA_KEY" ] && echo true || echo false)"
+          cd "$RUNNER_TEMP/v1-release"
+          node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" deploy --config wrangler.json --secrets-file "$RUNNER_TEMP/m4-secrets.json" --message "M4 Admin release ${GITHUB_SHA:0:12}"
+          shred -u "$RUNNER_TEMP/m4-secrets.json" 2>/dev/null || rm -f "$RUNNER_TEMP/m4-secrets.json"
+      - name: Wait for the exact Production identity
+        if: inputs.operation == 'publish'
+        run: node scripts/app-foundation/wait-public-production-identity.mjs "$GITHUB_SHA"
+      - name: Smoke the real Production domain (Public parity and Admin)
+        if: inputs.operation == 'publish'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/app-foundation/public-postgres-release-smoke.mjs https://www.dongphugia.vn "$GITHUB_SHA" production
+          node scripts/m4/admin-smoke.mjs https://www.dongphugia.vn configured "$GITHUB_SHA"
+      - name: Verify the deployed version bindings and record rollback evidence
+        if: inputs.operation == 'publish'
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
+        run: |
+          set -euo pipefail
+          wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
+          node "$wrangler" deployments list --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/m4-after.json"
+          version="$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const l=Array.isArray(d)?d:(d.deployments??d.result?.deployments);const c=l.reduce((a,i)=>!a||i.created_on>a.created_on?i:a,null);const a=c.versions.filter(v=>v.percentage===100);if(a.length!==1)process.exit(1);process.stdout.write(a[0].version_id)" "$RUNNER_TEMP/m4-after.json")"
+          node "$wrangler" versions view "$version" --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/m4-version.json"
+          node - "$RUNNER_TEMP/m4-version.json" "$V1_PUBLIC_HYPERDRIVE_ID" <<'NODE'
+          const fs = require('fs');
+          const raw = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          const b = (raw.version ?? raw.result ?? raw).resources?.bindings ?? [];
+          const has = (name, type) => b.some((x) => x.name === name && (!type || x.type === type));
+          const ok = b.filter((x) => x.name === 'PUBLIC_DB' && x.type === 'hyperdrive').length === 1
+            && (b.find((x) => x.name === 'PUBLIC_DB').id ?? b.find((x) => x.name === 'PUBLIC_DB').hyperdrive_id) === process.argv[3]
+            && has('IMAGES') && has('ADMIN_API_HMAC_SECRET', 'secret_text') && has('ASSETS')
+            && b.some((x) => x.name === 'APP_ENV' && x.text === 'production') && b.some((x) => x.name === 'ADMIN_API_URL');
+          if (!ok) { console.error('M4_VERSION_BINDINGS_FAIL'); process.exit(1); }
+          console.log(`M4_VERSION_BINDINGS_PASS names=${b.map((x) => x.name).sort().join(',')}`);
+          NODE
+          echo "DEPLOYED_WORKER_VERSION=$version" >> "$GITHUB_STEP_SUMMARY"
+          echo "ROLLBACK_TARGET_VERSION=${{ steps.rollback.outputs.version_id }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### M4 Production Admin release (${{ inputs.operation }})"
+            echo "- Source SHA: $GITHUB_SHA"
+            echo "- Packaged verification: ${{ steps.packaged.outcome }}"
+            echo "- Publish: ${{ steps.deploy.outcome }}"
+            echo "- Previous Worker version (rollback target): ${{ steps.rollback.outputs.version_id }}"
+            echo "- Worker rollback: wrangler rollback <version> --name dongphugia-v1-public-production (does not undo SQL)"
+            echo "- Automatic rollback: none (explicit command only)"
+          } >> "$GITHUB_STEP_SUMMARY"

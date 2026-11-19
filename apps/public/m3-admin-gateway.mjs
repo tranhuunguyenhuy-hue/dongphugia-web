@@ -7,6 +7,8 @@ import { routeOf, signEnvelope } from './m3-admin-envelope.mjs' // inline-import
 export const ADMIN_NEXT_BASE = '/admin-next'
 const API_PREFIX = `${ADMIN_NEXT_BASE}/api`
 const SESSION_COOKIE = 'dpg-admin-session'
+// Default (staging) target is the isolated TEST project. A caller (the Production dispatch) may pass its own exact pattern;
+// the function URL and the signing secret are always validated against the pattern of the deployment that owns them.
 const APPROVED_FUNCTION_URL = /^https:\/\/uybumsnyqpwcidjxmfsv\.supabase\.co\/functions\/v1\/admin-api$/
 const ROUTES = [
   { method: 'POST', pattern: /^\/login$/ }, { method: 'POST', pattern: /^\/logout$/ }, { method: 'GET', pattern: /^\/me$/ },
@@ -64,7 +66,7 @@ function isSameOriginMutation(request, stagingOrigin) {
   return site === null || site === 'same-origin'
 }
 
-export async function handleAdminNext(request, environment, { sourceSha, stagingOrigin }) {
+export async function handleAdminNext(request, environment, { sourceSha, stagingOrigin, approvedFunctionUrl = APPROVED_FUNCTION_URL }) {
   const url = new URL(request.url)
   if (!url.pathname.startsWith(`${API_PREFIX}/`)) {
     // Static shell: real files are served by the assets binding before the Worker runs; this is the SPA fallback.
@@ -84,7 +86,7 @@ export async function handleAdminNext(request, environment, { sourceSha, staging
   const mutation = request.method !== 'GET'
   if (mutation && !isSameOriginMutation(request, stagingOrigin)) return jsonError(403, 'ORIGIN_NOT_ALLOWED', sourceSha)
   const functionUrl = environment.ADMIN_API_URL, secret = environment.ADMIN_API_HMAC_SECRET
-  if (typeof functionUrl !== 'string' || !APPROVED_FUNCTION_URL.test(functionUrl) || typeof secret !== 'string' || secret.length < 32) {
+  if (typeof functionUrl !== 'string' || !approvedFunctionUrl.test(functionUrl) || typeof secret !== 'string' || secret.length < 32) {
     return jsonError(503, 'ADMIN_API_NOT_CONFIGURED', sourceSha)
   }
 
