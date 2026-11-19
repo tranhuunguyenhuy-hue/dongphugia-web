@@ -31,6 +31,11 @@
   --color-ring: oklch(0.705 0.015 286.067);
   --color-success: oklch(0.527 0.154 150.069);
   --color-warning: oklch(0.666 0.179 58.318);
+  /* DPG brand blue, used only for the page's primary CTA (600 keeps white text AA at 14px). */
+  --color-brand: #25738E;
+  --color-brand-hover: #225D73;
+  /* Softer elevation for cards and tables. */
+  --shadow-sm: 0 1px 1px 0 rgb(0 0 0 / 0.04);
   --color-sidebar: oklch(0.985 0 0);
   --color-sidebar-foreground: oklch(0.141 0.005 285.823);
   --color-sidebar-primary: oklch(0.21 0.006 285.885);

@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { api, ApiError, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
-import { Alert, EmptyState, NativeSelect, PageHeader, SkeletonRows, money, toast, useConfirm } from './ui'
+import { Alert, CTA, EmptyState, NativeSelect, PageHeader, SkeletonRows, money, toast, useConfirm } from './ui'
 
 const RichText = lazy(() => import('./RichText'))
 const BASE = '/admin-next'
@@ -76,7 +76,7 @@ export function ResourceList({ meta, go }: { meta: ResourceMeta; go: (to: string
   const open = (id: unknown) => go(`/r/${meta.key}/${id}`)
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
-      <PageHeader title={meta.label} description={loading && !data.total ? undefined : `${data.total} mục`} actions={meta.canCreate && <Button onClick={() => go(`/r/${meta.key}/new`)}><Plus />Thêm mới</Button>} />
+      <PageHeader title={meta.label} description={loading && !data.total ? undefined : `${data.total} mục`} actions={meta.canCreate && <Button className={CTA} onClick={() => go(`/r/${meta.key}/new`)}><Plus />Thêm mới</Button>} />
       <Card className="gap-0 overflow-hidden py-0">
         <div className="flex flex-wrap items-center gap-2 border-b p-3">
           {meta.searchable && <div className="relative min-w-48 flex-1 sm:max-w-xs"><Search className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input type="search" aria-label="Tìm kiếm" placeholder="Tìm kiếm…" className="pl-8" value={q} onChange={(e) => setQ(e.target.value)} /></div>}
@@ -309,7 +309,7 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
       )}
       {isProduct && creating && relationSections}
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
-        {canEdit ? <Button disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <Save />}{busy ? 'Đang xử lý…' : creating ? 'Tạo' : 'Lưu thay đổi'}</Button> : <p className="text-sm text-muted-foreground">Vai trò của bạn chỉ có quyền xem.</p>}
+        {canEdit ? <Button className={CTA} disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <Save />}{busy ? 'Đang xử lý…' : creating ? 'Tạo' : 'Lưu thay đổi'}</Button> : <p className="text-sm text-muted-foreground">Vai trò của bạn chỉ có quyền xem.</p>}
         {!creating && meta.canDelete && <Button type="button" variant="outline" className="text-destructive hover:text-destructive" disabled={busy} onClick={async () => {
           if (!(await confirm({ title: 'Xóa mục này?', description: 'Thao tác không thể hoàn tác.', confirmLabel: 'Xóa', destructive: true }))) return
           setBusy(true); setError('')
