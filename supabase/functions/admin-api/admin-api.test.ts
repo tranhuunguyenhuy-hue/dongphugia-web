@@ -384,7 +384,8 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect((await call('GET', '/r/brands/options', undefined, { token: admin })).status).toBe(200)
       expect((await call('GET', '/r/categories/options', undefined, { token: manager })).status).toBe(200)
       expect((await call('GET', '/r/colors/options', undefined, { token: sale })).status).toBe(200)
-      expect(code(await call('GET', '/r/categories/options', undefined, { token: sale }))).toBe('FORBIDDEN')
+      expect((await call('GET', '/r/categories/options', undefined, { token: sale })).status).toBe(200) // labels for product rows (products:read)
+      expect(code(await call('GET', '/r/blog-categories/options', undefined, { token: sale }))).toBe('FORBIDDEN') // non-lookup resources keep their own permission
       expect(code(await call('GET', '/r/brands/options', undefined, { token: 'none' }))).toBe('UNAUTHENTICATED')
       // The database enforces the same boundary even if a handler were wrong: no write privilege remains on the master tables.
       for (const statement of ["update dpg_app.categories set name='x'", "update dpg_app.brands set name='x'", "insert into dpg_app.brands(name,slug) values ('x','y')", 'delete from dpg_app.brands',

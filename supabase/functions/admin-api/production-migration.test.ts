@@ -75,6 +75,17 @@ describe.skipIf(!integrationUrl || !loopback)('Production migrations (M4) on a P
     await admin.query('drop role if exists dpg_public_catalogue').catch(() => undefined); await admin.end()
   })
 
+  it('grants the Admin role no write on Dev-managed master data (#309 scope): only SELECT on the eight tables', async () => {
+    const resources = productionMigrationFiles().find(([file]) => file.endsWith('002_m4_production_admin_resources.sql'))![1]
+    for (const table of ['categories', 'subcategories', 'brands', 'catalog_taxons', 'product_types', 'product_sub_types', 'spec_definitions', 'spec_options']) {
+      expect(resources, table).toMatch(new RegExp(`grant select \\([^)]*\\) on dpg_app\\.${table} to dpg_admin_api;`))
+      expect(resources, table).not.toMatch(new RegExp(`grant (insert|update|delete)[^;]* on dpg_app\\.${table} to`))
+      expect(resources, table).not.toMatch(new RegExp(`sequence dpg_app\\.${table}_id_seq`))
+    }
+    expect(resources).not.toMatch(/banner_url/)
+    // per-product records keep their grants
+    for (const table of ['products', 'product_spec_values', 'product_taxon_assignments', 'product_images', 'product_documents']) expect(resources, table).toMatch(new RegExp(`grant (insert|update)[^;]* on dpg_app\\.${table} to dpg_admin_api;`))
+  })
   it('refuses to run until the Owner has authorised Production writes in the target contract', async () => {
     await expect(apply('supabase/m4-production/001_m4_production_admin_api_base.sql')).rejects.toThrow(/production_writes_not_authorised/)
     await owner.query('update dpg_control.target_contract set production_writes_allowed = true')

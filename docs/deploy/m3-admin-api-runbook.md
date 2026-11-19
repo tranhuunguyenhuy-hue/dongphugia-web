@@ -35,7 +35,7 @@ Until step 2 is done the publisher uses a random secret, so the shell loads but 
 
 ## Rollback
 Worker: previous staging deployment (artifact preserved); function: `supabase functions delete admin-api`
-(TEST only); database: `004_m3_test_admin_api_rollback.sql`. Legacy `/admin` is untouched and remains available.
+(TEST only); database: `004_m3_test_admin_api_rollback.sql`. (Superseded by the scope decision below: the legacy `/admin` UI is retired on staging; its source and artifacts are kept in the repository.)
 
 ---
 
@@ -77,6 +77,8 @@ postgres.js (Edge) ≠ node-pg (tests): bind JSON as `$n::text::jsonb` (postgres
 parameter), never `select *` from a column-granted table, and give every parameter used in two typed contexts an explicit cast.
 
 # M4 package (Production Admin) — prepared, NOT executed
+
+The complete, current M4 plan (verified facts, code still to write, order, rollback, minimal Owner actions) is [m4-production-admin-plan.md](m4-production-admin-plan.md).
 
 Preconditions that only the Owner can satisfy (none are done):
 1. **Contract**: Production `dpg_control.target_contract.production_writes_allowed` is `false` today (read-only check). The M4

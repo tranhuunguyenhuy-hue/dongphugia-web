@@ -1,0 +1,42 @@
+name: M3 hosted replay check (TEST only)
+
+# Sends signed requests to the TEST admin-api function and proves that a replayed envelope, a tampered signature, a stale
+# timestamp, a re-routed signature and a missing/foreign origin marker are all refused. The HMAC secret is the repository
+# secret already used by the staging publisher; it is masked and never printed. TEST project only; no data is written
+# (the only mutation is a logout without a session). Owner-dispatched on main.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m3-hosted-replay
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.13.0
+      - name: Replay / signature / freshness / CSRF-marker checks
+        env:
+          M3_ADMIN_API_HMAC_SECRET: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$M3_ADMIN_API_HMAC_SECRET"
+          node scripts/m3/hosted-replay.mjs

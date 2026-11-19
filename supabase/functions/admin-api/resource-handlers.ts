@@ -91,7 +91,9 @@ export async function listResource(deps: ResourceDeps, ctx: Context, def: Resour
 
 /** Compact id/label pairs for dropdowns (categories, tags...). Needs only the referenced resource's read permission. */
 export async function optionsResource(deps: ResourceDeps, ctx: Context, def: ResourceDef): Promise<Result> {
-  requirePermission(ctx, def.read)
+  // Dev-managed master data is only ever read as id/label pairs, to render and edit product records: anyone who may read products
+  // may resolve those labels (otherwise a sale user would see raw ids for category/brand). Other resources keep their own read permission.
+  requirePermission(ctx, def.lookup ? 'products:read' : def.read)
   const rows = await deps.db.query<Row>(`select t.id, t.${quote(def.optionLabel)} as label from ${T(def)} t order by t.${quote(def.optionLabel)} asc, t.id asc limit 500`)
   return { status: 200, body: { data: { items: rows } } }
 }
