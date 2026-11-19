@@ -26,20 +26,32 @@ create role dpg_backup_reader login bypassrls nosuperuser nocreatedb nocreaterol
 alter role dpg_backup_reader set default_transaction_read_only = on;
 alter role dpg_backup_reader set statement_timeout = '15min';
 
--- Schemas and almost every object are owned by dpg_migration: grant as that owner.
-set role dpg_migration;
-grant usage on schema dpg_app, dpg_control to dpg_backup_reader;
-grant select on all tables in schema dpg_app, dpg_control to dpg_backup_reader;
-grant select on all sequences in schema dpg_app, dpg_control to dpg_backup_reader;
-alter default privileges in schema dpg_app, dpg_control grant select on tables to dpg_backup_reader;
-alter default privileges in schema dpg_app, dpg_control grant select on sequences to dpg_backup_reader;
-reset role;
+-- Grant as each object's actual owner (schemas and most objects: dpg_migration; the M4 Admin support tables: postgres).
+-- A bulk GRANT as one owner fails with "permission denied" on objects owned by the other, so grant object by object.
+do $$
+declare o record;
+begin
+  for o in select n.nspname as schema_name, pg_get_userbyid(n.nspowner) as owner_name
+           from pg_namespace n where n.nspname in ('dpg_app', 'dpg_control') loop
+    execute format('set local role %I', o.owner_name);
+    execute format('grant usage on schema %I to dpg_backup_reader', o.schema_name);
+    execute 'reset role';
+  end loop;
+  for o in select n.nspname as schema_name, c.relname, c.relkind, pg_get_userbyid(c.relowner) as owner_name
+           from pg_class c join pg_namespace n on n.oid = c.relnamespace
+           where n.nspname in ('dpg_app', 'dpg_control') and c.relkind in ('r', 'p', 'v', 'm', 'S') loop
+    execute format('set local role %I', o.owner_name);
+    execute format('grant select on %s %I.%I to dpg_backup_reader',
+                   case when o.relkind = 'S' then 'sequence' else 'table' end, o.schema_name, o.relname);
+    execute 'reset role';
+  end loop;
+end $$;
 
--- The M4 Admin support tables are owned by postgres (warnings for dpg_migration-owned objects are expected and harmless).
-grant select on all tables in schema dpg_app to dpg_backup_reader;
-grant select on all sequences in schema dpg_app to dpg_backup_reader;
-alter default privileges for role postgres in schema dpg_app grant select on tables to dpg_backup_reader;
-alter default privileges for role postgres in schema dpg_app grant select on sequences to dpg_backup_reader;
+-- Objects created later by future migrations (as dpg_migration or postgres) become readable automatically.
+alter default privileges for role dpg_migration in schema dpg_app, dpg_control grant select on tables to dpg_backup_reader;
+alter default privileges for role dpg_migration in schema dpg_app, dpg_control grant select on sequences to dpg_backup_reader;
+alter default privileges for role postgres in schema dpg_app, dpg_control grant select on tables to dpg_backup_reader;
+alter default privileges for role postgres in schema dpg_app, dpg_control grant select on sequences to dpg_backup_reader;
 
 -- Verification (must show: login, bypassrls, not superuser, conn limit 2, all tables readable, 0 write privileges).
 select r.rolname, r.rolcanlogin, r.rolbypassrls, r.rolsuper, r.rolcreaterole, r.rolcreatedb, r.rolreplication, r.rolconnlimit,

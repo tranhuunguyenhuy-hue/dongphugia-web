@@ -171,9 +171,32 @@ jobs:
           set -euo pipefail
           repo="$GITHUB_WORKSPACE"
           sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
-          # Same file the Owner runs. Scratch objects are owned by postgres (superuser), so the owner switch is dropped here.
+          # Mirror Production ownership: schemas and objects owned by dpg_migration, the M4 Admin support tables owned by a
+          # NON-superuser stand-in for Supabase's postgres (CREATEROLE, BYPASSRLS, member of dpg_migration). The exact Owner
+          # file then runs as that stand-in, so a privilege error in Production reproduces here.
+          sql <<'SQL'
+          create role sb_owner login createrole bypassrls;
+          grant dpg_migration to sb_owner;
+          do $$ declare o record; begin
+            for o in select nspname from pg_namespace where nspname in ('dpg_app','dpg_control') loop
+              execute format('alter schema %I owner to dpg_migration', o.nspname); end loop;
+            for o in select n.nspname, c.relname, c.relkind from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                     where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','p','v','m')
+                       and c.relname not in ('admin_api_login_attempts','admin_api_nonces') loop
+              execute format('alter %s %I.%I owner to dpg_migration', case when o.relkind = 'v' then 'view' when o.relkind = 'm' then 'materialized view' else 'table' end, o.nspname, o.relname); end loop;
+            for o in select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                     where n.nspname = 'dpg_app' and c.relname in ('admin_api_login_attempts','admin_api_nonces') loop
+              execute format('alter table %I.%I owner to sb_owner', o.nspname, o.relname); end loop;
+            for o in select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                     where n.nspname in ('dpg_app','dpg_control') and c.relkind = 'S' and pg_get_userbyid(c.relowner) = 'postgres'
+                       and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype in ('a','i')) loop
+              execute format('alter sequence %I.%I owner to dpg_migration', o.nspname, o.relname); end loop;
+          end $$;
+          SQL
+          echo "M5_READER owners=$(sql -c "select string_agg(distinct pg_get_userbyid(c.relowner), ',') from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','S','v')")"
           pw="$(openssl rand -hex 24)"
-          sed -e "s/<OWNER_GENERATED_STRONG_PASSWORD>/$pw/" -e '/^set role dpg_migration;$/d' -e '/^reset role;$/d' "$repo/supabase/m5-production/001_backup_reader_role.sql" | sql -f - > reader-verify.txt
+          sed -e "s/<OWNER_GENERATED_STRONG_PASSWORD>/$pw/" -e 's/for role postgres in schema/for role sb_owner in schema/' "$repo/supabase/m5-production/001_backup_reader_role.sql" \
+            | docker exec -i scratch psql -U sb_owner -d postgres -X -q -A -t -v ON_ERROR_STOP=1 -f - > reader-verify.txt
           echo "M5_READER verify=$(tr '\n' ' ' < reader-verify.txt)"
           IFS='|' read -r name login bypass superuser createrole createdb replication connlimit relations readable writable memberships < reader-verify.txt
           test "$login" = t; test "$bypass" = t; test "$superuser" = f; test "$createrole" = f; test "$createdb" = f; test "$replication" = f
