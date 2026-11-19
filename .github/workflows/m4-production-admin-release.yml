@@ -238,7 +238,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/app-foundation/public-postgres-release-smoke.mjs https://www.dongphugia.vn "$GITHUB_SHA" production
+          # Paced (cold page cache after a version switch) with a bounded, visible identity retry for edge propagation.
+          SMOKE_PACE_MS=700 SMOKE_SHA_RETRY_MS=120000 node scripts/app-foundation/public-postgres-release-smoke.mjs https://www.dongphugia.vn "$GITHUB_SHA" production
           node scripts/m4/admin-smoke.mjs https://www.dongphugia.vn configured "$GITHUB_SHA"
       - name: Verify the deployed version bindings and record rollback evidence
         if: inputs.operation == 'publish'

@@ -37,19 +37,37 @@ async function safeBodyPrefix(response) {
   return new TextDecoder().decode(bytes)
 }
 
+// M5: after a version switch every page-cache key is new, so a burst of cold renders can hit the Free-plan CPU limit.
+// SMOKE_PACE_MS spaces the requests; SMOKE_SHA_RETRY_MS bounds a retry window used ONLY when the single failing check is
+// the source identity (edge propagation right after publish). Both default to 0, i.e. the previous strict behaviour.
+const PACE_MS = Math.min(5000, Math.max(0, Number(process.env.SMOKE_PACE_MS ?? 0) || 0))
+const SHA_RETRY_MS = Math.min(180000, Math.max(0, Number(process.env.SMOKE_SHA_RETRY_MS ?? 0) || 0))
+const smokeStarted = performance.now()
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 async function checked(path, expectedType, route, slug) {
-  const started = performance.now()
+  if (PACE_MS) await pause(PACE_MS)
+  let started = performance.now()
   let response
-  try {
-    response = await fetch(new URL(path, base), { redirect: 'manual', signal: AbortSignal.timeout(20000) })
-  } catch (error) {
-    emitHttpEvidence(buildSmokeNetworkFailureEvidence({ route, slug, error, elapsedMs: performance.now() - started }))
-    fail('REQUEST')
+  let evidence
+  for (let attempt = 1; ; attempt += 1) {
+    started = performance.now()
+    try {
+      response = await fetch(new URL(path, base), { redirect: 'manual', signal: AbortSignal.timeout(20000) })
+    } catch (error) {
+      emitHttpEvidence(buildSmokeNetworkFailureEvidence({ route, slug, error, elapsedMs: performance.now() - started }))
+      fail('REQUEST')
+    }
+    evidence = buildSmokeResponseEvidence({
+      route, slug, response, expectedSha: sourceSha, expectedType, base,
+      elapsedMs: performance.now() - started,
+    })
+    const onlyIdentity = evidence.failedChecks.length === 1 && evidence.failedChecks[0] === 'source_sha'
+    if (!onlyIdentity || performance.now() - smokeStarted >= SHA_RETRY_MS) break
+    console.error(`PUBLIC_POSTGRES_SMOKE_IDENTITY_RETRY ${JSON.stringify({ route, attempt, status: response.status })}`)
+    await response.body?.cancel().catch(() => undefined)
+    await pause(3000)
   }
-  let evidence = buildSmokeResponseEvidence({
-    route, slug, response, expectedSha: sourceSha, expectedType, base,
-    elapsedMs: performance.now() - started,
-  })
   if (evidence.failedChecks.length) {
     evidence = buildSmokeResponseEvidence({
       route, slug, response, expectedSha: sourceSha, expectedType, base,
