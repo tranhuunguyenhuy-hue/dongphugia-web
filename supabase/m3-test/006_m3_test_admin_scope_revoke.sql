@@ -2,6 +2,8 @@
 -- REVOKE-ONLY and idempotent, ALL-OR-NOTHING (one transaction). Removes every write privilege and write RLS policy the Admin API role
 -- held on the eight shared master-data tables. SELECT privileges, rows, IDs, FKs and the m3_admin_api_select policies are untouched, so
 -- the product editor keeps its read-only lookups. Operator MUST verify the runner targets the intended project.
+-- The target guard is the TEST contract + roles check of 004. 004/005 also refused to run when orders/customers existed (first-time
+-- setup); that check is intentionally omitted here: this migration only removes privileges and TEST now holds acceptance rows.
 begin;
 -- guard:begin
 do $$ begin
@@ -13,9 +15,6 @@ do $$ begin
   end if;
   if (select count(*) from pg_roles where rolname in ('dpg_admin_m3_test','dpg_public_m3_test')) <> 2 then
     raise exception 'M3_TEST_TARGET_GUARD_FAILED:roles';
-  end if;
-  if exists (select 1 from dpg_app.orders) or exists (select 1 from dpg_app.customers) then
-    raise exception 'M3_TEST_TARGET_GUARD_FAILED:business_data_present';
   end if;
 end $$;
 -- guard:end
