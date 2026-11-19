@@ -36,7 +36,8 @@ env:
   TEST_PROJECT_REF: uybumsnyqpwcidjxmfsv
   PRODUCTION_ORIGIN: https://www.dongphugia.vn
   # Hosts of the images already stored on products (the form re-submits existing URLs) plus the Production media CDN.
-  MEDIA_HOSTS: cdn.dongphugia.com.vn,cdn.hita.com.vn,hita.com.vn,vietceramics.com
+  # Existing rows keep their legacy hosts (the edit form re-submits them); new uploads use the verified default pull zone host.
+  MEDIA_HOSTS: dpg-products.b-cdn.net,cdn.dongphugia.com.vn,cdn.hita.com.vn,hita.com.vn,vietceramics.com
   SUPABASE_CLI_VERSION: 3.2.0
 
 jobs:
