@@ -22,37 +22,37 @@ create temp table m5_restored (tbl text, pk integer, col text, product_id intege
 
 with r as (select t.id, l.product_id from dpg_control.m5_cdn_ledger l join dpg_app.product_images t on t.id = l.pk
            where l.tbl = 'product_images' and l.col = 'image_url' and l.rolled_back_at is null
-             and md5(t.image_url) = l.new_md5 and md5(pg_temp.m5_col_back(t.image_url)) = l.old_md5 for update of t),
+             and md5(t.image_url)::uuid = l.new_md5 and md5(pg_temp.m5_col_back(t.image_url))::uuid = l.old_md5 for update of t),
 u as (update dpg_app.product_images t set image_url = pg_temp.m5_col_back(t.image_url) from r where t.id = r.id returning t.id, r.product_id)
 insert into m5_restored select 'product_images', id, 'image_url', product_id from u;
 
 with r as (select t.id, l.product_id from dpg_control.m5_cdn_ledger l join dpg_app.product_documents t on t.id = l.pk
            where l.tbl = 'product_documents' and l.col = 'url' and l.rolled_back_at is null
-             and md5(t.url) = l.new_md5 and md5(pg_temp.m5_col_back(t.url)) = l.old_md5 for update of t),
+             and md5(t.url)::uuid = l.new_md5 and md5(pg_temp.m5_col_back(t.url))::uuid = l.old_md5 for update of t),
 u as (update dpg_app.product_documents t set url = pg_temp.m5_col_back(t.url) from r where t.id = r.id returning t.id, r.product_id)
 insert into m5_restored select 'product_documents', id, 'url', product_id from u;
 
 with r as (select t.id, l.product_id from dpg_control.m5_cdn_ledger l join dpg_app.product_descriptions t on t.id = l.pk
            where l.tbl = 'product_descriptions' and l.col = 'clean_html' and l.rolled_back_at is null
-             and md5(t.clean_html) = l.new_md5 and md5(pg_temp.m5_doc_back(t.clean_html)) = l.old_md5 for update of t),
+             and md5(t.clean_html)::uuid = l.new_md5 and md5(pg_temp.m5_doc_back(t.clean_html))::uuid = l.old_md5 for update of t),
 u as (update dpg_app.product_descriptions t set clean_html = pg_temp.m5_doc_back(t.clean_html) from r where t.id = r.id returning t.id, r.product_id)
 insert into m5_restored select 'product_descriptions', id, 'clean_html', product_id from u;
 
 with r as (select t.id from dpg_control.m5_cdn_ledger l join dpg_app.products t on t.id = l.pk
            where l.tbl = 'products' and l.col = 'image_main_url' and l.rolled_back_at is null
-             and md5(t.image_main_url) = l.new_md5 and md5(pg_temp.m5_col_back(t.image_main_url)) = l.old_md5 for update of t),
+             and md5(t.image_main_url)::uuid = l.new_md5 and md5(pg_temp.m5_col_back(t.image_main_url))::uuid = l.old_md5 for update of t),
 u as (update dpg_app.products t set image_main_url = pg_temp.m5_col_back(t.image_main_url) from r where t.id = r.id returning t.id)
 insert into m5_restored select 'products', id, 'image_main_url', id from u;
 
 with r as (select t.id from dpg_control.m5_cdn_ledger l join dpg_app.products t on t.id = l.pk
            where l.tbl = 'products' and l.col = 'description' and l.rolled_back_at is null
-             and md5(t.description) = l.new_md5 and md5(pg_temp.m5_doc_back(t.description)) = l.old_md5 for update of t),
+             and md5(t.description)::uuid = l.new_md5 and md5(pg_temp.m5_doc_back(t.description))::uuid = l.old_md5 for update of t),
 u as (update dpg_app.products t set description = pg_temp.m5_doc_back(t.description) from r where t.id = r.id returning t.id)
 insert into m5_restored select 'products', id, 'description', id from u;
 
 with r as (select t.id from dpg_control.m5_cdn_ledger l join dpg_app.products t on t.id = l.pk
            where l.tbl = 'products' and l.col = 'specs' and l.rolled_back_at is null
-             and md5(t.specs::text) = l.new_md5 and md5(pg_temp.m5_doc_back(t.specs::text)::jsonb::text) = l.old_md5 for update of t),
+             and md5(t.specs::text)::uuid = l.new_md5 and md5(pg_temp.m5_doc_back(t.specs::text)::jsonb::text)::uuid = l.old_md5 for update of t),
 u as (update dpg_app.products t set specs = pg_temp.m5_doc_back(t.specs::text)::jsonb from r where t.id = r.id returning t.id)
 insert into m5_restored select 'products', id, 'specs', id from u;
 
