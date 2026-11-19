@@ -85,6 +85,9 @@ export interface ResourceDef {
   childOf?: { parent: string; column: string }
   /** Edited from inside another screen (e.g. product gallery) rather than from the navigation. */
   hideFromNav?: boolean
+  /** Dev-managed shared master data (#309 scope decision): Admin roles only read id/label options for the product forms.
+   * No list/get/create/update/delete is served and the resource is omitted from /schema, for every role. */
+  lookup?: boolean
   create?: boolean
   /** Rows can be edited (default true when `write` is set). */
   update?: boolean
@@ -287,18 +290,17 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'categories', label: 'Danh mục (banner nội dung)', group: 'Sản phẩm', table: 'categories',
-    read: 'categories:read', write: 'categories:write', search: ['name', 'slug'], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
+    lookup: true, hideFromNav: true, read: 'categories:read', search: ['name', 'slug'], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
     fields: [
       { name: 'name', label: 'Tên', kind: 'text', max: 100, list: true, readOnly: true },
       { name: 'slug', label: 'Slug', kind: 'text', max: 100, list: true, readOnly: true },
       { name: 'is_active', label: 'Đang dùng', kind: 'bool', list: true, readOnly: true },
       { name: 'sort_order', label: 'Thứ tự', kind: 'int', readOnly: true },
-      { name: 'banner_url', label: 'Banner danh mục', kind: 'media', max: 1000, list: true, upload: { folder: 'category-banners', profile: 'hero' } },
     ],
   },
   {
     key: 'subcategories', label: 'Danh mục con', group: 'Sản phẩm', table: 'subcategories',
-    read: 'categories:read', search: ['name', 'slug'], orderBy: 'category_id asc, sort_order asc, id asc', optionLabel: 'name',
+    lookup: true, hideFromNav: true, read: 'categories:read', search: ['name', 'slug'], orderBy: 'category_id asc, sort_order asc, id asc', optionLabel: 'name',
     fields: [
       { name: 'name', label: 'Tên', kind: 'text', max: 200, list: true },
       { name: 'slug', label: 'Slug', kind: 'text', max: 200, list: true },
@@ -309,7 +311,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'brands', label: 'Thương hiệu', group: 'Sản phẩm', table: 'brands',
-    read: 'brands:read', write: 'brands:write', create: true,
+    lookup: true, hideFromNav: true, read: 'brands:read',
     search: ['name', 'slug'], orderBy: 'name asc, id asc', optionLabel: 'name',
     filters: [{ name: 'is_active', label: 'Trạng thái', kind: 'bool' }, { name: 'is_featured', label: 'Nổi bật', kind: 'bool' }],
     fields: [
@@ -326,7 +328,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'catalog-taxons', label: 'Phân loại (taxonomy)', group: 'Sản phẩm', table: 'catalog_taxons',
-    read: 'taxonomy:read', write: 'taxonomy:write', create: true,
+    lookup: true, hideFromNav: true, read: 'taxonomy:read',
     search: ['name', 'slug', 'canonical_path'], orderBy: 'canonical_path asc, id asc', optionLabel: 'canonical_path',
     filters: [{ name: 'is_active', label: 'Trạng thái', kind: 'bool' }],
     fields: [
@@ -347,7 +349,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'product-types', label: 'Loại sản phẩm', group: 'Sản phẩm', table: 'product_types',
-    read: 'product_types:read', write: 'product_types:write', create: true,
+    lookup: true, hideFromNav: true, read: 'product_types:read',
     search: ['name', 'slug'], orderBy: 'subcategory_id asc, sort_order asc, id asc', optionLabel: 'name',
     filters: [{ name: 'is_active', label: 'Trạng thái', kind: 'bool' }, { name: 'subcategory_id', label: 'Danh mục con', kind: 'int' }],
     fields: [
@@ -362,7 +364,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'product-sub-types', label: 'Phân loại phụ sản phẩm', group: 'Sản phẩm', table: 'product_sub_types', noUpdatedAt: true,
-    read: 'product_types:read', write: 'product_types:write', create: true,
+    lookup: true, hideFromNav: true, read: 'product_types:read',
     search: ['name', 'slug'], orderBy: 'product_type_id asc, sort_order asc, id asc', optionLabel: 'name',
     filters: [{ name: 'is_active', label: 'Trạng thái', kind: 'bool' }, { name: 'product_type_id', label: 'Loại sản phẩm', kind: 'int' }],
     fields: [
@@ -375,7 +377,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'spec-definitions', label: 'Thông số kỹ thuật', group: 'Sản phẩm', table: 'spec_definitions',
-    read: 'specifications:read', write: 'specifications:write', create: true,
+    lookup: true, hideFromNav: true, read: 'specifications:read',
     search: ['key', 'label'], orderBy: 'sort_order asc, id asc', optionLabel: 'label',
     fields: [
       { name: 'key', label: 'Khóa', kind: 'text', required: true, max: 120, list: true },
@@ -391,7 +393,7 @@ export const RESOURCES: ResourceDef[] = [
   },
   {
     key: 'spec-options', label: 'Giá trị thông số', group: 'Sản phẩm', table: 'spec_options', noUpdatedAt: true,
-    read: 'specifications:read', write: 'specifications:write', create: true, update: false,
+    lookup: true, hideFromNav: true, read: 'specifications:read',
     search: ['value', 'slug'], orderBy: 'spec_definition_id asc, sort_order asc, id asc', optionLabel: 'value',
     filters: [{ name: 'spec_definition_id', label: 'Thông số', kind: 'int' }],
     fields: [
@@ -433,11 +435,11 @@ export const RESOURCES: ResourceDef[] = [
     ],
   },
 
-  { key: 'origins', label: 'Xuất xứ', group: 'Sản phẩm', table: 'origins', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
+  { lookup: true, hideFromNav: true, key: 'origins', label: 'Xuất xứ', group: 'Sản phẩm', table: 'origins', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
     fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 100, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 100 }] },
-  { key: 'colors', label: 'Màu sắc', group: 'Sản phẩm', table: 'colors', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
+  { lookup: true, hideFromNav: true, key: 'colors', label: 'Màu sắc', group: 'Sản phẩm', table: 'colors', read: 'products:read', search: ['name'], orderBy: 'name asc, id asc', optionLabel: 'name',
     fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 50, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 50 }, { name: 'hex_code', label: 'Mã màu', kind: 'text', max: 7 }] },
-  { key: 'materials', label: 'Chất liệu', group: 'Sản phẩm', table: 'materials', read: 'products:read', search: ['name'], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
+  { lookup: true, hideFromNav: true, key: 'materials', label: 'Chất liệu', group: 'Sản phẩm', table: 'materials', read: 'products:read', search: ['name'], orderBy: 'sort_order asc, id asc', optionLabel: 'name',
     fields: [{ name: 'name', label: 'Tên', kind: 'text', max: 100, list: true }, { name: 'slug', label: 'Slug', kind: 'text', max: 100 }, { name: 'sort_order', label: 'Thứ tự', kind: 'int' }] },
   {
     key: 'products', label: 'Sản phẩm', group: 'Sản phẩm', table: 'products',

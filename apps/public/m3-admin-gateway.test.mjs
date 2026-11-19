@@ -63,6 +63,20 @@ describe('Admin shell gateway', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('refuses every management route of Dev-managed master data but still relays read-only options', async () => {
+    stubUpstream(json({ data: { items: [] } }))
+    const env = environment()
+    for (const key of ['categories', 'subcategories', 'brands', 'catalog-taxons', 'product-types', 'product-sub-types', 'spec-definitions', 'spec-options', 'origins', 'colors', 'materials']) {
+      for (const [method, suffix] of [['GET', ''], ['POST', ''], ['GET', '/7'], ['PATCH', '/7'], ['DELETE', '/7']]) {
+        const init = method === 'GET' ? {} : { method, body: '{}' }
+        const response = await handleAdminNext(browser(`/admin-next/api/r/${key}${suffix}`, init), env, ctx)
+        expect(response.status, `${method} ${key}${suffix}`).toBe(403)
+        expect((await response.json()).error.code).toBe('DEV_MANAGED')
+      }
+      expect((await handleAdminNext(browser(`/admin-next/api/r/${key}/options`), env, ctx)).status, `${key} options`).toBe(200)
+    }
+  })
+
   it('rejects unknown routes/methods and cross-site mutations before contacting the function', async () => {
     stubUpstream(json({ data: {} }))
     const env = environment()

@@ -8,6 +8,8 @@ Updated 2026-11-18 (UTC) by Claude Code under the Owner delegation in [#360 comm
 - M3 (G4 architecture: static SPA + same-origin gateway + Supabase Edge Function `admin-api` + narrow DB role): pilot gate PASS ([#360 / 6988532875](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988532875)); all 12 legacy Admin areas ported in PR #378 (merged, main `11b99a4`). Local/CI evidence: 49 PostgreSQL/definition tests, 10 gateway tests, browser e2e 18/18 PASS (`scripts/m3/local-e2e`). **Hosted acceptance: UNKNOWN.**
 - M4: package prepared (`supabase/m4-production/001+002` + rollbacks, tested on a Production-shaped database), **not executed**. M5: partial (publisher resilience, cache TTL 45 s); backlog open.
 
+- M3 scope (Owner decision, [#309 / 7001962983](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309#issuecomment-7001962983)): catalogue master data (categories, brands, taxons, product types, specifications, origins/colors/materials) is Dev-managed: no Admin screen or write path for any role; see the [runbook](../deploy/m3-admin-api-runbook.md). The Sản phẩm group has one page. M4/M5 stay on HOLD until the in-scope Admin is accepted.
+
 ## Blocked on the Owner (nothing else blocks M3 hosted acceptance)
 
 1. Run `supabase/m3-test/005_m3_test_admin_resources.sql` in the SQL Editor of `dongphugia-staging` (ref `uybumsnyqpwcidjxmfsv`). The Supabase MCP DDL confirmation is never answered while the Owner is offline.

@@ -90,6 +90,11 @@ function isAdminPath(pathname) {
     || pathname === '/api/upload-image'
 }
 
+/** The retired legacy Admin pages (also its framework assets). `/api/admin/revalidate` and `/api/upload-image` are separate paths. */
+function isLegacyAdminUiPath(pathname) {
+  return pathname === ADMIN_BASE_PATH || pathname.startsWith(`${ADMIN_BASE_PATH}/`)
+}
+
 function isStaticAssetPath(pathname) {
   return STATIC_PATHS.some((prefix) => pathname.startsWith(prefix))
     || pathname === '/favicon.ico'
@@ -179,6 +184,16 @@ export function createCombinedM3Worker({ publicWorker, adminWorker }) {
       }
 
       if (isAdminNextPath(pathname)) return handleAdminNext(request, environment, { sourceSha, stagingOrigin: STAGING_ORIGIN })
+
+      // Owner scope decision (#309): the legacy Next Admin UI (`/admin/*`) is no longer served on staging. Its code and the
+      // reviewed artifacts are preserved in the repository, but exposing it would bypass the server-side scope of the new
+      // Admin (Dev-managed master data). Pages redirect to the new Admin; everything else under /admin is a 404.
+      if (isLegacyAdminUiPath(pathname)) {
+        if (request.method === 'GET' || request.method === 'HEAD') {
+          return new Response(null, { status: 302, headers: { Location: '/admin-next/', 'Cache-Control': PRIVATE_CACHE_CONTROL, 'X-Robots-Tag': ADMIN_NOINDEX, ...(sourceSha ? { 'X-DPG-Source-SHA': sourceSha } : {}) } })
+        }
+        return fail(404, 'Not found.', sourceSha)
+      }
 
       if ((request.method === 'GET' || request.method === 'HEAD')
         && isStaticAssetPath(pathname)

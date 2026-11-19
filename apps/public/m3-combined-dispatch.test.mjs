@@ -70,8 +70,8 @@ function fixture() {
 it('routes Admin only to the isolated runtime and removes its session, database, and media credentials from Public', async () => {
   const { worker, environment, calls } = fixture()
   const context = { waitUntil() {} }
-  const adminResponse = await worker.fetch(new Request(`${STAGING_ORIGIN}/admin/login`, {
-    headers: { cookie: 'dpg-admin-session=private-token' },
+  const adminResponse = await worker.fetch(new Request(`${STAGING_ORIGIN}/api/upload-image`, {
+    method: 'POST', headers: { cookie: 'dpg-admin-session=private-token' },
   }), environment, context)
   const publicResponse = await worker.fetch(new Request(`${STAGING_ORIGIN}/`, {
     headers: {
@@ -86,7 +86,7 @@ it('routes Admin only to the isolated runtime and removes its session, database,
   expect(adminResponse.headers.get('set-cookie')).toContain('Path=/')
   expect(publicResponse.status).toBe(200)
   expect(calls.admin).toEqual([{
-    path: '/admin/login',
+    path: '/api/upload-image',
     cookie: 'dpg-admin-session=private-token',
     hyperdrive: environment.HYPERDRIVE_ADMIN_NO_CACHE,
     role: 'staging',
@@ -134,19 +134,13 @@ it('routes the legacy Admin revalidation endpoint to the Admin-only Preview secr
   expect(calls.public).toHaveLength(0)
 })
 
-it('serves distinct framework asset paths without forwarding cookies or authorization', async () => {
+it('serves Public framework asset paths without forwarding cookies or authorization', async () => {
   const { worker, environment, calls } = fixture()
   const context = { waitUntil() {} }
-  const adminAsset = await worker.fetch(new Request(`${STAGING_ORIGIN}/admin/_next/static/admin.js`, {
-    headers: { cookie: 'dpg-admin-session=private-token', authorization: 'Bearer private-token' },
-  }), environment, context)
   const publicAsset = await worker.fetch(new Request(`${STAGING_ORIGIN}/_next/static/public.js`), environment, context)
 
-  expect(await adminAsset.text()).toBe('admin asset')
-  expect(adminAsset.headers.get('x-robots-tag')).toBe('noindex, nofollow')
   expect(await publicAsset.text()).toBe('public asset')
   expect(calls.assets).toEqual([
-    { path: '/admin/_next/static/admin.js', cookie: null },
     { path: '/_next/static/public.js', cookie: null },
   ])
   expect(calls.admin).toHaveLength(0)
@@ -156,15 +150,15 @@ it('serves distinct framework asset paths without forwarding cookies or authoriz
 it('fails closed for a missing Admin database, wrong TEST identity, or non-staging host', async () => {
   const { worker, environment, calls } = fixture()
   const context = { waitUntil() {} }
-  const noDatabase = await worker.fetch(new Request(`${STAGING_ORIGIN}/admin/login`), {
+  const noDatabase = await worker.fetch(new Request(`${STAGING_ORIGIN}/api/upload-image`, { method: 'POST' }), {
     ...environment,
     HYPERDRIVE_ADMIN_NO_CACHE: undefined,
   }, context)
-  const wrongRole = await worker.fetch(new Request(`${STAGING_ORIGIN}/admin/login`), {
+  const wrongRole = await worker.fetch(new Request(`${STAGING_ORIGIN}/api/upload-image`, { method: 'POST' }), {
     ...environment,
     ADMIN_TEST_DB_ROLE: 'dpg_runtime',
   }, context)
-  const productionHost = await worker.fetch(new Request('https://www.dongphugia.vn/admin/login'), environment, context)
+  const productionHost = await worker.fetch(new Request('https://www.dongphugia.vn/api/upload-image', { method: 'POST' }), environment, context)
 
   expect(noDatabase.status).toBe(503)
   expect(wrongRole.status).toBe(503)
@@ -195,7 +189,7 @@ it('keeps Admin process.env writes out of Public requests, including concurrent 
   process.env.APP_ENV = 'staging'
   const context = { waitUntil() {} }
 
-  const admin = worker.fetch(new Request(`${STAGING_ORIGIN}/admin/login`), environment, context)
+  const admin = worker.fetch(new Request(`${STAGING_ORIGIN}/api/upload-image`, { method: 'POST' }), environment, context)
   await new Promise((resolve) => setTimeout(resolve, 5))
   await worker.fetch(new Request(`${STAGING_ORIGIN}/`), environment, context) // overlaps the in-flight Admin request
   await admin
@@ -208,4 +202,22 @@ it('keeps Admin process.env writes out of Public requests, including concurrent 
   expect(seen.find(({ side }) => side === 'admin')).toEqual({ side: 'admin', appEnv: 'preview', keys: true })
   expect(process.env.APP_ENV).toBe('staging')
   expect(process.env.APP_BUILD_TARGET).toBeUndefined()
+})
+
+it('no longer serves the legacy Admin UI on staging: pages redirect to the new Admin, everything else is a 404', async () => {
+  const { worker, environment, calls } = fixture()
+  const context = { waitUntil() {} }
+  for (const path of ['/admin', '/admin/', '/admin/login', '/admin/brands', '/admin/categories/1/edit', '/admin/products']) {
+    const page = await worker.fetch(new Request(`${STAGING_ORIGIN}${path}`, { headers: { cookie: 'dpg-admin-session=private-token' } }), environment, context)
+    expect(page.status, path).toBe(302)
+    expect(page.headers.get('location'), path).toBe('/admin-next/')
+    expect(page.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+    expect(page.headers.get('cache-control')).toBe('private, no-store')
+  }
+  for (const [method, path] of [['POST', '/admin/brands'], ['PUT', '/admin/categories/1'], ['DELETE', '/admin/products/1'], ['GET', '/admin/_next/static/admin.js']]) {
+    const response = method === 'GET' ? await worker.fetch(new Request(`${STAGING_ORIGIN}${path}`), environment, context) : await worker.fetch(new Request(`${STAGING_ORIGIN}${path}`, { method }), environment, context)
+    expect(response.status, `${method} ${path}`).toBe(path.endsWith('.js') ? 302 : 404)
+  }
+  expect(calls.admin).toHaveLength(0)
+  expect(calls.public).toHaveLength(0)
 })

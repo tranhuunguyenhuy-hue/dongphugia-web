@@ -39,7 +39,7 @@ function readableSelect(def: ResourceDef, alias = 't') {
 
 /** Field metadata for the SPA forms. Contains no permission strings or SQL. */
 export function resourceMeta(role: AdminRole) {
-  return RESOURCES.filter((def) => can(role, def.read)).map((def) => ({
+  return RESOURCES.filter((def) => !def.lookup && can(role, def.read)).map((def) => ({
     key: def.key, label: def.label, group: def.group, children: RESOURCES.filter((c) => c.childOf?.parent === def.key && can(role, c.read)).map((c) => ({ key: c.key, column: c.childOf!.column })), inNav: Boolean(def.write) && !def.hideFromNav,
     canCreate: Boolean(def.create && def.write && can(role, def.write)),
     canUpdate: Boolean(def.write && def.update !== false && can(role, def.write)),
@@ -55,6 +55,11 @@ export function resourceMeta(role: AdminRole) {
   }))
 }
 
+/** Dev-managed master data (ResourceDef.lookup) is never served for management: only `options` is available. */
+export function assertManaged(def: ResourceDef): void {
+  if (def.lookup) throw new ApiError(403, 'DEV_MANAGED')
+}
+
 export function findResource(key: string): ResourceDef {
   const def = resourceByKey(key)
   if (!def) throw new ApiError(404, 'NOT_FOUND')
@@ -62,6 +67,7 @@ export function findResource(key: string): ResourceDef {
 }
 
 export async function listResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, search: URLSearchParams): Promise<Result> {
+  assertManaged(def)
   requirePermission(ctx, def.read)
   const query = validate(resourceQuerySchema(def), Object.fromEntries(search)) as Record<string, unknown> & { q?: string; page: number; limit: number }
   const params: unknown[] = []
@@ -104,6 +110,7 @@ const existingForHook = (row: Row): Row => {
 }
 
 export async function getResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, id: number): Promise<Result> {
+  assertManaged(def)
   requirePermission(ctx, def.read)
   const row = await loadRow(deps.db, def, id)
   if (!row) throw new ApiError(404, 'NOT_FOUND')
@@ -160,6 +167,7 @@ async function recount(tx: Db, relation: NonNullable<ResourceDef['relations']>[n
 }
 
 export async function createResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, body: string): Promise<Result> {
+  assertManaged(def)
   if (!def.create || !def.write) throw new ApiError(404, 'NOT_FOUND')
   requirePermission(ctx, def.write)
   const { input } = validate(resourceBodySchemas(def, parseAllowedMediaHosts(deps.allowedMediaHosts)).create, parseJson(body)) as { input: Row }
@@ -195,6 +203,7 @@ export async function createResource(deps: ResourceDeps, ctx: Context, def: Reso
 }
 
 export async function updateResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, id: number, body: string): Promise<Result> {
+  assertManaged(def)
   if (!def.write || def.update === false) throw new ApiError(404, 'NOT_FOUND')
   requirePermission(ctx, def.write)
   const { input, expected_version } = validate(resourceBodySchemas(def, parseAllowedMediaHosts(deps.allowedMediaHosts)).update, parseJson(body)) as { input: Row; expected_version?: number }
@@ -232,6 +241,7 @@ export async function updateResource(deps: ResourceDeps, ctx: Context, def: Reso
 }
 
 export async function deleteResource(deps: ResourceDeps, ctx: Context, def: ResourceDef, id: number, body: string): Promise<Result> {
+  assertManaged(def)
   if (!def.write || !def.delete) throw new ApiError(404, 'NOT_FOUND')
   requirePermission(ctx, def.remove ?? def.write)
   const { expected_version } = validate(resourceBodySchemas(def, parseAllowedMediaHosts(deps.allowedMediaHosts)).remove, parseJson(body)) as { expected_version?: number }

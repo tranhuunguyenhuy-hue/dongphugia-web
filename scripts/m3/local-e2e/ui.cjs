@@ -23,7 +23,9 @@ const expectText = async (page, text, timeout = 8000) => page.getByText(text, { 
   await page.route('**/api/upload-image', (route) => route.request().method() === 'POST' ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ url: `https://dpg-media-staging.b-cdn.net/e2e/${Date.now()}.webp` }) }) : route.continue())
 
   await check('admin login lands on dashboard with KPIs', async () => { await login(page, 'admin@example.test', 'admin-pass-1'); await page.waitForURL(/\/dashboard$/); await expectText(page, 'Báo giá chờ xử lý'); await expectText(page, 'Doanh thu tháng này') }, page)
-  await check('nav shows all admin areas', async () => { for (const t of ['Tổng quan', 'Đơn hàng', 'Yêu cầu báo giá', 'Bài viết', 'Tag blog', 'Banner', 'Đối tác', 'Dự án', 'Sản phẩm', 'Thương hiệu', 'Khách hàng', 'Người dùng']) await page.getByRole('link', { name: t, exact: true }).first().waitFor({ timeout: 4000 }) }, page)
+  await check('nav shows all admin areas', async () => { for (const t of ['Tổng quan', 'Đơn hàng', 'Yêu cầu báo giá', 'Bài viết', 'Tag blog', 'Banner', 'Đối tác', 'Dự án', 'Sản phẩm', 'Khách hàng', 'Người dùng']) await page.getByRole('link', { name: t, exact: true }).first().waitFor({ timeout: 4000 })
+    for (const t of ['Thương hiệu', 'Danh mục (banner nội dung)', 'Phân loại (taxonomy)', 'Loại sản phẩm', 'Phân loại phụ sản phẩm', 'Thông số kỹ thuật', 'Giá trị thông số', 'Xuất xứ', 'Màu sắc', 'Chất liệu']) if (await page.getByRole('link', { name: t, exact: true }).count()) throw new Error('Dev-managed master data must not be in the navigation: ' + t)
+    if ((await page.getByRole('link').filter({ hasText: /^Sản phẩm$/ }).count()) !== 1) throw new Error('Sản phẩm group must contain exactly one page') }, page)
 
   await check('blog tag: create, then deactivate', async () => {
     await page.goto(BASE + '/r/blog-tags/new'); await page.locator('#f-name').fill('Phòng tắm'); await page.waitForFunction(() => document.querySelector('#f-slug').value === 'phong-tam')
@@ -56,11 +58,19 @@ const expectText = async (page, text, timeout = 8000) => page.getByText(text, { 
   await check('banner: javascript: link rejected with field hint', async () => {
     await page.goto(BASE + '/r/banners/new'); await page.locator('#f-image_url').fill('https://dpg-media-staging.b-cdn.net/banners/x.webp'); await page.locator('#f-link_url').fill('javascript:alert(1)'); await page.getByRole('button', { name: 'Tạo' }).click(); await expectText(page, 'Liên kết')
   }, page)
-  await check('brand create + category banner edit', async () => {
-    await page.goto(BASE + '/r/brands/new'); await page.locator('#f-name').fill('TOTO'); await page.getByRole('button', { name: 'Tạo' }).click(); await page.waitForURL(/\/r\/brands\/\d+$/)
-    await page.goto(BASE + '/r/categories/1'); await page.locator('#f-banner_url').fill('https://dpg-media-staging.b-cdn.net/category-banners/e2e.webp'); await page.getByRole('button', { name: 'Lưu' }).click(); await expectText(page, 'Đã lưu')
-    if ((await sql('select banner_url from dpg_app.categories where id=1'))[0].banner_url !== 'https://dpg-media-staging.b-cdn.net/category-banners/e2e.webp') throw new Error('banner not stored')
-    if (await page.locator('#f-name').isEnabled()) throw new Error('category name must be read-only')
+  await check('master data is Dev-managed: no screens, direct routes fail closed, lookups still feed the product form', async () => {
+    for (const key of ['brands', 'categories', 'subcategories', 'catalog-taxons', 'product-types', 'product-sub-types', 'spec-definitions', 'spec-options', 'origins', 'colors', 'materials']) {
+      await page.goto(BASE + `/r/${key}`); await expectText(page, 'Không tìm thấy hoặc không có quyền truy cập')
+      await page.goto(BASE + `/r/${key}/new`); await expectText(page, 'Không tìm thấy hoặc không có quyền truy cập')
+    }
+    // Server-side, for the signed-in Admin: management routes answer 403 DEV_MANAGED, options still work.
+    const res = await page.evaluate(async () => {
+      const call = async (method, path, body) => { const r = await fetch('/admin-next/api' + path, { method, credentials: 'same-origin', headers: body ? { 'content-type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined }); return [r.status, (await r.json().catch(() => ({}))).error?.code ?? 'OK'] }
+      return [await call('GET', '/r/brands'), await call('POST', '/r/brands', { input: { name: 'x', slug: 'x' } }), await call('PATCH', '/r/categories/1', { input: { banner_url: 'https://dpg-media-staging.b-cdn.net/x.webp' } }), await call('DELETE', '/r/catalog-taxons/1', {}), await call('GET', '/r/brands/options')]
+    })
+    if (JSON.stringify(res) !== JSON.stringify([[403, 'DEV_MANAGED'], [403, 'DEV_MANAGED'], [403, 'DEV_MANAGED'], [403, 'DEV_MANAGED'], [200, 'OK']])) throw new Error('unexpected ' + JSON.stringify(res))
+    await page.goto(BASE + '/r/products/new'); await page.locator('#f-category_id').selectOption({ label: 'Cat' }); await page.locator('#f-brand_id').selectOption({ label: 'Brand' })
+    if (Number((await sql("select count(*) from dpg_app.brands where slug='x'"))[0].count) !== 0) throw new Error('brand was created')
   }, page)
   await check('product: create, price rules, gallery upload, set main image, bulk activate', async () => {
     await page.goto(BASE + '/r/products/new'); await page.locator('#f-sku').fill('E2E-1'); await page.locator('#f-name').fill('Sản phẩm E2E'); await page.waitForFunction(() => document.querySelector('#f-slug').value === 'san-pham-e2e')
@@ -113,7 +123,7 @@ const expectText = async (page, text, timeout = 8000) => page.getByText(text, { 
     await page.goto(BASE + '/quotes'); await expectText(page, 'BG-E2E-1'); await page.getByRole('link', { name: 'BG-E2E-1' }).click(); await page.waitForURL(/\/quotes\/\d+$/)
     await page.getByLabel('Đơn giá Bồn cầu A').fill('1400'); await page.getByRole('button', { name: 'Lưu nháp' }).click(); await expectText(page, 'Đã lưu bản nháp')
     if ((await sql("select status from dpg_app.quote_requests where quote_number='BG-E2E-1'"))[0].status !== 'resolved') throw new Error('not resolved')
-    page.once('dialog', (d) => d.accept()); await page.getByRole('button', { name: 'Hoàn thành' }).click(); await expectText(page, 'Đã hoàn thành báo giá')
+    await page.getByRole('button', { name: 'Hoàn thành' }).click(); await page.getByRole('alertdialog').getByRole('button', { name: 'Hoàn thành' }).click(); await expectText(page, 'Đã hoàn thành báo giá')
     if ((await sql("select count(*) from dpg_app.customers where phone='0933444555'"))[0].count !== '1') throw new Error('customer not synced')
   }, page)
   await check('dashboard shows pending counts and revenue chart section', async () => { await page.goto(BASE + '/dashboard'); await expectText(page, 'Sản phẩm bán chạy'); await expectText(page, 'Doanh thu') }, page)
