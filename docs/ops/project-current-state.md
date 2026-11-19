@@ -1,6 +1,6 @@
 # Current checkpoint — M3 code complete (local/CI), hosted acceptance waiting on one Owner step
 
-Updated 2026-11-18 (UTC) by Claude Code under the Owner delegation in [#360 comment 6988598277](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988598277). Working issue [#360](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360); milestone [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Latest status comments: #360 / 6989649031, #309 / 6989916507.
+Updated 2026-11-18 (UTC) by Claude Code under the Owner delegation in [#360 comment 6988598277](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988598277). Working issue [#360](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360); milestone [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) and [#360 / 6999610211](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6999610211). Latest status comments: #360 / 6990205607, #309 / 6989916507.
 
 ## Status
 
@@ -19,6 +19,8 @@ Updated 2026-11-18 (UTC) by Claude Code under the Owner delegation in [#360 comm
 - Production Worker `dongphugia-v1-public-production`: version `edcb15b2-bcb0-46d6-b0c6-31efb495a8c7` (deployment `116da805…`, source `e73fb13`), Public-only; rollback targets `5577b78d…` then `b179b339…`. **Unchanged by this work.**
 - Fixed Preview `staging`: runs main `a2468e1` (pilot UI + pilot function). Do **not** deploy the new function or publish the new SPA before `005` is applied: the new SPA no longer uses the pilot `/products` routes.
 - Supabase: Production `bonxyxluzlxfkdetryoo`; TEST `uybumsnyqpwcidjxmfsv` (function `admin-api` deployed from `a2468e1`). Production schema differs from TEST (no `products.version`; `audit_logs` has no `request_id/changed_fields`): handled by the M4 migration and portable audit rows.
+
+- Denylisted historical database ref `tlmgudfhsyzayiazuugf` is neither of the approved targets. Do not use it.
 
 ## Next steps (in order)
 
