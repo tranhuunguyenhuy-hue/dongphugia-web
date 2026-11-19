@@ -52,7 +52,7 @@ export function App() {
           ))}
         </nav>
         <span className="muted">{user.name} · {user.role}</span>
-        <button onClick={async () => { await api.logout().catch(() => undefined); setUser(null); go('/login') }}>Đăng xuất</button>
+        <button onClick={async () => { await api.logout().catch(() => undefined); setUser(null); setResources([]); go('/login') }}>Đăng xuất</button>
       </header>
       <main>{content}</main>
     </div>
