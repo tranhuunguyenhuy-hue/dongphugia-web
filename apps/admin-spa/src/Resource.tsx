@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { api, ApiError, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
+import { api, ApiError, displayMediaUrl, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
 import { Alert, CTA, EmptyState, NativeSelect, PageHeader, SkeletonRows, money, toast, useConfirm } from './ui'
 
 const RichText = lazy(() => import('./RichText'))
@@ -33,7 +33,7 @@ function Cell({ field, value, refs }: { field: FieldMeta; value: unknown; refs?:
   switch (field.kind) {
     case 'bool': return <Badge variant={value ? 'secondary' : 'outline'} className={value ? 'text-success' : 'text-muted-foreground'}>{value ? 'Có' : 'Không'}</Badge>
     case 'datetime': return <span className="whitespace-nowrap text-muted-foreground">{new Date(String(value)).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</span>
-    case 'media': return <img src={String(value)} alt="" width={40} height={40} className="size-10 rounded-md border object-cover" />
+    case 'media': return <img src={displayMediaUrl(value)} alt="" width={40} height={40} className="size-10 rounded-md border object-cover" />
     case 'strings': return <>{(value as string[]).join(', ')}</>
     case 'ref': return <>{refs?.[field.ref!]?.find((o) => o.id === Number(value))?.label ?? String(value)}</>
     case 'money': return <span className="tabular-nums">{money(Number(value))}</span>
@@ -223,7 +223,7 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
       case 'strings': return <Input {...common} placeholder="Ngăn cách bằng dấu phẩy" value={Array.isArray(value) ? (value as string[]).join(', ') : ''} onChange={(e) => set(f.name, e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
       case 'media': return (
         <div className="flex flex-wrap items-start gap-4">
-          {value ? <img src={String(value)} alt="" width={112} height={112} className="size-28 rounded-lg border object-cover" /> : <div className="grid size-28 place-items-center rounded-lg border border-dashed text-xs text-muted-foreground">Chưa có ảnh</div>}
+          {value ? <img src={displayMediaUrl(value)} alt="" width={112} height={112} className="size-28 rounded-lg border object-cover" /> : <div className="grid size-28 place-items-center rounded-lg border border-dashed text-xs text-muted-foreground">Chưa có ảnh</div>}
           <div className="grid min-w-56 flex-1 gap-2">
             <Input {...common} type="url" placeholder="https://…" value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
             <Input type="file" aria-label={`Tải ảnh: ${f.label}`} accept="image/jpeg,image/png,image/webp,image/gif" disabled={disabled} onChange={async (e) => {
@@ -335,7 +335,7 @@ function Gallery({ productId, canEdit, mainUrl, onSetMain }: { productId: number
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {items.map((img) => (
           <figure key={String(img.id)} className="grid gap-2 rounded-lg border p-2">
-            <img src={String(img.image_url)} alt={String(img.alt_text ?? '')} className="aspect-square w-full rounded-md object-cover" />
+            <img src={displayMediaUrl(img.image_url)} alt={String(img.alt_text ?? '')} className="aspect-square w-full rounded-md object-cover" />
             <figcaption className="grid gap-1.5">
               <Input type="number" aria-label="Thứ tự" className="h-8" disabled={!canEdit || busy} defaultValue={Number(img.sort_order ?? 0)} onBlur={(e) => { const next = Number(e.target.value); if (Number.isInteger(next) && next !== Number(img.sort_order)) void run(() => api.update('product-images', Number(img.id), undefined, { sort_order: next })) }} />
               {canEdit && <div className="flex gap-1.5">

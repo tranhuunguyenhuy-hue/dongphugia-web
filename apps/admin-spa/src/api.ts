@@ -46,6 +46,22 @@ export const api = {
   bulkProducts: (ids: number[], action: string) => request<{ updated: number; skipped: { id: number; reason: string }[] }>('POST', '/products/bulk', { ids, action }),
 }
 
+// Display-only media host mapping. Stored URLs are never rewritten: the legacy product CDN hostname has a TLS renewal problem,
+// while the same paths are served by the verified default pull zone. Only that exact https host is mapped.
+const LEGACY_MEDIA_HOST = 'cdn.dongphugia.com.vn'
+const DEFAULT_MEDIA_HOST = 'dpg-products.b-cdn.net'
+export function displayMediaUrl(value: unknown): string {
+  const raw = typeof value === 'string' ? value : value == null ? '' : String(value)
+  try {
+    const url = new URL(raw)
+    if (url.protocol === 'https:' && url.hostname === LEGACY_MEDIA_HOST && url.port === '' && !url.username && !url.password) {
+      url.hostname = DEFAULT_MEDIA_HOST
+      return url.toString()
+    }
+  } catch { /* not an absolute URL: show as stored */ }
+  return raw
+}
+
 // Legacy upload route (Cloudflare Images transform + isolated Bunny target): the transform contract is unchanged.
 export async function uploadImage(file: File, folder = 'products', profile = 'product'): Promise<string> {
   const form = new FormData(); form.set('file', file); form.set('folder', folder); form.set('profile', profile)

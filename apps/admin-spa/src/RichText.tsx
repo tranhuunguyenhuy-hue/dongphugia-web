@@ -8,13 +8,26 @@ import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Button } from '@/components/ui/button'
-import { errorText, uploadImage } from './api'
+import { displayMediaUrl, errorText, uploadImage } from './api'
+
+// Show legacy-host images through the verified default host WITHOUT changing the stored document attribute.
+const DisplayImage = Image.extend({
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement('img')
+      dom.src = displayMediaUrl(node.attrs.src)
+      if (node.attrs.alt) dom.alt = String(node.attrs.alt)
+      if (node.attrs.title) dom.title = String(node.attrs.title)
+      return { dom }
+    }
+  },
+})
 
 export default function RichText({ value, onChange, disabled, folder = 'blog' }: { value: string; onChange: (html: string) => void; disabled?: boolean; folder?: string }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const picker = useRef<HTMLInputElement>(null)
   const editor = useEditor({
-    extensions: [StarterKit, Image.configure({ inline: false, allowBase64: false }), Link.configure({ openOnClick: false, autolink: true }), Placeholder.configure({ placeholder: 'Bắt đầu viết nội dung...' })],
+    extensions: [StarterKit, DisplayImage.configure({ inline: false, allowBase64: false }), Link.configure({ openOnClick: false, autolink: true }), Placeholder.configure({ placeholder: 'Bắt đầu viết nội dung...' })],
     content: value,
     editable: !disabled,
     onUpdate: ({ editor: e }) => onChange(e.getHTML()),
