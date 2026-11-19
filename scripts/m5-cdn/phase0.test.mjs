@@ -103,3 +103,27 @@ describe('M5 storage listing', () => {
     expect(lines).toEqual(['a/x.jpg\t9\tD', 'r.txt\t3\tC']); expect(dirs).toBe(2); expect(new Set(seen)).toEqual(new Set(['k']))
   })
 })
+
+import { planBatches, buildBatch } from './build-sql.mjs'
+describe('M5 CDN batches', () => {
+  it('splits product ids into disjoint, complete windows', () => {
+    const ids = Array.from({ length: 17752 }, (_, i) => i + 1 + Math.floor(i / 7)) // gaps
+    const w = planBatches(ids, 6)
+    expect(w).toHaveLength(6)
+    expect(w[0].lo).toBe(1); expect(w.at(-1).hi).toBe(2147483647)
+    w.slice(1).forEach((x, i) => expect(x.lo).toBe(w[i].hi))
+    const covered = ids.filter((id) => w.some((x) => id >= x.lo && id < x.hi))
+    expect(covered.length).toBe(ids.length)
+    expect(ids.every((id) => w.filter((x) => id >= x.lo && id < x.hi).length === 1)).toBe(true)
+  })
+  it('puts the autovacuum tuning only in the first batch and the reset only in the last', () => {
+    const template = readFileSync('scripts/m5-cdn/002.template.sql', 'utf8')
+    const mk = (batch) => buildBatch(template, { excluded: [], phase0: 'r', maxStartBytes: 320000000, lo: 1, hi: 100, batch, batches: 3 })
+    expect(mk(1)).toMatch(/set \(autovacuum_vacuum_scale_factor = 0.01/); expect(mk(1)).not.toMatch(/reset \(autovacuum/)
+    expect(mk(2)).not.toMatch(/alter table dpg_app\.\w+ (set|reset) \(autovacuum/)
+    expect(mk(3)).toMatch(/reset \(autovacuum/)
+    expect(mk(2)).toContain('t.product_id >= 1 and t.product_id < 100'); expect(mk(2)).toContain('p.id >= 1 and p.id < 100')
+    expect(mk(2)).not.toMatch(/__[A-Z_]+__/)
+    expect(() => buildBatch(template, { excluded: [], phase0: '', maxStartBytes: 1, lo: 5, hi: 5, batch: 1, batches: 1 })).toThrow()
+  })
+})

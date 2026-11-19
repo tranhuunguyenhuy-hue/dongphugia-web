@@ -7,11 +7,33 @@ import { OLD_PREFIX, NEW_PREFIX } from './phase0.mjs'
 
 export const sqlString = (v) => `'${String(v).replace(/'/g, "''")}'`
 
-export function buildNormalization(template, { excluded, phase0, maxStartBytes }) {
-  for (const u of excluded) if (!u.startsWith(OLD_PREFIX) || /[\u0000-\u001f]/.test(u)) throw new Error(`bad excluded url: ${u}`)
-  const list = excluded.length ? excluded.map((u) => `  ${sqlString(u)}`).join(',\n') : ''
-  return template.replace('__PHASE0__', phase0).replace('__MAX_START_BYTES__', String(maxStartBytes)).replace('__EXCLUDED__', list)
+const TABLES = ['products', 'product_images', 'product_documents', 'product_descriptions']
+const AV_SET = 'autovacuum_vacuum_scale_factor = 0.01, autovacuum_vacuum_threshold = 200, autovacuum_vacuum_cost_delay = 0'
+const AV_RESET = 'autovacuum_vacuum_scale_factor, autovacuum_vacuum_threshold, autovacuum_vacuum_cost_delay'
+
+/** Equal-count windows over the sorted product ids: [{lo, hi}) with the last hi open-ended. */
+export function planBatches(productIds, count) {
+  const ids = [...productIds].sort((a, b) => a - b)
+  if (!ids.length || count < 1) throw new Error('no products to batch')
+  const size = Math.ceil(ids.length / count)
+  const windows = []
+  for (let i = 0; i < ids.length; i += size) windows.push({ lo: windows.length ? ids[i] : 1, hi: i + size < ids.length ? ids[i + size] : 2147483647 })
+  return windows
 }
+
+export function buildBatch(template, { excluded, phase0, maxStartBytes, lo, hi, batch, batches }) {
+  for (const u of excluded) if (!u.startsWith(OLD_PREFIX) || /[\u0000-\u001f]/.test(u)) throw new Error(`bad excluded url: ${u}`)
+  if (!Number.isInteger(lo) || !Number.isInteger(hi) || lo >= hi) throw new Error('bad batch window')
+  const list = excluded.length ? excluded.map((u) => `  ${sqlString(u)}`).join(',\n') : ''
+  const prologue = batch === 1 ? `-- Batch 1 only: let autovacuum keep up while the batches run (storage parameters, reset after the last batch).\n${TABLES.map((t) => `alter table dpg_app.${t} set (${AV_SET});`).join('\n')}` : ''
+  const epilogue = batch === batches ? `-- Last batch: restore the default autovacuum parameters.\n${TABLES.map((t) => `alter table dpg_app.${t} reset (${AV_RESET});`).join('\n')}` : ''
+  return template.replaceAll('__LO__', String(lo)).replaceAll('__HI__', String(hi)).replaceAll('__BATCHES__', String(batches)).replaceAll('__BATCH__', String(batch))
+    .replace('__PROLOGUE__', prologue).replace('__EPILOGUE__', epilogue)
+    .replace('__PHASE0__', phase0).replace('__MAX_START_BYTES__', String(maxStartBytes)).replace('__EXCLUDED__', list)
+}
+
+// Kept for the single-window fixture: one batch over every product.
+export const buildNormalization = (template, o) => buildBatch(template, { ...o, lo: 1, hi: 2147483647, batch: 1, batches: 1 })
 
 export function confirmTiles(tiles, headRows) {
   const head = new Map(headRows.map(([status, type, , url]) => [url, { status: String(status), type: String(type) }]))
@@ -75,14 +97,17 @@ commit;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [phase0Dir, phase0Id, maxStartBytes, outDir] = process.argv.slice(2)
+  const [phase0Dir, phase0Id, maxStartBytes, outDir, batchCount = '6'] = process.argv.slice(2)
   const excluded = readFileSync(`${phase0Dir}/excluded-urls.txt`, 'utf8').split('\n').filter(Boolean)
   const template = readFileSync(new URL('./002.template.sql', import.meta.url), 'utf8')
-  writeFileSync(`${outDir}/002_cdn_normalization.sql`, buildNormalization(template, { excluded, phase0: phase0Id, maxStartBytes: Number(maxStartBytes) }))
+  const ids = readFileSync(`${phase0Dir}/products.tsv`, 'utf8').split('\n').filter(Boolean).map((l) => Number(l.split('\t')[0]))
+  const windows = planBatches(ids, Number(batchCount))
+  windows.forEach((w, i) => writeFileSync(`${outDir}/002_cdn_normalization_${String(i + 1).padStart(2, '0')}_of_${String(windows.length).padStart(2, '0')}.sql`,
+    buildBatch(template, { excluded, phase0: phase0Id, maxStartBytes: Number(maxStartBytes), lo: w.lo, hi: w.hi, batch: i + 1, batches: windows.length })))
   const tiles = JSON.parse(readFileSync(`${phase0Dir}/tiles.json`, 'utf8'))
   const headRows = readFileSync(`${phase0Dir}/head.tsv`, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t'))
   const { confirmed, rejected } = confirmTiles(tiles, headRows)
   writeFileSync(`${outDir}/004_tile_image_repair.sql`, buildTileRepair(confirmed, phase0Id))
   writeFileSync(`${phase0Dir}/tiles-decision.json`, JSON.stringify({ confirmed: confirmed.map((t) => ({ path: t.path, sibling: t.sibling, evidence: t.evidence, fixable: t.fixable.length, htmlRows: t.htmlRows })), rejected: rejected.map((t) => ({ path: t.path, reasons: t.reasons, rows: t.rows.length })) }, null, 2))
-  console.log(`M5_CDN_BUILD excluded=${excluded.length} tiles_confirmed=${confirmed.length} tile_values=${confirmed.reduce((a, t) => a + t.fixable.length, 0)} tiles_rejected=${rejected.length} rejected_reasons=${JSON.stringify(rejected.reduce((a, t) => { for (const r of t.reasons) { const k = r.split(':')[0]; a[k] = (a[k] ?? 0) + 1 } return a }, {}))}`)
+  console.log(`M5_CDN_BUILD batches=${windows.length} windows=${JSON.stringify(windows)} excluded=${excluded.length} tiles_confirmed=${confirmed.length} tile_values=${confirmed.reduce((a, t) => a + t.fixable.length, 0)} tiles_rejected=${rejected.length} rejected_reasons=${JSON.stringify(rejected.reduce((a, t) => { for (const r of t.reasons) { const k = r.split(':')[0]; a[k] = (a[k] ?? 0) + 1 } return a }, {}))}`)
 }

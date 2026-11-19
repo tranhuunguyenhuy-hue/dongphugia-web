@@ -49,17 +49,30 @@ echo "M5_CDN_REHEARSAL old_origin_rows_before(images,main,docs,html,desc,specs)=
 read -r db0 rel0 lsn0 <<< "$(sizes)"
 
 # Concurrency: an Admin edit in flight (row locks held 3 s) while 002 starts. X: name edit must survive; Y: new image must survive.
-read -r X Y <<< "$(sa -c "select (select id from dpg_app.products where starts_with(image_main_url,'https://cdn.dongphugia.com.vn/') and position('https://cdn.dongphugia.com.vn/' in description)>0 order by id limit 1) || ' ' || (select id from dpg_app.products where starts_with(image_main_url,'https://cdn.dongphugia.com.vn/') order by id desc limit 1)")"
+read -r X Y <<< "$(sa -c "select (select id from dpg_app.products where starts_with(image_main_url,'https://cdn.dongphugia.com.vn/') and position('https://cdn.dongphugia.com.vn/' in description)>0 order by id limit 1) || ' ' || (select id from dpg_app.products where starts_with(image_main_url,'https://cdn.dongphugia.com.vn/') order by id limit 1 offset 3)")"
 vx0="$(sa -c "select version from dpg_app.products where id=$X")"
 ( docker exec -i scratch psql -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 -c "begin; update dpg_app.products set name = name || ' [edit]', version = version + 1 where id = $X; update dpg_app.products set image_main_url = 'https://other.example/edited.jpg', version = version + 1 where id = $Y; select pg_sleep(3); commit;" >/dev/null ) &
 sleep 1
+batch_files=("$OUT"/002_cdn_normalization_*_of_*.sql)
+peak=$db0; : > "$work/002.out"
+run_batches() { # $1 = pace seconds between batches (autovacuum), $2 = output file
+  local f t0 n=0
+  for f in "${batch_files[@]}"; do
+    n=$((n+1)); t0=$(date +%s.%N)
+    so -f - < "$f" >> "$2" || fail "002_batch_${n}_failed"
+    read -r dbn reln lsnn <<< "$(sizes)"
+    echo "M5_CDN_REHEARSAL 002 batch=$n/${#batch_files[@]} seconds=$(echo "$(date +%s.%N) - $t0" | bc) db_bytes=$dbn"
+    [ "$dbn" -gt "$peak" ] && peak=$dbn
+    sleep "$1"
+  done
+}
 start=$(date +%s.%N)
-so -f - < "$OUT/002_cdn_normalization.sql" > "$work/002.out" || fail "002_failed"
+run_batches "${BATCH_PACE_SECONDS:-45}" "$work/002.out"
 secs=$(echo "$(date +%s.%N) - $start" | bc)
 wait
-cat "$work/002.out" | sed 's/^/M5_CDN_REHEARSAL 002 /'
+grep -E "^(migrated|remaining_old_origin)" "$work/002.out" | tail -n 16 | sed 's/^/M5_CDN_REHEARSAL 002 last_batch_result /'
 read -r db1 rel1 lsn1 <<< "$(sizes)"
-echo "M5_CDN_REHEARSAL 002 seconds=$secs db_growth_bytes=$((db1-db0)) tables_growth_bytes=$((rel1-rel0)) wal_bytes=$(sa -c "select pg_wal_lsn_diff('$lsn1','$lsn0')::bigint") ledger_bytes=$(sa -c "select pg_total_relation_size('dpg_control.m5_cdn_ledger')") db_bytes_after=$db1"
+echo "M5_CDN_REHEARSAL 002 seconds=$secs peak_db_bytes=$peak peak_growth_bytes=$((peak-db0)) final_growth_bytes=$((db1-db0)) tables_growth_bytes=$((rel1-rel0)) wal_bytes=$(sa -c "select pg_wal_lsn_diff('$lsn1','$lsn0')::bigint") ledger_bytes=$(sa -c "select pg_total_relation_size('dpg_control.m5_cdn_ledger')") db_bytes_after=$db1"
 want "select name like '% [edit]' from dpg_app.products where id=$X" t "lost_update_name"
 want "select image_main_url from dpg_app.products where id=$Y" 'https://other.example/edited.jpg' "lost_update_image"
 want "select version > $vx0 + 1 from dpg_app.products where id=$X" t "version_not_bumped_after_edit"
@@ -69,7 +82,7 @@ other="$(sa -c "$(diff_q "where not (s.t = 'products' and s.id in ($X,$Y))")")";
 [ "$oc" = 0 ] && [ "$ms" = 0 ] || fail "non_target_data_changed(other=$oc missing=$ms)"
 echo "M5_CDN_REHEARSAL 002 non_target_columns_changed=0 rows_missing=0 target_values_changed=$tc"
 vsum1="$(sa -c "select sum(version) from dpg_app.products")"; led1="$(sa -c "select count(*) from dpg_control.m5_cdn_ledger")"
-so -f - < "$OUT/002_cdn_normalization.sql" > /dev/null || fail "002_rerun_failed"
+run_batches 0 /dev/null
 want "select sum(version) from dpg_app.products" "$vsum1" "rerun_not_idempotent_versions"
 want "select count(*) from dpg_control.m5_cdn_ledger" "$led1" "rerun_not_idempotent_ledger"
 # Rollback is exact for untouched rows and skips the edited ones.
@@ -79,7 +92,7 @@ other="$(sa -c "$(diff_q "where not (s.t = 'products' and s.id in ($X,$Y))")")";
 echo "M5_CDN_REHEARSAL 003 rollback_exact=true old_origin_rows_after(images,main,docs,html,desc,specs)=$(old_count)"
 want "select image_main_url from dpg_app.products where id=$Y" 'https://other.example/edited.jpg' "rollback_overwrote_edit"
 # Re-apply (002), then the targeted tile repair (004).
-so -f - < "$OUT/002_cdn_normalization.sql" > /dev/null || fail "002_reapply_failed"
+run_batches 0 /dev/null
 so -f - < "$OUT/004_tile_image_repair.sql" | sed 's/^/M5_CDN_REHEARSAL 004 /' || fail "004_failed"
 so -f - < "$OUT/004_tile_image_repair.sql" > /dev/null || fail "004_rerun_failed"
 echo "M5_CDN_REHEARSAL 004 tile_ledger_rows=$(sa -c "select count(*) from dpg_control.m5_tile_ledger")"
