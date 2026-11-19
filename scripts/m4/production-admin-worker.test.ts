@@ -21,7 +21,7 @@ function environment(extra: Record<string, unknown> = {}) {
   return {
     APP_ENV: 'production', APP_BUILD_TARGET: 'public', APP_ORIGIN: ORIGIN, PUBLIC_CATALOGUE_SOURCE: 'postgresql', PUBLIC_DB: { connectionString: 'x' },
     ADMIN_API_URL: FN, ADMIN_API_HMAC_SECRET: 's'.repeat(40), ADMIN_PRODUCTION_MEDIA_KEY: 'k'.repeat(24),
-    BUNNY_STORAGE_ZONE_NAME: 'dpg-products', BUNNY_STORAGE_HOSTNAME: 'sg.storage.bunnycdn.com', BUNNY_CDN_HOSTNAME: 'cdn.dongphugia.com.vn',
+    BUNNY_STORAGE_ZONE_NAME: 'dpg-products', BUNNY_STORAGE_HOSTNAME: 'sg.storage.bunnycdn.com', BUNNY_CDN_HOSTNAME: 'dpg-products.b-cdn.net',
     ASSETS: { fetch: vi.fn(async () => new Response('<!doctype html><title>shell</title>', { headers: { 'content-type': 'text/html' } })) },
     IMAGES: undefined as unknown, ...extra,
   }
@@ -148,7 +148,7 @@ describe('Production upload', () => {
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.variants).toHaveLength(2); expect(widths).toEqual([320, 640])
-    expect(body.url).toMatch(/^https:\/\/cdn\.dongphugia\.com\.vn\/products\/\d+-[0-9a-f]{8}\.product\.w640\.webp$/)
+    expect(body.url).toMatch(/^https:\/\/dpg-products\.b-cdn\.net\/products\/\d+-[0-9a-f]{8}\.product\.w640\.webp$/)
     expect(bunny.map((call) => call.method)).toEqual(['PUT', 'PUT'])
     expect(bunny.every((call) => call.url.startsWith('https://sg.storage.bunnycdn.com/dpg-products/products/'))).toBe(true)
   })
@@ -212,7 +212,7 @@ describe('Production artifact composition', () => {
     const config = productionAdminConfig(base, media) as Record<string, unknown> & { main: string; images: unknown; assets: { run_worker_first: string[] }; vars: Record<string, string> }
     expect(config.main).toBe('worker/m4-entry.mjs'); expect(config.images).toEqual({ binding: 'IMAGES' })
     expect(config.assets.run_worker_first).toEqual(expect.arrayContaining(['/admin-next', '/admin-next/', '/admin', '/admin/*', '/api/upload-image']))
-    expect(config.vars.ADMIN_API_URL).toBe(FN); expect(config.vars.BUNNY_CDN_HOSTNAME).toBe('cdn.dongphugia.com.vn')
+    expect(config.vars.ADMIN_API_URL).toBe(FN); expect(config.vars.BUNNY_CDN_HOSTNAME).toBe('dpg-products.b-cdn.net')
     expect(Object.keys(config.vars).some((name) => /SECRET|KEY|TOKEN|PASSWORD/.test(name))).toBe(false)
     expect(() => productionAdminConfig({ ...base, name: 'other' }, media)).toThrow('M4_WRONG_WORKER_TARGET')
     expect(() => productionAdminConfig({ ...base, vars: { ...base.vars, APP_ENV: 'staging' } }, media)).toThrow('M4_PRODUCTION_VARS_REQUIRED')

@@ -10,7 +10,7 @@ import { handleAdminUpload, UPLOAD_PATH } from './m4-admin-upload.mjs' // inline
 export const PRODUCTION_ORIGIN = 'https://www.dongphugia.vn'
 const ADMIN_HOST = 'www.dongphugia.vn'
 const PRODUCTION_FUNCTION_URL = /^https:\/\/bonxyxluzlxfkdetryoo\.supabase\.co\/functions\/v1\/admin-api$/
-const PRODUCTION_MEDIA_CDN_HOST = 'cdn.dongphugia.com.vn'
+const PRODUCTION_MEDIA_CDN_HOST = 'dpg-products.b-cdn.net'
 const ADMIN_BASE_PATH = '/admin'
 const PRODUCTION_SESSION_COOKIE = 'dpg-admin-session'
 const PUBLIC_ENV_KEYS = ['APP_ENV', 'APP_BUILD_TARGET', 'APP_ORIGIN', 'PUBLIC_CATALOGUE_SOURCE', 'PUBLIC_DB', 'PUBLIC_DB_DIAGNOSTICS', 'ASSETS']

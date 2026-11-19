@@ -113,7 +113,7 @@ jobs:
           if (v.APP_ENV !== 'production' || v.APP_BUILD_TARGET !== 'public' || v.APP_ORIGIN !== 'https://www.dongphugia.vn' || v.PREVIEW_NOINDEX === 'true') fail('vars');
           if (v.PUBLIC_CATALOGUE_SOURCE !== 'postgresql') fail('source');
           if (v.ADMIN_API_URL !== 'https://bonxyxluzlxfkdetryoo.supabase.co/functions/v1/admin-api') fail('function-url');
-          if (v.BUNNY_CDN_HOSTNAME !== 'cdn.dongphugia.com.vn') fail('cdn');
+          if (v.BUNNY_CDN_HOSTNAME !== 'dpg-products.b-cdn.net') fail('cdn');
           if (Object.keys(v).some((n) => /(SECRET|PASSWORD|TOKEN|PRIVATE_KEY|CREDENTIAL|DATABASE_URL|API_KEY|_KEY$)/i.test(n))) fail('secret-like-var');
           if (x.hyperdrive?.length !== 1 || x.hyperdrive[0].binding !== 'PUBLIC_DB' || x.hyperdrive[0].id !== process.env.V1_PUBLIC_HYPERDRIVE_ID) fail('hyperdrive');
           if (x.images?.binding !== 'IMAGES') fail('images');
@@ -156,6 +156,36 @@ jobs:
           test "$ready" -eq 1
           node scripts/app-foundation/public-postgres-release-smoke.mjs http://127.0.0.1:8793 "$GITHUB_SHA" local
           node scripts/m4/admin-smoke.mjs http://127.0.0.1:8793 unconfigured "$GITHUB_SHA"
+      - name: Verify the Production media target with a unique test object (no overwrite)
+        id: media
+        continue-on-error: true
+        shell: bash
+        env:
+          MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+        run: |
+          set -uo pipefail
+          echo 'verified=false' >> "$GITHUB_OUTPUT"
+          if [ -z "$MEDIA_KEY" ]; then echo 'M4_MEDIA status=FAIL reason=key_missing (uploads stay fail-closed)'; exit 1; fi
+          echo "::add-mask::$MEDIA_KEY"
+          cdn='dpg-products.b-cdn.net'
+          path="_m4-verify/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(openssl rand -hex 6).txt"
+          storage="https://${M4_MEDIA_STORAGE_HOST}/${M4_MEDIA_ZONE}/${path}"
+          authed() { curl -sS -m 30 -K <(printf 'header = "AccessKey: %s"\n' "$MEDIA_KEY") "$@"; }
+          cleanup() { authed -o /dev/null -X DELETE "$storage" || true; }
+          pre="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' "https://${cdn}/${path}" || true)"
+          [ "$pre" = '404' ] || { echo "M4_MEDIA status=FAIL reason=test_path_not_free status=$pre"; exit 1; }
+          put="$(authed -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: text/plain' --data-binary "m4-verify-${GITHUB_RUN_ID}" "$storage" || true)"
+          trap cleanup EXIT
+          [ "$put" = '201' ] || { echo "M4_MEDIA status=FAIL reason=write_rejected status=$put"; exit 1; }
+          ok=0
+          for _ in 1 2 3 4 5; do
+            got="$(curl -sS -m 20 "https://${cdn}/${path}" || true)"
+            [ "$got" = "m4-verify-${GITHUB_RUN_ID}" ] && { ok=1; break; }
+            sleep 3
+          done
+          [ "$ok" -eq 1 ] || { echo 'M4_MEDIA status=FAIL reason=public_delivery_failed'; exit 1; }
+          echo "M4_MEDIA status=PASS zone=${M4_MEDIA_ZONE} write=201 public_delivery=200 host=${cdn} (test object removed)"
+          echo 'verified=true' >> "$GITHUB_OUTPUT"
       - name: Verify the active version equals the recorded rollback target before publishing
         id: rollback
         if: inputs.operation == 'publish'
@@ -187,7 +217,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ADMIN_API_HMAC_SECRET: ${{ secrets.ADMIN_API_HMAC_SECRET }}
-          ADMIN_PRODUCTION_MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+          ADMIN_PRODUCTION_MEDIA_KEY: ${{ steps.media.outputs.verified == 'true' && secrets.ADMIN_PRODUCTION_MEDIA_KEY || '' }}
         run: |
           set -euo pipefail
           test "$CLOUDFLARE_ACCOUNT_ID" = 'd54f3402b9d112ab64d6135e0e3f1fb1'
@@ -245,6 +275,7 @@ jobs:
             echo "### M4 Production Admin release (${{ inputs.operation }})"
             echo "- Source SHA: $GITHUB_SHA"
             echo "- Packaged verification: ${{ steps.packaged.outcome }}"
+            echo "- Media target verified (unique test object, removed): ${{ steps.media.outputs.verified }}"
             echo "- Publish: ${{ steps.deploy.outcome }}"
             echo "- Previous Worker version (rollback target): ${{ steps.rollback.outputs.version_id }}"
             echo "- Worker rollback: wrangler rollback <version> --name dongphugia-v1-public-production (does not undo SQL)"
