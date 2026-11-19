@@ -40,7 +40,8 @@ jobs:
     timeout-minutes: 40
     environment: runtime-backup
     env:
-      DATABASE_URL: ${{ secrets.M4_BACKUP_DATABASE_URL || secrets.SUPABASE_RUNTIME_DATABASE_URL }}
+      # Least-privilege reader first (M5); the owner credential stays as the fallback until the reader is verified.
+      DATABASE_URL: ${{ secrets.M4_BACKUP_READER_DATABASE_URL || secrets.M4_BACKUP_DATABASE_URL }}
     outputs:
       bundle: ${{ steps.dump.outputs.bundle }}
     steps:
@@ -65,6 +66,14 @@ jobs:
           # M4 opened Admin writes: the Production contract is now writes=true (M5 #311).
           test "$writes" = 'true'
           test "$products" -gt 17000
+          if [ "$current" = 'dpg_backup_reader' ]; then
+            test "$readonly" = 'on' || { echo 'M4_BACKUP status=FAIL reason=reader_not_read_only'; exit 1; }
+            writable="$(pg -c "select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','p') and has_table_privilege(current_user, c.oid, 'INSERT,UPDATE,DELETE,TRUNCATE')")"
+            test "$writable" = 0 || { echo "M4_BACKUP status=FAIL reason=reader_has_write_privileges ($writable)"; exit 1; }
+            echo 'M4_BACKUP credential=least_privilege_reader write_privileges=0'
+          else
+            echo "M4_BACKUP credential=owner_fallback (replace with dpg_backup_reader, see supabase/m5-production/001_backup_reader_role.sql)"
+          fi
       - name: Row-count manifest, encrypted dump and checksums
         id: dump
         if: env.OPERATION == 'backup'
@@ -78,19 +87,9 @@ jobs:
           # Production is Public-read-only before the Owner opens writes; counts are taken immediately before and after the dump.
           counts() { pg -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | pg -f - | sort; }
           counts > "$work/counts-before.txt"
-          # Schema object manifest (names/counts only): tables, columns, constraints by type, indexes, functions, policies, triggers, sequences, views.
-          objects() { pg -c "select kind || ' ' || n from (
-            select 'tables' kind, count(*)::text n from pg_tables where schemaname in ('dpg_app','dpg_control')
-            union all select 'columns', count(*)::text from information_schema.columns where table_schema in ('dpg_app','dpg_control')
-            union all select 'constraint_' || contype::text, count(*)::text from pg_constraint c join pg_namespace s on s.oid=c.connamespace where s.nspname in ('dpg_app','dpg_control') group by contype
-            union all select 'indexes', count(*)::text from pg_indexes where schemaname in ('dpg_app','dpg_control')
-            union all select 'functions', count(*)::text from pg_proc p join pg_namespace s on s.oid=p.pronamespace where s.nspname in ('dpg_app','dpg_control')
-            union all select 'policies', count(*)::text from pg_policies where schemaname in ('dpg_app','dpg_control')
-            union all select 'triggers', count(*)::text from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace s on s.oid=c.relnamespace where s.nspname in ('dpg_app','dpg_control') and not t.tgisinternal
-            union all select 'sequences', count(*)::text from pg_sequences where schemaname in ('dpg_app','dpg_control')
-            union all select 'views', count(*)::text from pg_views where schemaname in ('dpg_app','dpg_control')) x order by 1"; }
-          objects > "$work/objects.txt"
-          docker run --rm -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --no-privileges --schema=dpg_app --schema=dpg_control' > "$work/production.dump"
+          # Schema object + ACL + referenced-role manifest (names and counts only), shared with the restore gate.
+          pg -f - < scripts/backup/m5-manifest.sql > "$work/objects.txt"
+          docker run --rm -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --schema=dpg_app --schema=dpg_control' > "$work/production.dump"
           counts > "$work/counts-after.txt"
           cmp "$work/counts-before.txt" "$work/counts-after.txt" || { echo 'M4_BACKUP status=FAIL stage=dump reason=source_changed_during_dump'; exit 1; }
           tables="$(wc -l < "$work/counts-before.txt")"
@@ -125,17 +124,22 @@ jobs:
     timeout-minutes: 40
     environment: runtime-backup
     steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
       - uses: actions/download-artifact@v4
         with:
           name: m4-production-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/restore
-      - name: Verify checksums, decrypt, restore into a scratch database and compare every table count
+      - name: Verify checksums, decrypt, restore into a scratch database and gate on counts, schema objects and ACLs
         shell: bash
         env:
           AGE_IDENTITY: ${{ secrets.BACKUP_AGE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           sudo apt-get install -y --no-install-recommends age >/dev/null
+          repo="$GITHUB_WORKSPACE"
           cd "$RUNNER_TEMP/restore"
           sha256sum --check SHA256SUMS
           umask 077
@@ -144,37 +148,51 @@ jobs:
           rm -f identity.txt
           expected_sha="$(sed -n 's/^plaintext_dump_sha256=//p' manifest.txt)"
           test "$(sha256sum production.dump | cut -d' ' -f1)" = "$expected_sha"
-          docker run -d --name scratch -e POSTGRES_PASSWORD=scratch -p 55432:5432 "$POSTGRES_IMAGE" >/dev/null
+          docker run -d --name scratch -e POSTGRES_PASSWORD=scratch "$POSTGRES_IMAGE" >/dev/null
           for _ in $(seq 1 40); do docker exec scratch pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
           sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
-          # Roles referenced by policies/grants must exist for a faithful restore (names only, no credentials).
-          sql -c "do \$\$ declare r text; begin foreach r in array array['anon','authenticated','service_role','dpg_public_catalogue','dpg_readonly','dpg_runtime','dpg_migration','dpg_m2_snapshot_read','dpg_direct_read','dpg_direct_import','dpg_admin_api'] loop if not exists (select 1 from pg_roles where rolname = r) then execute format('create role %I nologin', r); end if; end loop; end \$\$"
-          # Supabase platform objects referenced by some policies (auth.uid()/auth.role()); stubs only, never data.
+          # Every role the source ACLs/policies reference (from the manifest), as NOLOGIN stubs: names only, no credentials.
+          for role in $(sed -n 's/^role //p' objects.txt); do
+            sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$role') then execute format('create role %I nologin', '$role'); end if; end \$\$"
+          done
+          # Supabase platform helpers referenced by some policies. SCRATCH ONLY: a real recovery restores into a Supabase
+          # project that already provides auth.*; see docs/ops/m5-backup-recovery-runbook.md.
           sql -c "create schema if not exists auth; create or replace function auth.uid() returns uuid language sql stable as 'select null::uuid'; create or replace function auth.role() returns text language sql stable as 'select null::text'; create or replace function auth.jwt() returns jsonb language sql stable as 'select null::jsonb'"
           docker cp production.dump scratch:/tmp/production.dump
-          docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-privileges /tmp/production.dump > restore.log 2>&1 || true
-          errors="$(grep -c '^pg_restore: error' restore.log || true)"
-          echo "M4_RESTORE restore_errors=$errors"
-          # Error classes only (object/statement names, never row data); the scratch DB has no Supabase platform roles/extensions.
-          grep -A1 '^pg_restore: error' restore.log | grep -E 'ERROR:|error:' | sed -E 's/^pg_restore: error: //; s/[[:space:]]+/ /g' | cut -c1-180 | sort | uniq -c | head -12 | sed 's/^/M4_RESTORE error_class /' || true
+          rc=0; docker exec scratch pg_restore -U postgres -d postgres --no-owner /tmp/production.dump > restore.log 2>&1 || rc=$?
+          echo "M4_RESTORE pg_restore_exit=$rc"
           sql -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | sql -f - | sort > restored-counts.txt
-          sort row-counts.txt > expected-counts.txt
-          diff expected-counts.txt restored-counts.txt && echo "M4_RESTORE counts=identical tables=$(wc -l < expected-counts.txt)"
-          sql -c "select kind || ' ' || n from (
-            select 'tables' kind, count(*)::text n from pg_tables where schemaname in ('dpg_app','dpg_control')
-            union all select 'columns', count(*)::text from information_schema.columns where table_schema in ('dpg_app','dpg_control')
-            union all select 'constraint_' || contype::text, count(*)::text from pg_constraint c join pg_namespace s on s.oid=c.connamespace where s.nspname in ('dpg_app','dpg_control') group by contype
-            union all select 'indexes', count(*)::text from pg_indexes where schemaname in ('dpg_app','dpg_control')
-            union all select 'functions', count(*)::text from pg_proc p join pg_namespace s on s.oid=p.pronamespace where s.nspname in ('dpg_app','dpg_control')
-            union all select 'policies', count(*)::text from pg_policies where schemaname in ('dpg_app','dpg_control')
-            union all select 'triggers', count(*)::text from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace s on s.oid=c.relnamespace where s.nspname in ('dpg_app','dpg_control') and not t.tgisinternal
-            union all select 'sequences', count(*)::text from pg_sequences where schemaname in ('dpg_app','dpg_control')
-            union all select 'views', count(*)::text from pg_views where schemaname in ('dpg_app','dpg_control')) x order by 1" > restored-objects.txt
-          if diff objects.txt restored-objects.txt > objects.diff; then echo 'M4_RESTORE objects=identical'; else echo 'M4_RESTORE objects=DIFFERENT'; sed 's/^/M4_RESTORE object_diff /' objects.diff; fi
-          paste -d' ' objects.txt | sed 's/^/M4_RESTORE source_object /'
-          cmp -s expected-counts.txt restored-counts.txt
-          echo "M4_RESTORE status=PASS tables=$(wc -l < expected-counts.txt) counts=identical"
-          rm -f production.dump
+          sql -f - < "$repo/scripts/backup/m5-manifest.sql" > restored-objects.txt
+          node "$repo/scripts/backup/m5-restore-gate.mjs" "$rc" restore.log row-counts.txt restored-counts.txt objects.txt restored-objects.txt
+          echo "M4_RESTORE status=PASS tables=$(wc -l < row-counts.txt) counts=identical objects_acl=identical"
+      - name: Prove the least-privilege backup role can produce a complete dump (and that BYPASSRLS is required)
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_WORKSPACE"
+          sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+          # Same file the Owner runs. Scratch objects are owned by postgres (superuser), so the owner switch is dropped here.
+          pw="$(openssl rand -hex 24)"
+          sed -e "s/<OWNER_GENERATED_STRONG_PASSWORD>/$pw/" -e '/^set role dpg_migration;$/d' -e '/^reset role;$/d' "$repo/supabase/m5-production/001_backup_reader_role.sql" | sql -f - > reader-verify.txt
+          echo "M5_READER verify=$(tr '\n' ' ' < reader-verify.txt)"
+          IFS='|' read -r name login bypass superuser createrole createdb replication connlimit relations readable writable memberships < reader-verify.txt
+          test "$login" = t; test "$bypass" = t; test "$superuser" = f; test "$createrole" = f; test "$createdb" = f; test "$replication" = f
+          test "$connlimit" = 2; test "$relations" = "$readable"; test "$writable" = 0; test "$memberships" = 0
+          test "$(sql -c "select setconfig::text from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where r.rolname = 'dpg_backup_reader'" | grep -c default_transaction_read_only=on)" = 1
+          docker exec scratch pg_dump -U dpg_backup_reader -d postgres --format=custom --no-owner --schema=dpg_app --schema=dpg_control -f /tmp/reader.dump
+          full="$(docker exec scratch pg_restore -l /tmp/production.dump | grep -vc '^;')"; reader="$(docker exec scratch pg_restore -l /tmp/reader.dump | grep -vc '^;')"
+          echo "M5_READER dump=PASS toc_entries=$reader source_toc_entries=$full"
+          # Writes must be impossible even if the read-only default is overridden in a session.
+          if docker exec -i scratch psql -U dpg_backup_reader -d postgres -X -q -v ON_ERROR_STOP=1 -c "set default_transaction_read_only = off; delete from dpg_app.banners where false" >/dev/null 2>&1; then
+            echo 'M5_READER status=FAIL reason=write_possible'; exit 1
+          fi
+          echo 'M5_READER write=DENIED'
+          # Negative control: the same role subject to RLS cannot dump the FORCE RLS tables.
+          sql -c "alter role dpg_backup_reader nobypassrls"
+          if docker exec scratch pg_dump -U dpg_backup_reader -d postgres --format=custom --schema=dpg_app -f /tmp/reader-rls.dump > rls.log 2>&1; then
+            echo 'M5_READER status=FAIL reason=dump_succeeded_without_bypassrls'; exit 1
+          fi
+          echo "M5_READER without_bypassrls=FAILS ($(grep -oE 'row-level security|row security' rls.log | head -1))"
           docker rm -f scratch >/dev/null
 
   failure-signal:
