@@ -175,6 +175,9 @@ jobs:
           # NON-superuser stand-in for Supabase's postgres (CREATEROLE, BYPASSRLS, member of dpg_migration). The exact Owner
           # file then runs as that stand-in, so a privilege error in Production reproduces here.
           sql <<'SQL'
+          -- Production already has dpg_backup_reader, so the restored ACLs created a stub of it; start from a clean slate.
+          do $$ begin if exists (select 1 from pg_roles where rolname = 'dpg_backup_reader') then
+            execute 'drop owned by dpg_backup_reader'; execute 'drop role dpg_backup_reader'; end if; end $$;
           create role sb_owner login createrole bypassrls;
           grant dpg_migration to sb_owner;
           do $$ declare o record; begin
