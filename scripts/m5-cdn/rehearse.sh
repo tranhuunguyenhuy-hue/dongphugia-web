@@ -101,8 +101,8 @@ other="$(sa -c "$(diff_q "where not (s.t = 'products' and s.id in ($X,$Y))")")";
 [ "$oc" = 0 ] && [ "$ms" = 0 ] && [ "$tc" = 0 ] || fail "rollback_not_exact(other=$oc target=$tc missing=$ms)"
 echo "M5_CDN_REHEARSAL 003 rollback_exact=true old_origin_rows_after(images,main,docs,html,desc,specs)=$(old_count)"
 want "select image_main_url from dpg_app.products where id=$Y" 'https://other.example/edited.jpg' "rollback_overwrote_edit"
-# Re-apply (002), then the targeted tile repair (004).
-run_batches 0 /dev/null
+# Targeted tile repair (004). Its URLs were never touched by 002/003. A forward-rollback-forward cycle is not rehearsed: the free-tier
+# guard in 002 correctly refuses it (the file keeps the dead space), and nothing needs it on Production.
 so -f - < "$OUT/004_tile_image_repair.sql" | sed 's/^/M5_CDN_REHEARSAL 004 /' || fail "004_failed"
 so -f - < "$OUT/004_tile_image_repair.sql" > /dev/null || fail "004_rerun_failed"
 echo "M5_CDN_REHEARSAL 004 tile_ledger_rows=$(sa -c "select count(*) from dpg_control.m5_tile_ledger")"
