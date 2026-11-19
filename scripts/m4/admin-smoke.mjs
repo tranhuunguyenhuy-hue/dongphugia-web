@@ -12,7 +12,7 @@ const checks = []
 const record = (name, ok, detail = '') => { checks.push({ name, ok }); console.log(`M4_ADMIN_SMOKE ${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` ${detail}` : ''}`) }
 const call = (path, init = {}) => fetch(new URL(path, base), { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(20_000), ...init, headers: { 'user-agent': 'dpg-m4-smoke', ...(init.headers ?? {}) } })
 const expect = async (name, path, init, predicate) => {
-  try { const response = await call(path, init); const text = await response.text(); const ok = await predicate(response, text); record(name, Boolean(ok), `status=${response.status}`) } catch (error) { record(name, false, `error=${error?.name ?? 'unknown'}`) }
+  try { const response = await call(path, init); const text = await response.text(); const ok = await predicate(response, text); record(name, Boolean(ok), `status=${response.status}`) } catch (error) { record(name, false, `error=${error?.name ?? 'unknown'}:${String(error?.message ?? '').slice(0, 80)}:${error?.cause?.code ?? error?.cause?.message ?? ''}`.slice(0, 220)) }
 }
 const code = (text) => { try { return JSON.parse(text)?.error?.code } catch { return undefined } }
 const sameOrigin = { origin, 'sec-fetch-site': 'same-origin' }
@@ -28,7 +28,7 @@ await expect('Dev-managed master data cannot be written', '/admin-next/api/r/bra
 await expect('cross-origin mutation is refused', '/admin-next/api/r/blog-posts', { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'application/json' }, body: '{}' }, (r, t) => r.status === 403 && code(t) === 'ORIGIN_NOT_ALLOWED')
 await expect('unknown API route is a 404', '/admin-next/api/nope', {}, (r) => r.status === 404)
 await expect('upload rejects GET', '/api/upload-image', {}, (r) => r.status === 405)
-await expect('anonymous upload is rejected before any body work', '/api/upload-image', { method: 'POST', headers: { ...sameOrigin, 'content-type': 'multipart/form-data; boundary=x', 'content-length': '10' }, body: '--x--\r\n\r\n' }, (r) => mode === 'configured' ? r.status === 401 : r.status === 503)
+await expect('anonymous upload is rejected before any body work', '/api/upload-image', { method: 'POST', headers: { ...sameOrigin, 'content-type': 'multipart/form-data; boundary=x', 'x-m4-smoke': 'upload' }, body: '--x--\r\n\r\n' }, (r) => mode === 'configured' ? r.status === 401 : r.status === 503)
 await expect('Public home is unchanged (200, indexable, no Admin cookie)', '/', {}, (r) => r.status === 200 && !/noindex/.test(r.headers.get('x-robots-tag') ?? '') && !/dpg-admin-session/.test(r.headers.get('set-cookie') ?? '') && (sourceSha === '-' || !sourceSha || r.headers.get('x-dpg-source-sha') === sourceSha))
 await expect('Public health reports PostgreSQL', '/api/health', {}, (r, t) => r.status === 200 && /postgresql/.test(t))
 
