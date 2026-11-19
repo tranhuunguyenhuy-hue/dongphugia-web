@@ -8,6 +8,8 @@ import { ConfirmProvider, Toaster } from './ui'
 import { Login } from './Login'
 
 const BASE = '/admin-next'
+// Owner decision (#310): hidden from navigation and routing until the M5 review (the gateway also refuses their API routes).
+const HIDDEN_RESOURCES = new Set(['partners', 'projects'])
 function useRoute() {
   const [path, setPath] = useState(() => window.location.pathname.slice(BASE.length) || '/')
   useEffect(() => { const on = () => setPath(window.location.pathname.slice(BASE.length) || '/'); window.addEventListener('popstate', on); return () => window.removeEventListener('popstate', on) }, [])
@@ -20,7 +22,7 @@ export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [resources, setResources] = useState<ResourceMeta[]>([])
   useEffect(() => { api.me().then(setUser).catch(() => setUser(null)) }, [])
-  useEffect(() => { if (user) api.schema().then(setResources).catch(() => setResources([])) }, [user])
+  useEffect(() => { if (user) api.schema().then((all) => setResources(all.filter((r) => !HIDDEN_RESOURCES.has(r.key)))).catch(() => setResources([])) }, [user])
   useEffect(() => { if (user === null && path !== '/login') go('/login');
     const legacyProduct = path.match(/^\/products(?:\/(\d+))?$/); if (user && legacyProduct) go(legacyProduct[1] ? `/r/products/${legacyProduct[1]}` : '/r/products'); if (user && (path === '/' || path === '/login')) go(can(user, 'dashboard:read') ? '/dashboard' : '/r/products') }, [user, path, go])
   if (user === undefined) return <div className="grid min-h-svh place-items-center text-sm text-muted-foreground">Đang tải…</div>

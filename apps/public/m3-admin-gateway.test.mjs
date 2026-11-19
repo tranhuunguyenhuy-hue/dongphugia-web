@@ -47,13 +47,13 @@ describe('Admin shell gateway', () => {
   it('allows only well-formed generic resource routes and signs them like any other request', async () => {
     stubUpstream(json({ data: { items: [] } }))
     const env = environment()
-    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/partners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/payment'], ['GET', '/quotes/9'], ['PATCH', '/quotes/9/assign'], ['POST', '/quotes/9/complete'], ['POST', '/products/bulk'], ['GET', '/products/5/variants'], ['POST', '/products/5/variants'], ['DELETE', '/products/5/variants/7']]) {
+    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/banners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/payment'], ['GET', '/quotes/9'], ['PATCH', '/quotes/9/assign'], ['POST', '/quotes/9/complete'], ['POST', '/products/bulk'], ['GET', '/products/5/variants'], ['POST', '/products/5/variants'], ['DELETE', '/products/5/variants/7']]) {
       const init = method === 'GET' ? {} : { method, body: '{}' }
       expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(200)
     }
     expect(calls).toHaveLength(20)
     const { url, init } = calls[6]
-    expect(url).toBe(`${FN}/r/partners/3`)
+    expect(url).toBe(`${FN}/r/banners/3`)
     expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
     calls.length = 0
     for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['DELETE', '/orders/1'], ['POST', '/orders/1/status'], ['PATCH', '/orders/1/complete'], ['PATCH', '/quotes/1/payment'], ['GET', '/orders/1/status'], ['POST', '/quotes'], ['PATCH', '/products/bulk'], ['GET', '/products/bulk'], ['PATCH', '/products/5/variants'], ['DELETE', '/products/5/variants'], ['POST', '/products/5/variants/7']]) {
@@ -150,5 +150,19 @@ describe('Admin shell gateway', () => {
     stubUpstream(json({ code: 'NOT_FOUND', message: 'Requested function was not found' }, 404))
     const platform = await handleAdminNext(browser('/admin-next/api/me'), environment(), ctx)
     expect(platform.status).toBe(502); expect(await platform.text()).not.toContain('Requested function')
+  })
+})
+
+describe('Hidden Admin resources (Owner decision, M4)', () => {
+  it('does not route Partners or Projects: every method and sub-path is a 404 before the function is contacted', async () => {
+    stubUpstream(json({ data: {} }))
+    const env = environment()
+    for (const [method, path] of [['GET', '/r/partners'], ['GET', '/r/partners/3'], ['POST', '/r/partners'], ['PATCH', '/r/projects/2'], ['DELETE', '/r/projects/2'], ['GET', '/r/projects/options'], ['GET', '/r/partners?q=a']]) {
+      const response = await handleAdminNext(browser('/admin-next/api' + path, { method, body: method === 'GET' || method === 'DELETE' ? undefined : '{}' }), env, ctx)
+      expect(response.status, `${method} ${path}`).toBe(404)
+    }
+    expect(calls).toHaveLength(0)
+    // an unrelated generic resource is still routed (to the function, which owns RBAC)
+    expect((await handleAdminNext(browser('/admin-next/api/r/banners'), env, ctx)).status).toBe(200)
   })
 })

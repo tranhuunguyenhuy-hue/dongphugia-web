@@ -1,4 +1,4 @@
-import { publicPostgresEnabled } from './public-db'
+import { publicPostgresEnabled, readPublicRows } from './public-db'
 import type {
   PublicHomeCategory,
   PublicHomeContent,
@@ -22,13 +22,9 @@ function publicHomeParityEnabled() {
     && !publicPostgresEnabled() && !usesProductionPublishedCatalogue())
 }
 
-export async function getPublicHomeBanners(): Promise<PublicHomePageData['banners']> {
-  if (!publicHomeParityEnabled()) return []
-  // Owner-verified historical Production artwork, archived in the legacy Supabase Storage bucket.
-  // These three objects correspond to inactive legacy DB rows (6, 4, 5); Owner confirmed
-  // the artworks and order, independently of those historical is_active flags.
-  // Keep the local /images/banner-*.jpg assets as a rollback option until assets are mirrored.
-  return [
+// Owner-verified historical Production artwork, archived in the legacy Supabase Storage bucket. These three objects
+// correspond to legacy DB rows 6, 4, 5. They remain the fallback until the Production `banners` table serves the hero.
+const HISTORICAL_HOME_BANNERS: PublicHomePageData['banners'] = [
     {
       id: 6,
       title: 'Banner 1',
@@ -57,6 +53,59 @@ export async function getPublicHomeBanners(): Promise<PublicHomePageData['banner
       linkUrl: null,
     },
   ]
+
+// Hero banners are managed in the Admin (`dpg_app.banners`, position HERO, active, by sort_order). Image URLs must be on the
+// managed default pull zone under `banners/` (or the verified legacy archive host); links must be same-site paths or https.
+const HOME_BANNER_SQL = `SELECT id, title, image_url, link_url FROM dpg_app.banners
+ WHERE is_active = true AND position = 'HERO' ORDER BY sort_order, id LIMIT 8`
+const MANAGED_BANNER_HOST = 'dpg-products.b-cdn.net'
+const MANAGED_BANNER_PATH = /^\/banners\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(?:png|jpe?g|webp|gif)$/
+const LEGACY_BANNER_HOST = 'tygjmrhandbffjllxveu.supabase.co'
+const LEGACY_BANNER_PATH = /^\/storage\/v1\/object\/public\/images\/banners\/[A-Za-z0-9][A-Za-z0-9._-]{0,120}\.(?:png|jpe?g|webp|gif)$/
+
+export function safeHomeBannerImage(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.port !== '' || url.username || url.password || url.search || url.hash) return null
+    if (url.hostname === MANAGED_BANNER_HOST && MANAGED_BANNER_PATH.test(url.pathname)) return url.href
+    if (url.hostname === LEGACY_BANNER_HOST && LEGACY_BANNER_PATH.test(url.pathname)) return url.href
+    return null
+  } catch { return null }
+}
+
+export function safeHomeBannerLink(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null
+  if (/^\/(?![/\\])[\w\-./%?=&#]*$/.test(value)) return value
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && ['www.dongphugia.vn', 'dongphugia.vn'].includes(url.hostname) && !url.username && !url.password ? url.href : null
+  } catch { return null }
+}
+
+export function mapHomeBannerRows(rows: ReadonlyArray<{ id: unknown; title: unknown; image_url: unknown; link_url: unknown }>): PublicHomePageData['banners'] {
+  return rows.flatMap((row) => {
+    const image = safeHomeBannerImage(row.image_url)
+    if (!image || !Number.isSafeInteger(row.id)) return []
+    return [{
+      id: Number(row.id), title: typeof row.title === 'string' && row.title ? row.title.slice(0, 200) : null,
+      imageUrl: image, mobileImageUrl: image, desktopImageUrl: image, desktopLargeImageUrl: image,
+      linkUrl: safeHomeBannerLink(row.link_url),
+    }]
+  })
+}
+
+export async function getPublicHomeBanners(): Promise<PublicHomePageData['banners']> {
+  if (!publicHomeParityEnabled()) return []
+  if (publicPostgresEnabled()) {
+    try {
+      const mapped = mapHomeBannerRows(await readPublicRows(HOME_BANNER_SQL))
+      if (mapped.length) return mapped
+    } catch {
+      // The Public role has no banner grant yet, or the read failed: keep the verified historical hero instead of an empty page.
+    }
+  }
+  return HISTORICAL_HOME_BANNERS
 }
 
 export async function getPublicHomeContent(): Promise<PublicHomeContent> {

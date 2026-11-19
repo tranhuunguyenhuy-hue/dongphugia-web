@@ -29,6 +29,9 @@ const ROUTES = [
 // product forms; the gateway refuses everything else for these keys before contacting the function (which enforces it too).
 const MASTER_DATA_ROUTE = /^\/r\/(categories|subcategories|brands|catalog-taxons|product-types|product-sub-types|spec-definitions|spec-options|origins|colors|materials)(\/|$)/
 const MASTER_DATA_OPTIONS = /^\/r\/[a-z-]+\/options$/
+// Owner decision (#310): the Partners and Projects pages are hidden from the Admin until the M5 review. The function keeps its
+// resource definitions; the gateway simply does not route them, so neither the UI nor a direct API call can reach them.
+const HIDDEN_RESOURCE_ROUTE = /^\/r\/(partners|projects)(\/|$)/
 const MAX_BODY_BYTES = 600_000
 const UPSTREAM_TIMEOUT_MS = 8_000
 // The TEST project database lives in Singapore: run the Edge Function next to it instead of next to the caller.
@@ -81,7 +84,7 @@ export async function handleAdminNext(request, environment, { sourceSha, staging
 
   const route = url.pathname.slice(API_PREFIX.length) + url.search
   const path = url.pathname.slice(API_PREFIX.length)
-  if (!ROUTES.some((entry) => entry.method === request.method && entry.pattern.test(path))) return jsonError(404, 'NOT_FOUND', sourceSha)
+  if (HIDDEN_RESOURCE_ROUTE.test(path) || !ROUTES.some((entry) => entry.method === request.method && entry.pattern.test(path))) return jsonError(404, 'NOT_FOUND', sourceSha)
   if (MASTER_DATA_ROUTE.test(path) && !(request.method === 'GET' && MASTER_DATA_OPTIONS.test(path))) return jsonError(403, 'DEV_MANAGED', sourceSha)
   const mutation = request.method !== 'GET'
   if (mutation && !isSameOriginMutation(request, stagingOrigin)) return jsonError(403, 'ORIGIN_NOT_ALLOWED', sourceSha)
