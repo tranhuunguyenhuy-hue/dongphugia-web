@@ -50,7 +50,9 @@ jobs:
           test -n "$DATABASE_URL" || { echo 'M4_BACKUP status=FAIL reason=credential_missing'; exit 1; }
           pg() { docker run --rm -i --network host -e DATABASE_URL "$POSTGRES_IMAGE" psql "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
           if ! out="$(pg -c "select current_user || '|' || session_user || '|' || current_setting('transaction_read_only') || '|' || (select production_writes_allowed::text from dpg_control.target_contract where project_name = 'dongphugia-runtime') || '|' || (select count(*) from dpg_app.products)" 2>/tmp/probe.err)"; then
-            echo "M4_BACKUP status=FAIL stage=probe reason=$(grep -oE '(password authentication failed|role .* does not exist|permission denied|could not translate host|timeout|SSL|Tenant or user not found)' /tmp/probe.err | head -1 | tr -d '"' | sed 's/role .* does not exist/role_missing/')"
+            echo "M4_BACKUP status=FAIL stage=probe"
+            # Sanitised first error line: hosts, addresses and quoted values are redacted; only the error class and role names remain.
+            head -n 2 /tmp/probe.err | sed -E 's/"[^"]*(supabase|pooler)[^"]*"/"<host>"/g; s/\([0-9a-f:.]+\)/(<ip>)/g; s/postgres(ql)?:\/\/[^ ]*/<url>/g' | cut -c1-240
             exit 1
           fi
           IFS='|' read -r current session readonly writes products <<<"$out"
