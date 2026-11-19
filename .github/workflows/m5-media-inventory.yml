@@ -1,0 +1,59 @@
+name: M5 media inventory (read-only)
+
+# Read-only inventory of the Production product storage zone `dpg-products`: object count and bytes per folder (top level and
+# one level below), plus a sample of names. Uses the Storage API listing only: no download, no write, no delete. Output is
+# metadata (folder names, counts, sizes), never credentials.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: Production
+    env:
+      MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+      STORAGE: https://sg.storage.bunnycdn.com/dpg-products
+    steps:
+      - name: List folders and sizes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MEDIA_KEY"; echo "::add-mask::$MEDIA_KEY"
+          list() { curl -sS -m 120 -K <(printf 'header = "AccessKey: %s"\n' "$MEDIA_KEY") -H 'accept: application/json' "$STORAGE/$1"; }
+          list '' > root.json
+          node -e '
+            const r=JSON.parse(require("fs").readFileSync("root.json","utf8"));
+            const files=r.filter(x=>!x.IsDirectory), dirs=r.filter(x=>x.IsDirectory);
+            console.log(`M5_MEDIA root files=${files.length} bytes=${files.reduce((a,x)=>a+x.Length,0)} dirs=${dirs.map(d=>d.ObjectName).join(",")}`);
+            require("fs").writeFileSync("dirs.txt", dirs.map(d=>d.ObjectName).join("\n"));'
+          while read -r dir; do
+            [ -n "$dir" ] || continue
+            list "$dir/" > d.json
+            node -e '
+              const [dir]=process.argv.slice(1); const r=JSON.parse(require("fs").readFileSync("d.json","utf8"));
+              const files=r.filter(x=>!x.IsDirectory), sub=r.filter(x=>x.IsDirectory);
+              const bytes=files.reduce((a,x)=>a+x.Length,0);
+              const ext={}; for (const f of files){const e=(f.ObjectName.match(/\.([a-z0-9]+)$/i)||[,"none"])[1].toLowerCase(); ext[e]=(ext[e]||0)+1}
+              const last=files.map(f=>f.LastChanged).sort().at(-1)||"-";
+              console.log(`M5_MEDIA dir=${dir} files=${files.length} bytes=${bytes} subdirs=${sub.length} ext=${JSON.stringify(ext)} last_changed=${last} sample=${files.slice(0,3).map(f=>f.ObjectName).join("|")} subdir_names=${sub.slice(0,12).map(s=>s.ObjectName).join("|")}`);
+              require("fs").writeFileSync("sub.txt", sub.map(s=>dir+"/"+s.ObjectName).join("\n"));' "$dir"
+            while read -r sd; do
+              [ -n "$sd" ] || continue
+              list "$sd/" > s.json
+              node -e '
+                const [sd]=process.argv.slice(1); const r=JSON.parse(require("fs").readFileSync("s.json","utf8"));
+                const files=r.filter(x=>!x.IsDirectory); console.log(`M5_MEDIA dir=${sd} files=${files.length} bytes=${files.reduce((a,x)=>a+x.Length,0)} subdirs=${r.length-files.length}`);' "$sd"
+            done < sub.txt
+          done < dirs.txt

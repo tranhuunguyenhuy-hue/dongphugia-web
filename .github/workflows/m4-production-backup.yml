@@ -9,6 +9,8 @@ name: M4 Production backup and restore rehearsal
 # access to every table (a role that bypasses RLS, or the project owner); falls back to SUPABASE_RUNTIME_DATABASE_URL.
 # The old runtime-backup.yml role `dpg_backup` does not exist in Production, so that workflow cannot run against it.
 on:
+  schedule:
+    - cron: '41 19 * * *' # 02:41 Vietnam time (quiet), daily encrypted backup + isolated restore rehearsal (M5: replaces the retired runtime-backup schedule)
   workflow_dispatch:
     inputs:
       operation:
@@ -26,6 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  OPERATION: ${{ github.event_name == 'schedule' && 'backup' || inputs.operation }}
   POSTGRES_IMAGE: postgres:17.6-bookworm@sha256:45cd22f8d32e189d245403954882f88e7a8714301fda80dab6da90f1265b25a3
   AGE_RECIPIENT: age12zqtv9r2fc4v2j0kk6v79xrvy66gxcht2uqfxvqske4lzh83uq2qtqhfmc
   PRODUCTION_PROJECT_REF: bonxyxluzlxfkdetryoo
@@ -59,11 +62,12 @@ jobs:
           fi
           IFS='|' read -r current session readonly writes products <<<"$out"
           echo "M4_BACKUP status=PASS stage=probe current_user=$current session_user=$session transaction_read_only=$readonly production_writes_allowed=$writes products=$products"
-          test "$writes" = 'false'
+          # M4 opened Admin writes: the Production contract is now writes=true (M5 #311).
+          test "$writes" = 'true'
           test "$products" -gt 17000
       - name: Row-count manifest, encrypted dump and checksums
         id: dump
-        if: inputs.operation == 'backup'
+        if: env.OPERATION == 'backup'
         shell: bash
         run: |
           set -euo pipefail
@@ -74,6 +78,18 @@ jobs:
           # Production is Public-read-only before the Owner opens writes; counts are taken immediately before and after the dump.
           counts() { pg -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | pg -f - | sort; }
           counts > "$work/counts-before.txt"
+          # Schema object manifest (names/counts only): tables, columns, constraints by type, indexes, functions, policies, triggers, sequences, views.
+          objects() { pg -c "select kind || ' ' || n from (
+            select 'tables' kind, count(*)::text n from pg_tables where schemaname in ('dpg_app','dpg_control')
+            union all select 'columns', count(*)::text from information_schema.columns where table_schema in ('dpg_app','dpg_control')
+            union all select 'constraint_' || contype::text, count(*)::text from pg_constraint c join pg_namespace s on s.oid=c.connamespace where s.nspname in ('dpg_app','dpg_control') group by contype
+            union all select 'indexes', count(*)::text from pg_indexes where schemaname in ('dpg_app','dpg_control')
+            union all select 'functions', count(*)::text from pg_proc p join pg_namespace s on s.oid=p.pronamespace where s.nspname in ('dpg_app','dpg_control')
+            union all select 'policies', count(*)::text from pg_policies where schemaname in ('dpg_app','dpg_control')
+            union all select 'triggers', count(*)::text from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace s on s.oid=c.relnamespace where s.nspname in ('dpg_app','dpg_control') and not t.tgisinternal
+            union all select 'sequences', count(*)::text from pg_sequences where schemaname in ('dpg_app','dpg_control')
+            union all select 'views', count(*)::text from pg_views where schemaname in ('dpg_app','dpg_control')) x order by 1"; }
+          objects > "$work/objects.txt"
           docker run --rm -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --no-privileges --schema=dpg_app --schema=dpg_control' > "$work/production.dump"
           counts > "$work/counts-after.txt"
           cmp "$work/counts-before.txt" "$work/counts-after.txt" || { echo 'M4_BACKUP status=FAIL stage=dump reason=source_changed_during_dump'; exit 1; }
@@ -84,12 +100,12 @@ jobs:
           # The manifest holds table names and counts only (no row data).
           { echo "backup_id=m4-$GITHUB_RUN_ID"; echo "source_sha=$GITHUB_SHA"; echo "plaintext_dump_sha256=$dump_sha"; echo "tables=$tables"; echo "created_utc=$(date -u +%FT%TZ)"; } > "$work/manifest.txt"
           cp "$work/counts-before.txt" "$work/row-counts.txt"
-          ( cd "$work" && sha256sum production.dump.age manifest.txt row-counts.txt > SHA256SUMS )
+          ( cd "$work" && sha256sum production.dump.age manifest.txt row-counts.txt objects.txt > SHA256SUMS )
           rm -f "$work/counts-before.txt" "$work/counts-after.txt"
           echo "bundle=$work" >> "$GITHUB_OUTPUT"
           echo "M4_BACKUP status=PASS stage=dump tables=$tables dump_sha256=$dump_sha encrypted_bytes=$(stat -c %s "$work/production.dump.age")"
       - name: Upload encrypted bundle (14 days)
-        if: inputs.operation == 'backup'
+        if: env.OPERATION == 'backup'
         uses: actions/upload-artifact@v4
         with:
           name: m4-production-backup-${{ github.run_id }}
@@ -97,13 +113,14 @@ jobs:
             ${{ runner.temp }}/m4-backup/production.dump.age
             ${{ runner.temp }}/m4-backup/manifest.txt
             ${{ runner.temp }}/m4-backup/row-counts.txt
+            ${{ runner.temp }}/m4-backup/objects.txt
             ${{ runner.temp }}/m4-backup/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
 
   restore-rehearsal:
     needs: backup
-    if: inputs.operation == 'backup'
+    if: github.event_name == 'schedule' || inputs.operation == 'backup'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: runtime-backup
@@ -133,10 +150,44 @@ jobs:
           # Roles referenced by policies/grants must exist for a faithful restore (names only, no credentials).
           sql -c "do \$\$ declare r text; begin foreach r in array array['anon','authenticated','service_role','dpg_public_catalogue','dpg_readonly','dpg_runtime','dpg_migration','dpg_m2_snapshot_read','dpg_direct_read','dpg_direct_import'] loop if not exists (select 1 from pg_roles where rolname = r) then execute format('create role %I nologin', r); end if; end loop; end \$\$"
           docker cp production.dump scratch:/tmp/production.dump
-          errors="$(docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-privileges /tmp/production.dump 2>&1 | grep -c '^pg_restore: error' || true)"
+          docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-privileges /tmp/production.dump > restore.log 2>&1 || true
+          errors="$(grep -c '^pg_restore: error' restore.log || true)"
           echo "M4_RESTORE restore_errors=$errors"
+          # Error classes only (object/statement names, never row data); the scratch DB has no Supabase platform roles/extensions.
+          grep -A1 '^pg_restore: error' restore.log | grep -E 'ERROR:|error:' | sed -E 's/^pg_restore: error: //; s/[[:space:]]+/ /g' | cut -c1-180 | sort | uniq -c | head -12 | sed 's/^/M4_RESTORE error_class /'
           sql -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | sql -f - | sort > restored-counts.txt
           sort row-counts.txt > expected-counts.txt
-          diff expected-counts.txt restored-counts.txt && echo "M4_RESTORE status=PASS tables=$(wc -l < expected-counts.txt) counts=identical"
+          diff expected-counts.txt restored-counts.txt && echo "M4_RESTORE counts=identical tables=$(wc -l < expected-counts.txt)"
+          sql -c "select kind || ' ' || n from (
+            select 'tables' kind, count(*)::text n from pg_tables where schemaname in ('dpg_app','dpg_control')
+            union all select 'columns', count(*)::text from information_schema.columns where table_schema in ('dpg_app','dpg_control')
+            union all select 'constraint_' || contype::text, count(*)::text from pg_constraint c join pg_namespace s on s.oid=c.connamespace where s.nspname in ('dpg_app','dpg_control') group by contype
+            union all select 'indexes', count(*)::text from pg_indexes where schemaname in ('dpg_app','dpg_control')
+            union all select 'functions', count(*)::text from pg_proc p join pg_namespace s on s.oid=p.pronamespace where s.nspname in ('dpg_app','dpg_control')
+            union all select 'policies', count(*)::text from pg_policies where schemaname in ('dpg_app','dpg_control')
+            union all select 'triggers', count(*)::text from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace s on s.oid=c.relnamespace where s.nspname in ('dpg_app','dpg_control') and not t.tgisinternal
+            union all select 'sequences', count(*)::text from pg_sequences where schemaname in ('dpg_app','dpg_control')
+            union all select 'views', count(*)::text from pg_views where schemaname in ('dpg_app','dpg_control')) x order by 1" > restored-objects.txt
+          if diff objects.txt restored-objects.txt > objects.diff; then echo 'M4_RESTORE objects=identical'; else echo 'M4_RESTORE objects=DIFFERENT'; sed 's/^/M4_RESTORE object_diff /' objects.diff; fi
+          paste -d' ' objects.txt | sed 's/^/M4_RESTORE source_object /'
+          cmp -s expected-counts.txt restored-counts.txt
+          echo "M4_RESTORE status=PASS tables=$(wc -l < expected-counts.txt) counts=identical"
           rm -f production.dump
           docker rm -f scratch >/dev/null
+
+  failure-signal:
+    needs: [backup, restore-rehearsal]
+    if: failure()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: runtime-backup
+    steps:
+      - name: Emit a visible, sanitized failure signal
+        env:
+          WEBHOOK: ${{ secrets.BACKUP_FAILURE_WEBHOOK_URL }}
+        run: |
+          echo "::error title=Production backup failed::m4-production-backup run $GITHUB_RUN_ID failed (${{ github.event_name }}). Check the run; no data in this message."
+          echo "### Production backup FAILED (run $GITHUB_RUN_ID)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -m 15 -X POST -H 'content-type: application/json' --data "{\"text\":\"dongphugia Production backup failed: run $GITHUB_RUN_ID\"}" "$WEBHOOK" >/dev/null || echo 'webhook delivery failed'
+          fi
