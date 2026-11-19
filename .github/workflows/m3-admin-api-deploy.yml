@@ -49,7 +49,7 @@ jobs:
           grep -q 'verify_jwt = false' supabase/config.toml
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.2.0
       - name: Deploy function and set secrets (TEST project only)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_TEST_ACCESS_TOKEN }}
