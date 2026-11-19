@@ -1,33 +1,33 @@
-# Current checkpoint — M3 technical gate evidence complete on Staging; M4 prepared, waiting for Owner acceptance
+# Current checkpoint — M4 accepted; M5 audit and bounded fixes in progress
 
-Updated 2026-11-19 (UTC) by Claude Code under the Owner direction in [#309 / 7004192339](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309#issuecomment-7004192339) (earlier delegation: [#360 / 6988598277](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6988598277)). Working issue [#360](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360); milestone [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309). Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) and [#360 / 6999610211](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/360#issuecomment-6999610211). Latest status comments: #360 / 6990205607, #309 / 6989916507.
+Updated 2026-11-19 (UTC) by Claude Code under [#311 / 7013573147](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7013573147). M4 Owner UAT PASS: [#310 / 7013550757](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310#issuecomment-7013550757). Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306), [#311 CDN scope / 7007320247](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7007320247).
 
 ## Status
 
-- M1 and M2: DONE / Owner UAT PASS (unchanged).
-- M3: Owner visual/scope UAT PASS (shadcn/ui Zinc, brand-blue primary CTA, softer shadows, Dev-managed master data; [#309 / 7004192339](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309#issuecomment-7004192339)). Final hosted technical gate on main `d022689` (function deployed by run 44495653339, Worker published at `30e1b69`, deployment `1351eb11…`): API 52/52 (3 roles + Owner), UI 25 steps x 7 contexts (Chromium and WebKit; desktop, iPad portrait/landscape, mobile), replay/signature/CSRF-marker 9/9 (run 44494252070), freshness 0.6-0.7 s, first-attempt latency within the 3 s gate, zero 5xx. Evidence: [docs/ops/m3-final-gate](m3-final-gate/). Owner acceptance of the technical gate is pending.
-- Scope: catalogue master data (categories, brands, taxons, product types, specifications, origins/colors/materials) is Dev-managed (no Admin screen or write path for any role; lookups are read-only and need `products:read`). The legacy `/admin` UI is retired on staging (redirects to `/admin-next/`); its source and artifacts remain in the repository. See the [runbook](../deploy/m3-admin-api-runbook.md).
-- M4: plan and package prepared, **nothing executed**: [m4-production-admin-plan.md](../deploy/m4-production-admin-plan.md). M5: backlog open; M4/M5 stay on HOLD until the Owner accepts M3.
+- M1, M2, M3, M4: DONE / Owner UAT PASS. Active milestone: M5 (#311).
+- Production runs the combined Worker (canonical Public + Admin under `/admin-next`, legacy `/admin*` → 302) from main `24a5479`, Worker version `e7dda372-7cfa-418f-b729-b8d34ed5dcb6`; Edge Function `admin-api` on `bonxyxluzlxfkdetryoo`; `production_writes_allowed = true`; migrations `001`/`002` applied; 1 admin (`admin@dongphugia.vn`).
+- Scope: catalogue master data is Dev-managed (read-only lookups). Partners/Projects hidden in the Admin (gateway 404) pending M5 review. Homepage hero banners are DB-managed (`dpg_app.banners`, HERO, `sort_order`) with the verified historical hero as automatic fallback.
+- New uploads go to `dpg-products.b-cdn.net`; the legacy host `cdn.dongphugia.com.vn` has a TLS problem and is mapped to that host on display (Admin) and in Public rendering. Stored URLs are unchanged.
 
-## Blocked on the Owner (only after M3 acceptance, in this order)
+## Release and rollback
 
-1. Keep a durable copy of the M2 recovery artifact (section below) or confirm one exists.
-2. Create a Supabase token limited to Production (`bonxyxluzlxfkdetryoo`) and a fresh Production `ADMIN_API_HMAC_SECRET` as GitHub environment secrets; provide the Production media key/host as Worker secrets.
-3. At M4 start: set `dpg_control.target_contract.production_writes_allowed = true`; create the first Production admin (hash only). Details: [M4 plan](../deploy/m4-production-admin-plan.md).
+- Release lane: `.github/workflows/m4-production-admin-release.yml` (verify/publish, exact SHA, active version must equal the recorded rollback target, secrets via `--secrets-file`, paced smoke with bounded identity retry, no automatic rollback). `v1-worker-release.yml` refuses to publish while Production carries the Admin.
+- Function: `m4-production-function-deploy.yml` (Supabase CLI pinned 3.2.0). Rollback order: Worker `wrangler rollback <previous version>` (does not undo SQL) → function delete → banner grant/policy revoke → `002`/`001` rollbacks; restore only for data loss.
+
+## Backup
+
+- `m4-production-backup.yml`: daily 19:41 UTC, encrypted (age), SHA256SUMS, isolated restore rehearsal comparing per-table row counts and schema objects, visible failure signal. The legacy `runtime-backup.yml` schedule is retired (its target project was deleted).
+- Credential: currently the project owner role via `M4_BACKUP_DATABASE_URL`; least-privilege replacement (`dpg_backup_reader`) proposed in #311, Owner action.
 
 ## Environment (verify before writes)
 
-- Production Worker `dongphugia-v1-public-production`: version `edcb15b2-bcb0-46d6-b0c6-31efb495a8c7` (deployment `116da805…`, source `e73fb13`), Public-only; rollback targets `5577b78d…` then `b179b339…`. **Unchanged by this work.**
-- Fixed Preview `staging`: main `30e1b69` (Worker) with the function from main `d022689`; TEST database has `006_m3_test_admin_scope_revoke` applied (Owner ran it in the SQL Editor; verified read-only).
-- Supabase: Production `bonxyxluzlxfkdetryoo` (read-only checks only: writes flag `false`, no admin users, 17,752 products); TEST `uybumsnyqpwcidjxmfsv`. Production schema differs from TEST (no `products.version`; `audit_logs` has no `request_id/changed_fields`): handled by the M4 migration and portable audit rows.
+- Production Worker `dongphugia-v1-public-production` (Hyperdrive `905f5791…`, role `dpg_public_catalogue`); fixed Preview `staging` inside it (TEST `uybumsnyqpwcidjxmfsv`).
+- Denylisted historical database ref `tlmgudfhsyzayiazuugf` (deleted runtime project) is neither of the approved targets. Do not use it.
 
-- Denylisted historical database ref `tlmgudfhsyzayiazuugf` is neither of the approved targets. Do not use it.
+## Next steps
 
-## Next steps (in order)
-
-1. Owner reviews the M3 technical report in #309 and accepts or lists defects.
-2. M4 (after acceptance and the Owner items above): backup via `runtime-backup.yml`, migrations `001` then `002`, Production function deploy, Production Worker with the `/admin` redirect and a non-legacy upload path, verification and rollback readiness (full order in the M4 plan; the Production Worker code listed there still has to be written).
-3. M5 backlog: PLP `sort`/`price`/`page=1` URLs (product decision), legacy "quick create product" modal, CSP via response headers, mobile Orders stat cards in two columns, Supabase CLI version pin in `m3-admin-api-deploy.yml` (GitHub API rate limit during `setup-cli`).
+1. M5 report and Owner UAT (#311): stability, backup/recovery, functional audit, CDN/Bunny inventory, backlog.
+2. Owner decisions listed in the M5 report (least-privilege backup role, CDN/storage cleanup proposals); no deletions or DNS changes without separate approval.
 
 ## M2 recovery — time-sensitive
 
