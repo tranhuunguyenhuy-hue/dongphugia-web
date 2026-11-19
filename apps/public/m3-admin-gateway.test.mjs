@@ -53,7 +53,7 @@ describe('Admin shell gateway', () => {
     }
     expect(calls).toHaveLength(20)
     const { url, init } = calls[6]
-    expect(url).toBe(`${FN}/r/partners/3`)
+    expect(url).toBe(`${FN}/r/banners/3`)
     expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
     calls.length = 0
     for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['DELETE', '/orders/1'], ['POST', '/orders/1/status'], ['PATCH', '/orders/1/complete'], ['PATCH', '/quotes/1/payment'], ['GET', '/orders/1/status'], ['POST', '/quotes'], ['PATCH', '/products/bulk'], ['GET', '/products/bulk'], ['PATCH', '/products/5/variants'], ['DELETE', '/products/5/variants'], ['POST', '/products/5/variants/7']]) {
