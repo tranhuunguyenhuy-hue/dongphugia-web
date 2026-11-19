@@ -209,7 +209,7 @@ describe('Production artifact composition', () => {
   it('derives the Production config only from a Production Public release', () => {
     const base = { name: 'dongphugia-v1-public-production', main: 'worker/index.js', assets: { directory: 'assets', binding: 'ASSETS', not_found_handling: 'none' }, vars: { APP_ENV: 'production', APP_BUILD_TARGET: 'public', APP_ORIGIN: ORIGIN, PUBLIC_CATALOGUE_SOURCE: 'postgresql' } }
     const media = { zone: 'dpg-products', storageHost: 'sg.storage.bunnycdn.com' }
-    const config = productionAdminConfig(base, media) as Record<string, any>
+    const config = productionAdminConfig(base, media) as Record<string, unknown> & { main: string; images: unknown; assets: { run_worker_first: string[] }; vars: Record<string, string> }
     expect(config.main).toBe('worker/m4-entry.mjs'); expect(config.images).toEqual({ binding: 'IMAGES' })
     expect(config.assets.run_worker_first).toEqual(expect.arrayContaining(['/admin-next', '/admin-next/', '/admin', '/admin/*', '/api/upload-image']))
     expect(config.vars.ADMIN_API_URL).toBe(FN); expect(config.vars.BUNNY_CDN_HOSTNAME).toBe('cdn.dongphugia.com.vn')
