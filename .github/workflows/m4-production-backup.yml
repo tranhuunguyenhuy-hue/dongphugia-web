@@ -1,0 +1,138 @@
+name: M4 Production backup and restore rehearsal
+
+# Read-only logical backup of the Production Supabase project (dpg_app + dpg_control) BEFORE any M4 change, encrypted with the
+# existing age recipient, plus a checksum-verified restore into a scratch PostgreSQL service container and an exact row-count
+# comparison. It never writes to Production and never prints connection details. `probe` only checks that the credential
+# reaches the exact Production target contract (role names are printed, nothing else).
+#
+# Credential (environment `runtime-backup`): secret M4_BACKUP_DATABASE_URL, a read-only login for the Production project with
+# access to every table (a role that bypasses RLS, or the project owner); falls back to SUPABASE_RUNTIME_DATABASE_URL.
+# The old runtime-backup.yml role `dpg_backup` does not exist in Production, so that workflow cannot run against it.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: probe = connectivity/target check only; backup = encrypted dump + isolated restore rehearsal
+        required: true
+        type: choice
+        options: [probe, backup]
+        default: probe
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m4-production-backup
+  cancel-in-progress: false
+
+env:
+  POSTGRES_IMAGE: postgres:17.6-bookworm@sha256:45cd22f8d32e189d245403954882f88e7a8714301fda80dab6da90f1265b25a3
+  AGE_RECIPIENT: age12zqtv9r2fc4v2j0kk6v79xrvy66gxcht2uqfxvqske4lzh83uq2qtqhfmc
+  PRODUCTION_PROJECT_REF: bonxyxluzlxfkdetryoo
+
+jobs:
+  backup:
+    if: github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: runtime-backup
+    env:
+      DATABASE_URL: ${{ secrets.M4_BACKUP_DATABASE_URL || secrets.SUPABASE_RUNTIME_DATABASE_URL }}
+    outputs:
+      bundle: ${{ steps.dump.outputs.bundle }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: Probe the Production target (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo 'M4_BACKUP status=FAIL reason=credential_missing'; exit 1; }
+          pg() { docker run --rm -i --network host -e DATABASE_URL "$POSTGRES_IMAGE" psql "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+          if ! out="$(pg -c "select current_user || '|' || session_user || '|' || current_setting('transaction_read_only') || '|' || (select production_writes_allowed::text from dpg_control.target_contract where project_name = 'dongphugia-runtime') || '|' || (select count(*) from dpg_app.products)" 2>/tmp/probe.err)"; then
+            echo "M4_BACKUP status=FAIL stage=probe reason=$(grep -oE '(password authentication failed|role .* does not exist|permission denied|could not translate host|timeout|SSL|Tenant or user not found)' /tmp/probe.err | head -1 | tr -d '"' | sed 's/role .* does not exist/role_missing/')"
+            exit 1
+          fi
+          IFS='|' read -r current session readonly writes products <<<"$out"
+          echo "M4_BACKUP status=PASS stage=probe current_user=$current session_user=$session transaction_read_only=$readonly production_writes_allowed=$writes products=$products"
+          test "$writes" = 'false'
+          test "$products" -gt 17000
+      - name: Row-count manifest, encrypted dump and checksums
+        id: dump
+        if: inputs.operation == 'backup'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends age >/dev/null
+          work="$RUNNER_TEMP/m4-backup"; mkdir -p "$work"
+          chmod 700 "$work"
+          pg() { docker run --rm -i --network host -e DATABASE_URL "$POSTGRES_IMAGE" psql "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+          # Production is Public-read-only before the Owner opens writes; counts are taken immediately before and after the dump.
+          counts() { pg -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | pg -f - | sort; }
+          counts > "$work/counts-before.txt"
+          docker run --rm -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --no-privileges --schema=dpg_app --schema=dpg_control' > "$work/production.dump"
+          counts > "$work/counts-after.txt"
+          cmp "$work/counts-before.txt" "$work/counts-after.txt" || { echo 'M4_BACKUP status=FAIL stage=dump reason=source_changed_during_dump'; exit 1; }
+          tables="$(wc -l < "$work/counts-before.txt")"
+          dump_sha="$(sha256sum "$work/production.dump" | cut -d' ' -f1)"
+          age -r "$AGE_RECIPIENT" -o "$work/production.dump.age" "$work/production.dump"
+          shred -u "$work/production.dump" 2>/dev/null || rm -f "$work/production.dump"
+          # The manifest holds table names and counts only (no row data).
+          { echo "backup_id=m4-$GITHUB_RUN_ID"; echo "source_sha=$GITHUB_SHA"; echo "plaintext_dump_sha256=$dump_sha"; echo "tables=$tables"; echo "created_utc=$(date -u +%FT%TZ)"; } > "$work/manifest.txt"
+          cp "$work/counts-before.txt" "$work/row-counts.txt"
+          ( cd "$work" && sha256sum production.dump.age manifest.txt row-counts.txt > SHA256SUMS )
+          rm -f "$work/counts-before.txt" "$work/counts-after.txt"
+          echo "bundle=$work" >> "$GITHUB_OUTPUT"
+          echo "M4_BACKUP status=PASS stage=dump tables=$tables dump_sha256=$dump_sha encrypted_bytes=$(stat -c %s "$work/production.dump.age")"
+      - name: Upload encrypted bundle (14 days)
+        if: inputs.operation == 'backup'
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-production-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/m4-backup/production.dump.age
+            ${{ runner.temp }}/m4-backup/manifest.txt
+            ${{ runner.temp }}/m4-backup/row-counts.txt
+            ${{ runner.temp }}/m4-backup/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  restore-rehearsal:
+    needs: backup
+    if: inputs.operation == 'backup'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    environment: runtime-backup
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: m4-production-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/restore
+      - name: Verify checksums, decrypt, restore into a scratch database and compare every table count
+        shell: bash
+        env:
+          AGE_IDENTITY: ${{ secrets.BACKUP_AGE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends age >/dev/null
+          cd "$RUNNER_TEMP/restore"
+          sha256sum --check SHA256SUMS
+          umask 077
+          printf '%s\n' "$AGE_IDENTITY" > identity.txt
+          age -d -i identity.txt -o production.dump production.dump.age
+          rm -f identity.txt
+          expected_sha="$(sed -n 's/^plaintext_dump_sha256=//p' manifest.txt)"
+          test "$(sha256sum production.dump | cut -d' ' -f1)" = "$expected_sha"
+          docker run -d --name scratch -e POSTGRES_PASSWORD=scratch -p 55432:5432 "$POSTGRES_IMAGE" >/dev/null
+          for _ in $(seq 1 40); do docker exec scratch pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+          sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+          # Roles referenced by policies/grants must exist for a faithful restore (names only, no credentials).
+          sql -c "do \$\$ declare r text; begin foreach r in array array['anon','authenticated','service_role','dpg_public_catalogue','dpg_readonly','dpg_runtime','dpg_migration','dpg_m2_snapshot_read','dpg_direct_read','dpg_direct_import'] loop if not exists (select 1 from pg_roles where rolname = r) then execute format('create role %I nologin', r); end if; end loop; end \$\$"
+          docker cp production.dump scratch:/tmp/production.dump
+          errors="$(docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-privileges /tmp/production.dump 2>&1 | grep -c '^pg_restore: error' || true)"
+          echo "M4_RESTORE restore_errors=$errors"
+          sql -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | sql -f - | sort > restored-counts.txt
+          sort row-counts.txt > expected-counts.txt
+          diff expected-counts.txt restored-counts.txt && echo "M4_RESTORE status=PASS tables=$(wc -l < expected-counts.txt) counts=identical"
+          rm -f production.dump
+          docker rm -f scratch >/dev/null
