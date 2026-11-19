@@ -1,0 +1,99 @@
+name: M5 CDN Phase 0 and scratch rehearsal (read-only)
+
+# Read-only. (1) Exact object listing of the Bunny zone `dpg-products` (Production media key, listing only).
+# (2) Stored legacy-CDN references from Production through the least-privilege backup reader, compared with the listing,
+# bounded HEAD checks on the default pull zone, generation of the guarded SQL, and a rehearsal of that SQL on a SCRATCH
+# PostgreSQL restored from the same reader. Nothing is written to Production or to Bunny. The generated SQL, counts and
+# exclusion lists contain public media paths only (no credentials, no row data) and are uploaded for review (7 days).
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  POSTGRES_IMAGE: postgres:17.6-bookworm@sha256:45cd22f8d32e189d245403954882f88e7a8714301fda80dab6da90f1265b25a3
+
+jobs:
+  storage:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - name: List the storage zone (metadata only)
+        env:
+          MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$MEDIA_KEY"; echo "::add-mask::$MEDIA_KEY"
+          node scripts/m5-cdn/list-storage.mjs objects.tsv
+          gzip -9 objects.tsv
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m5-storage-objects
+          path: objects.tsv.gz
+          retention-days: 3
+
+  analyse:
+    needs: storage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: runtime-backup
+    env:
+      DATABASE_URL: ${{ secrets.M4_BACKUP_READER_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: m5-storage-objects
+          path: ${{ runner.temp }}/storage
+      - name: Extract references, compare with the zone, check delivery, build the SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+          pgp() { docker run --rm -i --network host -e DATABASE_URL "$POSTGRES_IMAGE" psql "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+          p0="$RUNNER_TEMP/p0"; mkdir -p "$p0" out
+          gunzip -c "$RUNNER_TEMP/storage/objects.tsv.gz" > "$p0/objects.tsv"
+          pgp -f - < scripts/m5-cdn/refs.sql > "$p0/refs.tsv"
+          pgp -f - < scripts/m5-cdn/products.sql > "$p0/products.tsv"
+          node scripts/m5-cdn/phase0.mjs "$p0/objects.tsv" "$p0/refs.tsv" "$p0/products.tsv" "$p0"
+          node scripts/m5-cdn/head-check.mjs "$p0/head-urls.txt" "$p0/head.tsv"
+          node scripts/m5-cdn/build-sql.mjs "$p0" "run $GITHUB_RUN_ID (main ${GITHUB_SHA::7})" 262144000 out
+          cp "$p0/summary.json" "$p0/excluded-urls.txt" "$p0/tiles-decision.json" "$p0/distinct-paths.tsv" "$p0/head.tsv" out/
+          # Same discipline as the backup: the exclusion list is public media paths only.
+          ! grep -qiE 'postgres(ql)?://|accesskey|password' out/*.sql
+      - name: Rehearse 002 / 003 / 004 on a scratch PostgreSQL
+        shell: bash
+        env:
+          OUT: ${{ github.workspace }}/out
+          REPO: ${{ github.workspace }}
+        run: bash scripts/m5-cdn/rehearse.sh | tee out/rehearsal.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: m5-cdn-phase0
+          path: |
+            out/*.sql
+            out/summary.json
+            out/excluded-urls.txt
+            out/tiles-decision.json
+            out/distinct-paths.tsv
+            out/head.tsv
+            out/rehearsal.log
+          retention-days: 7
