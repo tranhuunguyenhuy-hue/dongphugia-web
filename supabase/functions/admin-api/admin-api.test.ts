@@ -242,8 +242,8 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(JSON.stringify(a.json.data)).not.toMatch(/blog:write|dpg_app|select |insert /)
       const keysOf = async (who: string) => (await call('GET', '/schema', undefined, { token: who })).json.data.resources.map((r: { key: string }) => r.key).sort()
       const childKeys = ['product-documents', 'product-images', 'product-relationships', 'product-spec-values', 'product-taxon-assignments']
-      expect(await keysOf(manager)).toEqual(['categories', 'colors', 'customers', 'materials', 'origins', ...childKeys, 'products', 'subcategories'].sort())
-      expect(await keysOf(sale)).toEqual(['colors', 'customers', 'materials', 'origins', ...childKeys, 'products'].sort())
+      expect(await keysOf(manager)).toEqual(['customers', ...childKeys, 'products'].sort())
+      expect(await keysOf(sale)).toEqual(['customers', ...childKeys, 'products'].sort())
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'products').children.map((c: { key: string }) => c.key).sort()).toEqual(childKeys.filter((k) => k !== 'product-images')) // the gallery has its own panel
       expect(a.json.data.resources.find((r: { key: string }) => r.key === 'product-documents')).toMatchObject({ inNav: false, canCreate: true })
       expect((await call('GET', '/schema', undefined, { token: manager })).json.data.resources.find((r: { key: string }) => r.key === 'customers')).toMatchObject({ canCreate: true, canUpdate: true })
@@ -371,56 +371,46 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       expect(code(await call('PATCH', `/r/projects/${project.json.data.id}`, { input: { tags: [''] } }, { token: t }))).toBe('VALIDATION_FAILED')
     })
 
-    it('limits categories to the banner and keeps taxonomy/PIM resources admin-only', async () => {
+    it('serves Dev-managed master data as read-only options only, for every role (#309 scope decision)', async () => {
       const admin = await token('admin'), manager = await token('manager'), sale = await token('sale')
-      expect(code(await call('GET', '/r/categories', undefined, { token: sale }))).toBe('FORBIDDEN')
-      expect((await call('GET', '/r/categories', undefined, { token: manager })).status).toBe(200)
-      expect(code(await call('PATCH', '/r/categories/1', { input: { banner_url: `${MEDIA}/c.webp` } }, { token: manager }))).toBe('FORBIDDEN')
-      for (const input of [{ name: 'Hack' }, { slug: 'hack' }, { is_active: false }, { banner_url: 'https://evil.example/c.webp' }]) {
-        expect(code(await call('PATCH', '/r/categories/1', { input }, { token: admin })), JSON.stringify(input)).toBe('VALIDATION_FAILED')
+      const MASTER = ['categories', 'subcategories', 'brands', 'catalog-taxons', 'product-types', 'product-sub-types', 'spec-definitions', 'spec-options', 'origins', 'colors', 'materials']
+      for (const who of [admin, manager, sale]) {
+        for (const key of MASTER) {
+          for (const [method, route, body] of [['GET', `/r/${key}`], ['GET', `/r/${key}/1`], ['POST', `/r/${key}`, { input: { name: 'x' } }], ['PATCH', `/r/${key}/1`, { input: { name: 'x' } }], ['DELETE', `/r/${key}/1`, {}]] as [string, string, unknown?][]) {
+            expect(code(await call(method, route, body, { token: who })), `${method} ${route}`).toBe('DEV_MANAGED')
+          }
+        }
       }
-      const set = await call('PATCH', '/r/categories/1', { input: { banner_url: `${MEDIA}/category-banners/c.webp` } }, { token: admin })
-      expect(set.json.data).toMatchObject({ name: 'Cat', banner_url: `${MEDIA}/category-banners/c.webp` })
-      expect((await call('PATCH', '/r/categories/1', { input: { banner_url: '' } }, { token: admin })).json.data.banner_url).toBeNull()
-      expect(code(await call('POST', '/r/categories', { input: { banner_url: `${MEDIA}/x.webp` } }, { token: admin }))).toBe('NOT_FOUND')
-      expect(code(await call('DELETE', '/r/categories/1', {}, { token: admin }))).toBe('NOT_FOUND')
-      await expect(apiPool.query("update dpg_app.categories set name='x'"), 'db').rejects.toThrow(/permission denied/)
+      expect((await call('GET', '/r/brands/options', undefined, { token: admin })).status).toBe(200)
+      expect((await call('GET', '/r/categories/options', undefined, { token: manager })).status).toBe(200)
+      expect((await call('GET', '/r/colors/options', undefined, { token: sale })).status).toBe(200)
+      expect(code(await call('GET', '/r/categories/options', undefined, { token: sale }))).toBe('FORBIDDEN')
+      expect(code(await call('GET', '/r/brands/options', undefined, { token: 'none' }))).toBe('UNAUTHENTICATED')
+      // The database enforces the same boundary even if a handler were wrong: no write privilege remains on the master tables.
+      for (const statement of ["update dpg_app.categories set name='x'", "update dpg_app.brands set name='x'", "insert into dpg_app.brands(name,slug) values ('x','y')", 'delete from dpg_app.brands',
+        "insert into dpg_app.catalog_taxons(name,slug,canonical_path) values ('x','y','/y')", "update dpg_app.product_types set name='x'", "insert into dpg_app.spec_definitions(key,label) values ('k','l')", "insert into dpg_app.spec_options(spec_definition_id,value,slug) values (1,'v','s')",
+        "update dpg_app.subcategories set name='x'", "update dpg_app.product_sub_types set name='x'"]) {
+        await expect(apiPool.query(statement), statement).rejects.toThrow(/permission denied/)
+      }
     })
 
-    it('manages brands, taxons, types and specifications without hard delete', async () => {
-      const t = await token('admin'), manager = await token('manager')
-      for (const route of ['/r/brands', '/r/catalog-taxons', '/r/product-types', '/r/spec-definitions']) expect(code(await call('GET', route, undefined, { token: manager })), route).toBe('FORBIDDEN')
-      const brand = await call('POST', '/r/brands', { input: { name: 'TOTO', slug: 'toto', origin_country: 'Nhật Bản', website_url: 'https://toto.example/' } }, { token: t })
-      expect(brand.status).toBe(201); expect(brand.json.data).toMatchObject({ slug: 'toto', is_active: true, is_featured: false, sort_order: 0 })
-      expect(code(await call('POST', '/r/brands', { input: { name: 'X', slug: 'x', website_url: 'javascript:alert(1)' } }, { token: t }))).toBe('VALIDATION_FAILED')
-      expect((await call('PATCH', `/r/brands/${brand.json.data.id}`, { input: { is_active: false, logo_url: `${MEDIA}/brands/toto.webp` } }, { token: t })).json.data).toMatchObject({ is_active: false, logo_url: `${MEDIA}/brands/toto.webp` })
-      expect((await call('GET', '/r/brands?is_active=false', undefined, { token: t })).json.data.total).toBe(1)
-      expect(code(await call('DELETE', `/r/brands/${brand.json.data.id}`, {}, { token: t }))).toBe('NOT_FOUND')
-
-      const root = await call('POST', '/r/catalog-taxons', { input: { name: 'Thiết bị', slug: 'thiet-bi', canonical_path: '/thiet-bi' } }, { token: t })
-      expect(root.json.data).toMatchObject({ parent_id: null, depth: 0, kind: 'type', status: 'active', is_indexable: true })
-      const child = await call('POST', '/r/catalog-taxons', { input: { name: 'Bồn cầu', slug: 'bon-cau', canonical_path: '/thiet-bi/bon-cau', depth: 1, parent_id: root.json.data.id } }, { token: t })
-      expect(child.json.data.parent_id).toBe(root.json.data.id)
-      expect(code(await call('POST', '/r/catalog-taxons', { input: { name: 'Mồ côi', slug: 'mo-coi', canonical_path: '/mo-coi', parent_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
-      expect((await call('PATCH', `/r/catalog-taxons/${child.json.data.id}`, { input: { parent_id: null } }, { token: t })).json.data.parent_id).toBeNull()
-      expect(code(await call('PATCH', `/r/catalog-taxons/${child.json.data.id}`, { input: { depth: 11 } }, { token: t }))).toBe('VALIDATION_FAILED')
-
-      const type = await call('POST', '/r/product-types', { input: { subcategory_id: 1, name: 'Bồn cầu 1 khối', slug: 'bon-cau-1-khoi', filter_policy: { price: true } } }, { token: t })
-      expect(type.json.data).toMatchObject({ filter_policy: { price: true }, is_active: true })
-      for (const bad of [{ filter_policy: [1] }, { filter_policy: 'x' }, { subcategory_id: 'abc' }]) expect(code(await call('POST', '/r/product-types', { input: { subcategory_id: 1, name: 'n', slug: 's', ...bad } }, { token: t })), JSON.stringify(bad)).toBe('VALIDATION_FAILED')
-      expect(code(await call('POST', '/r/product-types', { input: { subcategory_id: 999, name: 'n', slug: 's' } }, { token: t }))).toBe('REFERENCE_CONFLICT')
-      const sub = await call('POST', '/r/product-sub-types', { input: { product_type_id: type.json.data.id, name: 'Nắp êm', slug: 'nap-em' } }, { token: t })
-      expect(sub.status).toBe(201)
-      expect((await call('GET', `/r/product-sub-types?product_type_id=${type.json.data.id}`, undefined, { token: t })).json.data.total).toBe(1)
-
-      const spec = await call('POST', '/r/spec-definitions', { input: { key: 'color', label: 'Màu sắc', is_filterable: true, normalize_rule: { lower: true } } }, { token: t })
-      expect(spec.json.data).toMatchObject({ data_type: 'text', is_pdp_visible: true, normalize_rule: { lower: true } })
-      expect(code(await call('POST', '/r/spec-definitions', { input: { key: 'color', label: 'Trùng' } }, { token: t }))).toBe('DUPLICATE')
-      expect((await call('PATCH', `/r/spec-definitions/${spec.json.data.id}`, { input: { unit: 'mm', normalize_rule: {} } }, { token: t })).json.data).toMatchObject({ unit: 'mm', normalize_rule: {} })
-      const option = await call('POST', '/r/spec-options', { input: { spec_definition_id: spec.json.data.id, value: 'Trắng', slug: 'trang', aliases: ['white', 'trắng'] } }, { token: t })
-      expect(option.json.data).toMatchObject({ aliases: ['white', 'trắng'], is_active: true })
-      expect(code(await call('PATCH', `/r/spec-options/${option.json.data.id}`, { input: { value: 'Đen' } }, { token: t }))).toBe('NOT_FOUND') // legacy has no option update
-      expect(code(await call('POST', '/r/spec-options', { input: { spec_definition_id: spec.json.data.id, value: 'v', slug: 's', aliases: [''] } }, { token: t }))).toBe('VALIDATION_FAILED')
+    it('006 revoke-only migration removes the legacy master-data writes on an already-granted TEST database and its rollback restores them', async () => {
+      const MASTER = ['categories', 'subcategories', 'brands', 'catalog_taxons', 'product_types', 'product_sub_types', 'spec_definitions', 'spec_options']
+      const strip = (sql: string) => sql.replace(/-- guard:begin[\s\S]*?-- guard:end\n/, '')
+      const forward = strip(await readFile(path.join(root, 'supabase/m3-test/006_m3_test_admin_scope_revoke.sql'), 'utf8'))
+      const rollback = await readFile(path.join(root, 'supabase/m3-test/006_m3_test_admin_scope_revoke_rollback.sql'), 'utf8')
+      const writes = async (table: string, command: 'INSERT' | 'UPDATE') => (await owner.query('select has_any_column_privilege($1, $2, $3) as ok', [apiRole, `dpg_app.${table}`, command])).rows[0].ok as boolean
+      const policies = async () => Number((await owner.query("select count(*) as n from pg_policies where schemaname='dpg_app' and tablename = any($1) and policyname in ('m3_admin_api_insert','m3_admin_api_update','m3_admin_api_delete')", [MASTER])).rows[0].n)
+      await owner.query(rollback) // state as before the Owner scope decision
+      expect(await writes('brands', 'INSERT')).toBe(true); expect(await writes('categories', 'UPDATE')).toBe(true); expect(await policies()).toBeGreaterThan(0)
+      await owner.query(forward)
+      for (const table of MASTER) { expect(await writes(table, 'INSERT'), `${table} insert`).toBe(false); expect(await writes(table, 'UPDATE'), `${table} update`).toBe(false) }
+      expect(await policies()).toBe(0)
+      expect((await owner.query('select has_table_privilege($1, $2, $3) as ok', [apiRole, 'dpg_app.brands', 'DELETE'])).rows[0].ok).toBe(false)
+      expect((await owner.query('select has_any_column_privilege($1, $2, $3) as ok', [apiRole, 'dpg_app.brands', 'SELECT'])).rows[0].ok).toBe(true) // lookups keep working
+      expect(await writes('products', 'UPDATE')).toBe(true); expect(await writes('product_spec_values', 'INSERT')).toBe(true); expect(await writes('product_taxon_assignments', 'INSERT')).toBe(true) // per-product records stay editable
+      await owner.query(forward) // idempotent
+      expect(await writes('brands', 'INSERT')).toBe(false)
     })
 
     it('lets sale managers write customers, sale read only, and rejects duplicate phones', async () => {
@@ -689,12 +679,12 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect((await call('DELETE', `/r/product-documents/${doc.json.data.id}`, {}, { token: t })).json.data.result).toBe('deleted')
 
         // spec values (numeric + JSON + option), taxon assignments, relationships (auto sort order, unique per type)
-        const spec = (await call('POST', '/r/spec-definitions', { input: { key: 'dung-tich', label: 'Dung tích' } }, { token: t })).json.data.id
+        const spec = Number((await owner.query("insert into dpg_app.spec_definitions(key,label) values ('dung-tich','Dung tích') returning id")).rows[0].id) // master data is Dev-managed: fixture inserted as owner
         const sv = await call('POST', '/r/product-spec-values', { input: { product_id: 2, spec_definition_id: spec, value_number: -1.5, value_json: { unit: 'l' }, raw_key: 'Dung tích' } }, { token: t })
         expect(sv.status).toBe(201); expect(sv.json.data).toMatchObject({ value_number: '-1.5', value_json: { unit: 'l' } })
         expect(code2(await call('POST', '/r/product-spec-values', { input: { product_id: 2, spec_definition_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
         expect((await call('PATCH', `/r/product-spec-values/${sv.json.data.id}`, { input: { value_json: null, value_text: '6 lít' } }, { token: t })).json.data).toMatchObject({ value_json: null, value_text: '6 lít' })
-        const taxon = (await call('POST', '/r/catalog-taxons', { input: { name: 'Bồn cầu', slug: 'bon-cau-x', canonical_path: '/bon-cau-x' } }, { token: t })).json.data.id
+        const taxon = Number((await owner.query("insert into dpg_app.catalog_taxons(name,slug,canonical_path) values ('Bồn cầu','bon-cau-x','/bon-cau-x') returning id")).rows[0].id)
         const ta = await call('POST', '/r/product-taxon-assignments', { input: { product_id: 2, taxon_id: taxon, is_primary: true } }, { token: t })
         expect(ta.json.data).toMatchObject({ is_primary: true, taxon_id: taxon })
         expect(code2(await call('POST', '/r/product-taxon-assignments', { input: { product_id: 2, taxon_id: 9999 } }, { token: t }))).toBe('REFERENCE_CONFLICT')
@@ -746,7 +736,7 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(code2(await call('POST', '/r/product-images', { input: { product_id: 2, image_url: `${MEDIA}/products/g3.webp` } }, { token: sale }))).toBe('FORBIDDEN')
         expect((await call('DELETE', `/r/product-images/${img.json.data.id}`, {}, { token: t })).json.data.result).toBe('deleted')
         for (const key of ['origins', 'colors', 'materials']) expect((await call('GET', `/r/${key}/options`, undefined, { token: sale })).json.data.items.length).toBeGreaterThan(0)
-        expect(code2(await call('POST', '/r/colors', { input: { name: 'x' } }, { token: t }))).toBe('NOT_FOUND')
+        expect(code2(await call('POST', '/r/colors', { input: { name: 'x' } }, { token: t }))).toBe('DEV_MANAGED')
       })
     })
 

@@ -98,3 +98,17 @@ Prepared artifacts (generated, drift-tested, applied successfully to a Productio
 Regenerate/check: `npx tsx scripts/m4/generate-production-admin-migration.mts [--check]`.
 Rollback order: Worker (previous Production version `edcb15b2`/`5577b78d`), function delete, `002_rollback` then `001_rollback`
 (`products.version` is kept), restore from backup only for data loss (Worker rollback ≠ SQL rollback).
+
+## Admin scope: Dev-managed catalogue master data (Owner decision, #309, 19/11/2026)
+
+The Admin manages **products and their per-product records**, orders, quotes, customers, blog, banners, partners, projects, users and the dashboard.
+These shared definitions are **Dev-managed** and have **no Admin screen, route or write path for any role** (including `admin`):
+categories/subcategories (and the category content banner), brands, catalog taxons, product types/sub-types, spec definitions/options, origins, colors, materials.
+
+What changed (nothing is deleted; no table, row, ID, FK, seed or Public behaviour is touched):
+- `resources.ts`: these eleven resources carry `lookup: true` (no write/create/delete, no nav, omitted from `/schema`). Only `GET /r/<key>/options` (id + label) is served, so the product editor and filters keep working.
+- `resource-handlers.ts`: `assertManaged` makes list/get/create/update/delete answer `403 DEV_MANAGED` even if a route or definition were wrong. The gateway (`m3-admin-gateway.mjs`) refuses the same routes before contacting the function.
+- Database: `supabase/m3-test/006_m3_test_admin_scope_revoke.sql` (+ `_rollback.sql`) is **revoke-only and guarded**: it removes the INSERT/UPDATE/DELETE privileges, sequence privileges and write RLS policies of `dpg_admin_api_test` on the eight writable master tables; SELECT stays. `005_*` and the M4 `002_*` were regenerated from the new definitions (they no longer grant those writes), so a fresh database and an already-granted TEST database end in the same state. Per-product child tables (`product_spec_values`, `product_taxon_assignments`, images, documents, relationships) keep their grants.
+- The legacy Next Admin (`/admin/*`) is no longer dispatched by the combined Worker on staging: pages redirect to `/admin-next/`, other methods and framework assets return 404 (`/api/upload-image` and `/api/admin/revalidate` are unchanged). The legacy source and the reviewed M2/M3 artifacts stay in the repository for recovery; this is not a deletion.
+
+How Dev changes master data (existing workflow, unchanged): versioned SQL under `prisma/migrations/` (e.g. `20260704150500_catalog_taxonomy_v2_schema`) applied through the guarded runner `scripts/db/postgres-migration-runner.ts` against an attested target; `prisma/seed.ts` / `seed-data.ts` are for development and TEST only. Production data is changed by a reviewed migration, never by re-running the seed.

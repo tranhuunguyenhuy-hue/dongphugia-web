@@ -12,9 +12,7 @@ revoke all on sequence dpg_app.blog_posts_id_seq from dpg_admin_api;
 revoke all on dpg_app.blog_tags from dpg_admin_api;
 revoke all on sequence dpg_app.blog_tags_id_seq from dpg_admin_api;
 revoke all on dpg_app.brands from dpg_admin_api;
-revoke all on sequence dpg_app.brands_id_seq from dpg_admin_api;
 revoke all on dpg_app.catalog_taxons from dpg_admin_api;
-revoke all on sequence dpg_app.catalog_taxons_id_seq from dpg_admin_api;
 revoke all on dpg_app.categories from dpg_admin_api;
 revoke all on dpg_app.colors from dpg_admin_api;
 revoke all on dpg_app.customers from dpg_admin_api;
@@ -34,11 +32,9 @@ revoke all on sequence dpg_app.product_relationships_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_spec_values from dpg_admin_api;
 revoke all on sequence dpg_app.product_spec_values_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_sub_types from dpg_admin_api;
-revoke all on sequence dpg_app.product_sub_types_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_taxon_assignments from dpg_admin_api;
 revoke all on sequence dpg_app.product_taxon_assignments_id_seq from dpg_admin_api;
 revoke all on dpg_app.product_types from dpg_admin_api;
-revoke all on sequence dpg_app.product_types_id_seq from dpg_admin_api;
 revoke all on dpg_app.products from dpg_admin_api;
 revoke all on sequence dpg_app.products_id_seq from dpg_admin_api;
 revoke all on dpg_app.projects from dpg_admin_api;
@@ -46,9 +42,7 @@ revoke all on sequence dpg_app.projects_id_seq from dpg_admin_api;
 revoke all on dpg_app.quote_items from dpg_admin_api;
 revoke all on dpg_app.quote_requests from dpg_admin_api;
 revoke all on dpg_app.spec_definitions from dpg_admin_api;
-revoke all on sequence dpg_app.spec_definitions_id_seq from dpg_admin_api;
 revoke all on dpg_app.spec_options from dpg_admin_api;
-revoke all on sequence dpg_app.spec_options_id_seq from dpg_admin_api;
 revoke all on dpg_app.subcategories from dpg_admin_api;
 grant update (last_login_at) on dpg_app.admin_users to dpg_admin_api;
 do $$
@@ -74,13 +68,8 @@ begin
     ('blog_tags','insert'),
     ('blog_tags','update'),
     ('brands','select'),
-    ('brands','insert'),
-    ('brands','update'),
     ('catalog_taxons','select'),
-    ('catalog_taxons','insert'),
-    ('catalog_taxons','update'),
     ('categories','select'),
-    ('categories','update'),
     ('colors','select'),
     ('customers','select'),
     ('customers','insert'),
@@ -112,15 +101,11 @@ begin
     ('product_spec_values','update'),
     ('product_spec_values','delete'),
     ('product_sub_types','select'),
-    ('product_sub_types','insert'),
-    ('product_sub_types','update'),
     ('product_taxon_assignments','select'),
     ('product_taxon_assignments','insert'),
     ('product_taxon_assignments','update'),
     ('product_taxon_assignments','delete'),
     ('product_types','select'),
-    ('product_types','insert'),
-    ('product_types','update'),
     ('products','select'),
     ('products','insert'),
     ('products','update'),
@@ -134,10 +119,7 @@ begin
     ('quote_requests','select'),
     ('quote_requests','update'),
     ('spec_definitions','select'),
-    ('spec_definitions','insert'),
-    ('spec_definitions','update'),
     ('spec_options','select'),
-    ('spec_options','insert'),
     ('subcategories','select')
   ) as t(tbl,cmd) loop
     if (spec.tbl||'.'||spec.cmd) <> all (array['admin_users.select', 'admin_users.update']) then

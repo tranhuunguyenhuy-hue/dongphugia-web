@@ -23,6 +23,10 @@ const ROUTES = [
   { method: 'POST', pattern: /^\/quotes\/\d{1,9}\/complete$/ }, { method: 'POST', pattern: /^\/products\/bulk$/ },
   { method: 'GET', pattern: /^\/products\/\d{1,9}\/variants$/ }, { method: 'POST', pattern: /^\/products\/\d{1,9}\/variants$/ }, { method: 'DELETE', pattern: /^\/products\/\d{1,9}\/variants\/\d{1,9}$/ },
 ]
+// Owner scope decision (#309): shared catalogue master data is Dev-managed. The Admin may only read id/label options for the
+// product forms; the gateway refuses everything else for these keys before contacting the function (which enforces it too).
+const MASTER_DATA_ROUTE = /^\/r\/(categories|subcategories|brands|catalog-taxons|product-types|product-sub-types|spec-definitions|spec-options|origins|colors|materials)(\/|$)/
+const MASTER_DATA_OPTIONS = /^\/r\/[a-z-]+\/options$/
 const MAX_BODY_BYTES = 600_000
 const UPSTREAM_TIMEOUT_MS = 8_000
 // The TEST project database lives in Singapore: run the Edge Function next to it instead of next to the caller.
@@ -76,6 +80,7 @@ export async function handleAdminNext(request, environment, { sourceSha, staging
   const route = url.pathname.slice(API_PREFIX.length) + url.search
   const path = url.pathname.slice(API_PREFIX.length)
   if (!ROUTES.some((entry) => entry.method === request.method && entry.pattern.test(path))) return jsonError(404, 'NOT_FOUND', sourceSha)
+  if (MASTER_DATA_ROUTE.test(path) && !(request.method === 'GET' && MASTER_DATA_OPTIONS.test(path))) return jsonError(403, 'DEV_MANAGED', sourceSha)
   const mutation = request.method !== 'GET'
   if (mutation && !isSameOriginMutation(request, stagingOrigin)) return jsonError(403, 'ORIGIN_NOT_ALLOWED', sourceSha)
   const functionUrl = environment.ADMIN_API_URL, secret = environment.ADMIN_API_HMAC_SECRET

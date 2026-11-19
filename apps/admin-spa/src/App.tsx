@@ -38,7 +38,6 @@ export function App() {
     else if (resource[2]) content = <ResourceForm key={`${meta.key}:${resource[2]}`} meta={meta} id={Number(resource[2])} go={go} resources={resources} />
     else content = <ResourceList key={meta.key} meta={meta} go={go} />
   } else content = <section className="card"><p className="muted">Không tìm thấy trang.</p></section>
-  const legacy = Boolean(order || quoteRoute)
   const crumbs: Crumb[] = [{ label: 'Quản trị' }]
   if (path === '/dashboard') crumbs.push({ label: 'Tổng quan' })
   else if (order) { crumbs.push({ label: 'Đơn hàng', to: '/orders' }); if (order[1]) crumbs.push({ label: `#${order[1]}` }) }
@@ -46,7 +45,7 @@ export function App() {
   else if (meta) { crumbs.push({ label: meta.group }, { label: meta.label, to: `/r/${meta.key}` }); if (resource?.[2]) crumbs.push({ label: resource[2] === 'new' ? 'Thêm mới' : `Chỉnh sửa #${resource[2]}` }) }
   return (
     <ConfirmProvider>
-      <AppShell user={user} resources={resources} path={path} go={go} crumbs={crumbs} onLogout={async () => { await api.logout().catch(() => undefined); setUser(null); setResources([]); go('/login') }}>{legacy ? <div className="legacy">{content}</div> : content}</AppShell>
+      <AppShell user={user} resources={resources} path={path} go={go} crumbs={crumbs} onLogout={async () => { await api.logout().catch(() => undefined); setUser(null); setResources([]); go('/login') }}>{content}</AppShell>
       <Toaster />
     </ConfirmProvider>
   )

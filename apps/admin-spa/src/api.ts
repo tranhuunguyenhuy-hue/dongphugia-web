@@ -60,7 +60,7 @@ export const ERROR_TEXT: Record<string, string> = {
   UNAUTHENTICATED: 'Phiên đăng nhập đã hết hạn.', FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',
   VERSION_CONFLICT: 'Dữ liệu đã được người khác cập nhật. Hãy tải lại trang.', VALIDATION_FAILED: 'Dữ liệu không hợp lệ.',
   NOT_FOUND: 'Không tìm thấy.', DUPLICATE: 'Giá trị bị trùng (ví dụ slug đã tồn tại).', REFERENCE_CONFLICT: 'Dữ liệu liên kết không hợp lệ hoặc đang được sử dụng.',
-  PUBLISHING_MANAGED: 'Nội dung/ảnh của bài do Publishing Agent tạo chỉ được đổi qua Publishing API.',
+  DEV_MANAGED: 'Dữ liệu danh mục dùng chung do bộ phận kỹ thuật quản lý, không chỉnh sửa tại Quản trị.', PUBLISHING_MANAGED: 'Nội dung/ảnh của bài do Publishing Agent tạo chỉ được đổi qua Publishing API.',
   METHOD_NOT_ALLOWED: 'Thao tác không được hỗ trợ.', LAST_ADMIN: 'Không thể vô hiệu hóa hoặc hạ quyền Quản trị viên cuối cùng.',
   PRICE_REQUIRED: 'Sản phẩm cần có giá trước khi kích hoạt.', IMAGE_REQUIRED: 'Sản phẩm cần có ảnh chính trước khi kích hoạt.', SALE_PRICE_INVALID: 'Giá khuyến mãi phải nhỏ hơn giá niêm yết.', ADMIN_API_NOT_CONFIGURED: 'Dịch vụ quản trị chưa được cấu hình.',
 }
