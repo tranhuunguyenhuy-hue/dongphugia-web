@@ -115,3 +115,38 @@ describe('Owner-requested legacy blog restoration', () => {
     }
   })
 })
+
+describe('Admin-uploaded Blog media (M4 hotfix)', () => {
+  const managed = 'https://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp'
+
+  it('accepts newly uploaded blog images on the managed default pull zone, exactly as the upload handler names them', () => {
+    expect(historicalBlogImage(managed)).toBe(managed)
+    expect(historicalBlogImage('https://dpg-products.b-cdn.net/blog/1795097731886-2355f708.hero.w1600.webp')).toBe('https://dpg-products.b-cdn.net/blog/1795097731886-2355f708.hero.w1600.webp')
+    expect(historicalBlogImage('https://dpg-products.b-cdn.net/blog/1795097731886-2355f708.gif')).toBe('https://dpg-products.b-cdn.net/blog/1795097731886-2355f708.gif')
+    const html = restoreHistoricalBlogArticleLinks(`<p><img src="${managed}" alt=""></p>`)
+    expect(html).toContain(`src="${managed}"`)
+  })
+
+  it('still rewrites the verified legacy host to the default pull zone and keeps the exact inventory', () => {
+    expect(historicalBlogImage('https://cdn.dongphugia.com.vn/blog/1782900856082-07fw89.png')).toBe('https://dpg-products.b-cdn.net/blog/1782900856082-07fw89.png')
+    expect(historicalBlogImage('https://cdn.dongphugia.com.vn/blog/1795097670233-2a60bbc4.editorial.w960.webp')).toBeNull()
+  })
+
+  it('rejects unsafe hosts, folders, names and URL shapes', () => {
+    for (const value of [
+      'http://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://dpg-products.b-cdn.net/products/1795097670233-2a60bbc4.product.w640.webp',
+      'https://dpg-products.b-cdn.net/blog/../products/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://dpg-products.b-cdn.net/blog/anything.webp',
+      'https://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp?x=1',
+      'https://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp#a',
+      'https://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.svg',
+      'https://dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp/extra',
+      'https://user:pass@dpg-products.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://dpg-products.b-cdn.net:8443/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://evil.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://dpg-products.b-cdn.net.evil.example/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+      'https://dpg-media-staging.b-cdn.net/blog/1795097670233-2a60bbc4.editorial.w960.webp',
+    ]) expect(historicalBlogImage(value), value).toBeNull()
+  })
+})
