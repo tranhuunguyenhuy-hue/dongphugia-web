@@ -32,6 +32,14 @@ export function buildBatch(template, { excluded, phase0, maxStartBytes, lo, hi, 
     .replace('__PHASE0__', phase0).replace('__MAX_START_BYTES__', String(maxStartBytes)).replace('__EXCLUDED__', list)
 }
 
+export function buildRollbackBatch(template, { lo, hi, batch, batches }) {
+  if (!Number.isInteger(lo) || !Number.isInteger(hi) || lo >= hi) throw new Error('bad batch window')
+  const prologue = batch === 1 ? `-- Batch 1 only: autovacuum keeps up while the batches run (reset after the last batch).\n${TABLES.map((t) => `alter table dpg_app.${t} set (${AV_SET});`).join('\n')}` : ''
+  const epilogue = batch === batches ? `-- Last batch: restore the default autovacuum parameters.\n${TABLES.map((t) => `alter table dpg_app.${t} reset (${AV_RESET});`).join('\n')}` : ''
+  return template.replaceAll('__LO__', String(lo)).replaceAll('__HI__', String(hi)).replaceAll('__BATCHES__', String(batches)).replaceAll('__BATCH__', String(batch))
+    .replace('__PROLOGUE__', prologue).replace('__EPILOGUE__', epilogue)
+}
+
 // Kept for the single-window fixture: one batch over every product.
 export const buildNormalization = (template, o) => buildBatch(template, { ...o, lo: 1, hi: 2147483647, batch: 1, batches: 1 })
 
@@ -104,6 +112,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const windows = planBatches(ids, Number(batchCount))
   windows.forEach((w, i) => writeFileSync(`${outDir}/002_cdn_normalization_${String(i + 1).padStart(2, '0')}_of_${String(windows.length).padStart(2, '0')}.sql`,
     buildBatch(template, { excluded, phase0: phase0Id, maxStartBytes: Number(maxStartBytes), lo: w.lo, hi: w.hi, batch: i + 1, batches: windows.length })))
+  const rollbackTemplate = readFileSync(new URL('./003.template.sql', import.meta.url), 'utf8')
+  windows.forEach((w, i) => writeFileSync(`${outDir}/003_cdn_rollback_${String(i + 1).padStart(2, '0')}_of_${String(windows.length).padStart(2, '0')}.sql`,
+    buildRollbackBatch(rollbackTemplate, { lo: w.lo, hi: w.hi, batch: i + 1, batches: windows.length })))
   const tiles = JSON.parse(readFileSync(`${phase0Dir}/tiles.json`, 'utf8'))
   const headRows = readFileSync(`${phase0Dir}/head.tsv`, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t'))
   const { confirmed, rejected } = confirmTiles(tiles, headRows)

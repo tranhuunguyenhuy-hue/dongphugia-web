@@ -127,3 +127,17 @@ describe('M5 CDN batches', () => {
     expect(() => buildBatch(template, { excluded: [], phase0: '', maxStartBytes: 1, lo: 5, hi: 5, batch: 1, batches: 1 })).toThrow()
   })
 })
+
+import { buildRollbackBatch } from './build-sql.mjs'
+describe('M5 CDN rollback batches', () => {
+  const template = readFileSync('scripts/m5-cdn/003.template.sql', 'utf8')
+  it('windows every table and carries the autovacuum prologue/epilogue like the forward batches', () => {
+    const b = (batch) => buildRollbackBatch(template, { lo: 10, hi: 20, batch, batches: 3 })
+    expect(b(2)).not.toMatch(/__[A-Z_]+__/)
+    expect((b(2).match(/t\.product_id >= 10 and t\.product_id < 20/g) ?? []).length).toBe(3)
+    expect((b(2).match(/t\.id >= 10 and t\.id < 20/g) ?? []).length).toBe(3)
+    expect(b(1)).toMatch(/set \(autovacuum_vacuum_scale_factor/); expect(b(3)).toMatch(/reset \(autovacuum/)
+    expect(b(2)).not.toMatch(/alter table dpg_app\.\w+ (set|reset) \(autovacuum/)
+    expect(() => buildRollbackBatch(template, { lo: 3, hi: 3, batch: 1, batches: 1 })).toThrow()
+  })
+})
