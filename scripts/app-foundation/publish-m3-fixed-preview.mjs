@@ -125,17 +125,25 @@ async function accessFetch(path, token, init = {}) {
 }
 async function adminSmoke(token, sourceSha) {
   const out = {}
-  const login = await accessFetch('/admin/login', token)
-  out.login = { status: login.status, noindex: /noindex/i.test(login.headers.get('x-robots-tag') || '') }
-  assert.equal(login.status, 200, 'M3_ADMIN_LOGIN_PAGE_REQUIRED'); assert.ok(out.login.noindex, 'M3_ADMIN_NOINDEX_REQUIRED')
-  for (const path of ['/admin/products', '/admin/users', '/admin/orders']) {
+  // The Admin is the static SPA under /admin-next (same origin, noindex). The legacy Next Admin (/admin/*) is retired on staging
+  // (Owner scope decision, #309): every legacy page path must redirect to the new Admin and never reach its runtime.
+  const shell = await accessFetch('/admin-next/', token)
+  out.shell = { status: shell.status, noindexMeta: /name="robots"[^>]*noindex/i.test(await shell.text()) }
+  assert.equal(shell.status, 200, 'M3_ADMIN_SHELL_REQUIRED'); assert.ok(out.shell.noindexMeta, 'M3_ADMIN_NOINDEX_REQUIRED')
+  for (const path of ['/admin/login', '/admin/products', '/admin/users', '/admin/orders', '/admin/brands']) {
     const response = await accessFetch(path, token)
     out[path] = response.status
-    assert.ok([302, 303, 307].includes(response.status) && /\/admin\/login/.test(response.headers.get('location') || ''), 'M3_ADMIN_UNAUTHENTICATED_REDIRECT_REQUIRED')
+    assert.ok([302, 303, 307].includes(response.status) && /^\/admin-next\/?$/.test(response.headers.get('location') || ''), 'M3_LEGACY_ADMIN_REDIRECT_REQUIRED')
   }
   const forged = await accessFetch('/admin/products', token, { headers: { cookie: 'dpg-admin-session=forged' } })
   out.forgedCookie = forged.status
-  assert.ok([302, 303, 307, 401].includes(forged.status), 'M3_ADMIN_FORGED_SESSION_DENIED_REQUIRED')
+  assert.ok([302, 303, 307].includes(forged.status), 'M3_LEGACY_ADMIN_REDIRECT_REQUIRED')
+  const me = await accessFetch('/admin-next/api/me', token)
+  out.apiMe = me.status
+  assert.equal(me.status, 401, 'M3_ADMIN_API_UNAUTHENTICATED_REQUIRED')
+  const master = await accessFetch('/admin-next/api/r/brands', token)
+  out.masterDataRoute = master.status
+  assert.equal(master.status, 403, 'M3_ADMIN_MASTER_DATA_DENIED_REQUIRED')
   const health = await accessFetch('/api/health', token)
   assert.equal(health.status, 200, 'M3_PREVIEW_HEALTH_REQUIRED')
   assert.equal(health.headers.get('x-dpg-source-sha'), sourceSha, 'M3_PREVIEW_SOURCE_SHA_REQUIRED')
