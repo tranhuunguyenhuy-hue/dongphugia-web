@@ -7,6 +7,7 @@ import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Button } from '@/components/ui/button'
 import { errorText, uploadImage } from './api'
 
 export default function RichText({ value, onChange, disabled, folder = 'blog' }: { value: string; onChange: (html: string) => void; disabled?: boolean; folder?: string }) {
@@ -20,15 +21,15 @@ export default function RichText({ value, onChange, disabled, folder = 'blog' }:
     editorProps: { attributes: { class: 'prose', 'aria-label': 'Nội dung bài viết' } },
     immediatelyRender: false,
   })
-  if (!editor) return <p className="muted">Đang tải trình soạn thảo…</p>
+  if (!editor) return <p className="text-sm text-muted-foreground">Đang tải trình soạn thảo…</p>
   const run = (fn: () => void) => (e: React.MouseEvent) => { e.preventDefault(); fn() }
   const btn = (label: string, title: string, action: () => void, active = false) => (
-    <button type="button" title={title} aria-pressed={active} className={active ? 'tool on' : 'tool'} disabled={disabled} onClick={run(action)}>{label}</button>
+    <Button type="button" size="xs" variant={active ? 'secondary' : 'ghost'} title={title} aria-pressed={active} disabled={disabled} onClick={run(action)}>{label}</Button>
   )
   return (
-    <div className="rte">
+    <div className="overflow-hidden rounded-md border border-input bg-background">
       {!disabled && (
-        <div className="toolbar" role="toolbar" aria-label="Định dạng">
+        <div className="flex flex-wrap gap-1 border-b bg-muted/40 p-1.5" role="toolbar" aria-label="Định dạng">
           {btn('B', 'Đậm', () => editor.chain().focus().toggleBold().run(), editor.isActive('bold'))}
           {btn('I', 'Nghiêng', () => editor.chain().focus().toggleItalic().run(), editor.isActive('italic'))}
           {btn('S', 'Gạch ngang', () => editor.chain().focus().toggleStrike().run(), editor.isActive('strike'))}
@@ -59,8 +60,8 @@ export default function RichText({ value, onChange, disabled, folder = 'blog' }:
           }} />
         </div>
       )}
-      <EditorContent editor={editor} />
-      {error && <p role="alert" className="error">{error}</p>}
+      <EditorContent editor={editor} className="[&_.prose]:min-h-72 [&_.prose]:px-4 [&_.prose]:py-3 [&_.prose]:text-sm [&_.prose]:outline-none [&_.prose_a]:text-primary [&_.prose_a]:underline [&_.prose_blockquote]:border-l-2 [&_.prose_blockquote]:pl-3 [&_.prose_blockquote]:text-muted-foreground [&_.prose_code]:rounded [&_.prose_code]:bg-muted [&_.prose_code]:px-1 [&_.prose_h2]:mt-4 [&_.prose_h2]:mb-2 [&_.prose_h2]:text-xl [&_.prose_h2]:font-semibold [&_.prose_h3]:mt-3 [&_.prose_h3]:mb-1.5 [&_.prose_h3]:text-lg [&_.prose_h3]:font-semibold [&_.prose_hr]:my-4 [&_.prose_img]:h-auto [&_.prose_img]:max-w-full [&_.prose_img]:rounded-md [&_.prose_ol]:list-decimal [&_.prose_ol]:pl-6 [&_.prose_p]:my-2 [&_.prose_p.is-editor-empty:first-child::before]:pointer-events-none [&_.prose_p.is-editor-empty:first-child::before]:float-left [&_.prose_p.is-editor-empty:first-child::before]:h-0 [&_.prose_p.is-editor-empty:first-child::before]:text-muted-foreground [&_.prose_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_.prose_ul]:list-disc [&_.prose_ul]:pl-6" />
+      {error && <p role="alert" className="border-t px-3 py-2 text-sm text-destructive">{error}</p>}
     </div>
   )
 }

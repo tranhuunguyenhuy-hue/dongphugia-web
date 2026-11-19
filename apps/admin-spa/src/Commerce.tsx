@@ -1,7 +1,7 @@
 // Dashboard, orders and quote requests (dedicated function handlers). Totals shown here are previews: the server
 // recomputes them from the stored lines on save.
 import { useCallback, useEffect, useState } from 'react'
-import { ApiError, can, commerce, errorText, type Dashboard, type OrderDetail, type OrderRow, type QuoteDetail, type QuoteRow, type User } from './api'
+import { ApiError, can, commerce, errorText, type OrderDetail, type OrderRow, type QuoteDetail, type QuoteRow, type User } from './api'
 
 const BASE = '/admin-next'
 type Go = (to: string) => void
@@ -17,35 +17,6 @@ function useAssignees(enabled: boolean) {
   const [list, setList] = useState<{ id: number; name: string; role: string }[]>([])
   useEffect(() => { if (enabled) commerce.assignees().then(setList).catch(() => setList([])) }, [enabled])
   return list
-}
-
-export function DashboardPage({ go }: { go: Go }) {
-  const [period, setPeriod] = useState('month'); const [data, setData] = useState<Dashboard | null>(null); const [error, setError] = useState(''); const [loadedFor, setLoadedFor] = useState('')
-  useEffect(() => { let live = true; commerce.dashboard(period).then((d) => { if (live) { setData(d); setError(''); setLoadedFor(period) } }).catch((e) => { if (live) { setError(errorText(e)); setLoadedFor(period) } }); return () => { live = false } }, [period])
-  if (!data) return <section className="card">{error ? <p role="alert" className="error">{error}</p> : <p className="muted">Đang tải…</p>}</section>
-  const s = data.stats; const max = Math.max(1, ...data.revenue.map((r) => r.revenue))
-  return (
-    <div className="stack-lg">
-      <div className="bar"><h1>Tổng quan</h1><label className="inline">Doanh thu theo
-        <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Kỳ doanh thu"><option value="day">30 ngày</option><option value="week">12 tuần</option><option value="month">12 tháng</option><option value="year">5 năm</option></select></label></div>
-      {error && loadedFor === period && <p role="alert" className="error">{error}</p>}
-      <div className="grid cards">
-        <div className="card kpi"><span className="muted">Báo giá chờ xử lý</span><strong>{s.pending_quotes}</strong></div>
-        <div className="card kpi"><span className="muted">Đơn hàng chờ xử lý</span><strong>{s.pending_orders}</strong></div>
-        <div className="card kpi"><span className="muted">Doanh thu tháng này</span><strong>{money(s.revenue_this_month)}</strong><span className="muted">{s.revenue_growth === null ? 'Chưa có dữ liệu tháng trước' : `${s.revenue_growth >= 0 ? '+' : ''}${s.revenue_growth}% so với tháng trước`} · {s.orders_this_month} đơn</span></div>
-        <div className="card kpi"><span className="muted">Sản phẩm đang bán</span><strong>{s.active_products}/{s.total_products}</strong></div>
-      </div>
-      <section className="card"><h2>Doanh thu</h2>
-        {data.revenue.length ? <div className="bars" role="img" aria-label="Biểu đồ doanh thu">{data.revenue.map((r) => <div key={r.date} className="bar-col" title={`${new Date(r.date).toLocaleDateString('vi-VN')}: ${money(r.revenue)} (${r.order_count} đơn)`}><div style={{ height: `${Math.max(2, (r.revenue / max) * 100)}%` }} /></div>)}</div> : <p className="muted">Chưa có đơn hoàn thành đã thanh toán trong kỳ.</p>}
-      </section>
-      <div className="grid two">
-        <section className="card"><h2>Báo giá chờ xử lý</h2>{data.pending_quotes.map((q) => <p key={q.id}><Link to={`/quotes/${q.id}`} go={go}>{q.quote_number ?? `#${q.id}`}</Link> · {q.name} · {q.phone}<br /><span className="muted">{q.item_names || '—'} · {dateText(q.created_at)}</span></p>)}{!data.pending_quotes.length && <p className="muted">Không có.</p>}</section>
-        <section className="card"><h2>Đơn hàng chờ xử lý</h2>{data.pending_orders.map((o) => <p key={o.id}><Link to={`/orders/${o.id}`} go={go}>{o.order_number}</Link> · {o.customer_name} · {money(o.total)}<br /><span className="muted">{PAYMENT_STATUS[o.payment_status] ?? o.payment_status} · {dateText(o.created_at)}</span></p>)}{!data.pending_orders.length && <p className="muted">Không có.</p>}</section>
-        <section className="card"><h2>Sản phẩm bán chạy</h2>{data.top_sold.map((p) => <p key={p.product_id}>{p.product_name} <span className="muted">({p.product_sku})</span> — {p.total_sold}</p>)}{!data.top_sold.length && <p className="muted">Chưa có dữ liệu.</p>}</section>
-        <section className="card"><h2>Được báo giá nhiều</h2>{data.top_quoted.map((p) => <p key={p.product_id}>{p.name} <span className="muted">({p.sku})</span> — {p.quote_count} lần</p>)}{!data.top_quoted.length && <p className="muted">Chưa có dữ liệu.</p>}</section>
-      </div>
-    </div>
-  )
 }
 
 function Assign({ value, users, onChange, disabled }: { value: number | null; users: { id: number; name: string }[]; onChange: (id: number | null) => void; disabled?: boolean }) {
