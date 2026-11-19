@@ -156,7 +156,7 @@ jobs:
           errors="$(grep -c '^pg_restore: error' restore.log || true)"
           echo "M4_RESTORE restore_errors=$errors"
           # Error classes only (object/statement names, never row data); the scratch DB has no Supabase platform roles/extensions.
-          grep -A1 '^pg_restore: error' restore.log | grep -E 'ERROR:|error:' | sed -E 's/^pg_restore: error: //; s/[[:space:]]+/ /g' | cut -c1-180 | sort | uniq -c | head -12 | sed 's/^/M4_RESTORE error_class /'
+          grep -A1 '^pg_restore: error' restore.log | grep -E 'ERROR:|error:' | sed -E 's/^pg_restore: error: //; s/[[:space:]]+/ /g' | cut -c1-180 | sort | uniq -c | head -12 | sed 's/^/M4_RESTORE error_class /' || true
           sql -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | sql -f - | sort > restored-counts.txt
           sort row-counts.txt > expected-counts.txt
           diff expected-counts.txt restored-counts.txt && echo "M4_RESTORE counts=identical tables=$(wc -l < expected-counts.txt)"
