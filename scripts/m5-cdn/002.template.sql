@@ -31,7 +31,7 @@ end $$;
 __PROLOGUE__
 create table if not exists dpg_control.m5_cdn_ledger (
   tbl text not null, pk integer not null, col text not null,
-  old_md5 text not null, new_md5 text not null, product_id integer,
+  old_md5 uuid not null, new_md5 uuid not null, product_id integer,
   migrated_at timestamptz not null default now(), rolled_back_at timestamptz,
   primary key (tbl, pk, col));
 alter table dpg_control.m5_cdn_ledger enable row level security;
@@ -62,7 +62,7 @@ with c as (select t.id, t.product_id, t.image_url as old_v from dpg_app.product_
 u as (update dpg_app.product_images t set image_url = pg_temp.m5_col(c.old_v) from c where t.id = c.id and t.image_url = c.old_v
       returning t.id, t.product_id, c.old_v, t.image_url as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
-select 'product_images', id, 'image_url', md5(old_v), md5(new_v), product_id from u
+select 'product_images', id, 'image_url', md5(old_v)::uuid, md5(new_v)::uuid, product_id from u
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;
 
 -- 2. Product documents.
@@ -70,7 +70,7 @@ with c as (select t.id, t.product_id, t.url as old_v from dpg_app.product_docume
 u as (update dpg_app.product_documents t set url = pg_temp.m5_col(c.old_v) from c where t.id = c.id and t.url = c.old_v
       returning t.id, t.product_id, c.old_v, t.url as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
-select 'product_documents', id, 'url', md5(old_v), md5(new_v), product_id from u
+select 'product_documents', id, 'url', md5(old_v)::uuid, md5(new_v)::uuid, product_id from u
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;
 
 -- 3. Description HTML used by the Public product page.
@@ -78,7 +78,7 @@ with c as (select t.id, t.product_id, t.clean_html as old_v from dpg_app.product
 u as (update dpg_app.product_descriptions t set clean_html = pg_temp.m5_doc(c.old_v) from c where t.id = c.id and t.clean_html = c.old_v
       returning t.id, t.product_id, c.old_v, t.clean_html as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
-select 'product_descriptions', id, 'clean_html', md5(old_v), md5(new_v), product_id from u
+select 'product_descriptions', id, 'clean_html', md5(old_v)::uuid, md5(new_v)::uuid, product_id from u
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;
 
 -- 4. Products: main image, Admin description HTML, specs JSON; version + 1 once per changed product.
@@ -96,7 +96,7 @@ u as (
   from n where p.id = n.id and p.version = n.version
   returning p.id, n.image_main_url as o1, n.img2 as n1, n.description as o2, n.desc2 as n2, n.specs::text as o3, n.specs2::text as n3)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
-select 'products', u.id, v.col, md5(v.o), md5(v.nw), u.id
+select 'products', u.id, v.col, md5(v.o)::uuid, md5(v.nw)::uuid, u.id
 from u, lateral (values ('image_main_url', u.o1, u.n1), ('description', u.o2, u.n2), ('specs', u.o3, u.n3)) v(col, o, nw)
 where v.o is distinct from v.nw
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;

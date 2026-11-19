@@ -81,6 +81,11 @@ echo "M5_CDN_REHEARSAL 002 old_origin_rows_after(images,main,docs,html,desc,spec
 other="$(sa -c "$(diff_q "where not (s.t = 'products' and s.id in ($X,$Y))")")"; IFS='|' read -r oc tc ms <<< "$other"
 [ "$oc" = 0 ] && [ "$ms" = 0 ] || fail "non_target_data_changed(other=$oc missing=$ms)"
 echo "M5_CDN_REHEARSAL 002 non_target_columns_changed=0 rows_missing=0 target_values_changed=$tc"
+# A row whose Admin edit committed during a batch is skipped by that batch (compare-and-set) and picked up by the next run.
+run_batches 0 /dev/null
+want "select name like '% [edit]' from dpg_app.products where id=$X" t "lost_update_name_after_sweep"
+want "select image_main_url from dpg_app.products where id=$Y" 'https://other.example/edited.jpg' "lost_update_image_after_sweep"
+echo "M5_CDN_REHEARSAL 002 after_sweep old_origin_rows(images,main,docs,html,desc,specs)=$(old_count)"
 vsum1="$(sa -c "select sum(version) from dpg_app.products")"; led1="$(sa -c "select count(*) from dpg_control.m5_cdn_ledger")"
 run_batches 0 /dev/null
 want "select sum(version) from dpg_app.products" "$vsum1" "rerun_not_idempotent_versions"
