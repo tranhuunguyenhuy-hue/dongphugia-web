@@ -196,6 +196,8 @@ describe('Production artifact composition', () => {
     const entry = composeProductionEntry(parts())
     expect(entry).not.toContain('__M4_BUILD_SOURCE_SHA__'); expect(entry).toContain(`sourceSha: '${SHA}'`)
     expect(entry).not.toMatch(/^import .* from '\.\//m)
+    expect(entry.match(/^export /gm)).toEqual(['export '])
+    expect(entry).toMatch(/^export default createProductionAdminWorker/m)
     const dir = mkdtempSync(path.join(tmpdir(), 'm4-entry-')); const file = path.join(dir, 'entry.mjs'); writeFileSync(file, entry)
     expect(() => execFileSync(process.execPath, ['--check', file])).not.toThrow()
     expect(entry).toContain("import('./index.js')")

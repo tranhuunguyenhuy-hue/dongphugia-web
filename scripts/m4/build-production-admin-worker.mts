@@ -65,7 +65,9 @@ export function composeProductionEntry(parts: { template: string; envelope: stri
   if (!parts.template.includes(importLine) || !parts.template.includes("import('./index.js')") || !parts.template.includes('__M4_BUILD_SOURCE_SHA__')) throw new Error('M4_ENTRY_TEMPLATE_INVALID')
   const defaultExport = parts.template.slice(parts.template.indexOf('export default createProductionAdminWorker'))
   const templateBody = parts.template.replace(importLine, '').replace(defaultExport, '')
-  const inlined = [parts.envelope, parts.gateway, parts.upload, parts.dispatch].map((source) => source.replace(INLINE_IMPORT, '').trim()).join('\n\n')
+  // Inlined modules must not export anything: every named export of a Worker entry is an entrypoint and must be a handler.
+  const stripExports = (source: string) => source.replace(/^export (?=(?:async )?(?:const|let|function|class)\b)/gm, '').replace(/^export \{[^}]*\}\r?\n?/gm, '')
+  const inlined = [parts.envelope, parts.gateway, parts.upload, parts.dispatch].map((source) => stripExports(source.replace(INLINE_IMPORT, '')).trim()).join('\n\n')
   if (/from '\.\.?\/[^']*(?:gateway|envelope|upload|dispatch)[^']*'/.test(inlined)) throw new Error('M4_INLINE_IMPORT_LEFT')
   return `${templateBody.trim()}\n\n${inlined}\n\n${defaultExport.replace('__M4_BUILD_SOURCE_SHA__', parts.sourceSha).trim()}\n`
 }
