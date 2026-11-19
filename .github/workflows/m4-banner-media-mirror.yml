@@ -1,0 +1,74 @@
+name: M4 hero banner media mirror (Production)
+
+# Copies the three Owner-verified hero banner PNGs from the legacy Supabase Storage archive to the existing Production Bunny zone
+# `dpg-products` under `banners/`, so the homepage no longer depends on the old project. Fixed allow-list (three exact objects),
+# content verified (HTTP 200, image/png, PNG signature, size bound), NO overwrite (an existing object is only accepted when
+# byte-identical), public delivery verified through the default pull zone. Nothing is deleted. Uses the existing Production media key.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m4-banner-media-mirror
+  cancel-in-progress: false
+
+env:
+  SOURCE_BASE: https://tygjmrhandbffjllxveu.supabase.co/storage/v1/object/public/images/banners
+  CDN: dpg-products.b-cdn.net
+  STORAGE_HOST: sg.storage.bunnycdn.com
+  ZONE: dpg-products
+
+jobs:
+  mirror:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: Production
+    env:
+      MEDIA_KEY: ${{ secrets.ADMIN_PRODUCTION_MEDIA_KEY }}
+    steps:
+      - name: Mirror the three banner objects
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$MEDIA_KEY" || { echo 'M4_BANNER_MIRROR status=FAIL reason=media_key_missing'; exit 1; }
+          echo "::add-mask::$MEDIA_KEY"
+          authed() { curl -sS -m 60 -K <(printf 'header = "AccessKey: %s"\n' "$MEDIA_KEY") "$@"; }
+          work="$RUNNER_TEMP/banners"; mkdir -p "$work"
+          for name in 1776486977694-87cnaa.png 1776485447824-r0eml8.png 1776485426606-t2pflg.png; do
+            src="$SOURCE_BASE/$name"; file="$work/$name"
+            code="$(curl -sS -m 60 -o "$file" -w '%{http_code} %{content_type}' "$src")"
+            [ "$code" = '200 image/png' ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=source_unavailable_or_wrong_type ($code)"; exit 1; }
+            size="$(stat -c %s "$file")"
+            [ "$size" -ge 10000 ] && [ "$size" -le 3000000 ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=size_out_of_bounds ($size)"; exit 1; }
+            [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" = '89504e470d0a1a0a' ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=not_png"; exit 1; }
+            sha="$(sha256sum "$file" | cut -d' ' -f1)"
+            dest="https://$STORAGE_HOST/$ZONE/banners/$name"
+            existing="$(curl -sS -m 30 -o "$work/existing.bin" -w '%{http_code}' "https://$CDN/banners/$name" || true)"
+            if [ "$existing" = '200' ]; then
+              [ "$(sha256sum "$work/existing.bin" | cut -d' ' -f1)" = "$sha" ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=destination_exists_with_different_bytes"; exit 1; }
+              echo "M4_BANNER_MIRROR name=$name action=already_present_identical sha256=$sha"
+            else
+              [ "$existing" = '404' ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=unexpected_destination_status ($existing)"; exit 1; }
+              put="$(authed -o /dev/null -w '%{http_code}' -X PUT -H 'Content-Type: image/png' --data-binary @"$file" "$dest")"
+              [ "$put" = '201' ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=write_rejected ($put)"; exit 1; }
+              ok=0
+              for _ in 1 2 3 4 5 6; do
+                got="$(curl -sS -m 30 -o "$work/check.bin" -w '%{http_code} %{content_type}' "https://$CDN/banners/$name" || true)"
+                if [ "$got" = '200 image/png' ] && [ "$(sha256sum "$work/check.bin" | cut -d' ' -f1)" = "$sha" ]; then ok=1; break; fi
+                sleep 4
+              done
+              [ "$ok" -eq 1 ] || { echo "M4_BANNER_MIRROR status=FAIL name=$name reason=public_delivery_mismatch"; exit 1; }
+              echo "M4_BANNER_MIRROR name=$name action=copied sha256=$sha bytes=$size"
+            fi
+            echo "M4_BANNER_MIRROR status=PASS name=$name url=https://$CDN/banners/$name"
+          done
