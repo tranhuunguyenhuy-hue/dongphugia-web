@@ -82,7 +82,7 @@ jobs:
           npm ci --prefix apps/public
           if [ -f apps/admin-spa/package-lock.json ]; then npm ci --prefix apps/admin-spa; fi
       - name: Run the M4 unit and contract tests
-        run: npx vitest run scripts/m4 apps/public/m3-admin-gateway.test.mjs apps/public/m3-combined-dispatch.test.mjs supabase/functions/admin-api/production-migration.test.ts
+        run: env -u APP_ENV -u APP_BUILD_TARGET -u APP_ORIGIN -u PUBLIC_CATALOGUE_SOURCE npx vitest run scripts/m4 apps/public/m3-admin-gateway.test.mjs apps/public/m3-combined-dispatch.test.mjs supabase/functions/admin-api/production-migration.test.ts
       - name: Build the actual Public Worker and assemble the Public release
         shell: bash
         env:
