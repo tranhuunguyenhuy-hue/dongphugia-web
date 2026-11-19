@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api, errorText, type User } from './api'
-import { Alert } from './ui'
+import { Alert, CTA } from './ui'
 
 export function Login({ onDone }: { onDone: (user: User) => void }) {
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [error, setError] = useState(''); const [busy, setBusy] = useState(false)
@@ -26,7 +26,7 @@ export function Login({ onDone }: { onDone: (user: User) => void }) {
               <div className="grid gap-2"><Label htmlFor="login-email">Email</Label><Input id="login-email" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
               <div className="grid gap-2"><Label htmlFor="login-password">Mật khẩu</Label><Input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
               {error && <Alert>{error}</Alert>}
-              <Button disabled={busy}>{busy && <Loader2 className="animate-spin" />}{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</Button>
+              <Button className={CTA} disabled={busy}>{busy && <Loader2 className="animate-spin" />}{busy ? 'Đang đăng nhập…' : 'Đăng nhập'}</Button>
             </form>
           </CardContent>
         </Card>

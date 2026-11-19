@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
 export { toast }
+/** Brand-coloured primary call to action: exactly one per page (create / save / sign in). */
+export const CTA = 'bg-brand text-white hover:bg-brand-hover focus-visible:ring-brand/40'
 export const Toaster = () => <Sonner position="top-right" richColors={false} closeButton toastOptions={{ classNames: { toast: 'border bg-popover text-popover-foreground shadow-lg', description: 'text-muted-foreground' } }} />
 
 type Confirm = { title: string; description?: string; confirmLabel?: string; destructive?: boolean }
