@@ -54,14 +54,16 @@ vx0="$(sa -c "select version from dpg_app.products where id=$X")"
 ( docker exec -i scratch psql -U postgres -d postgres -X -q -v ON_ERROR_STOP=1 -c "begin; update dpg_app.products set name = name || ' [edit]', version = version + 1 where id = $X; update dpg_app.products set image_main_url = 'https://other.example/edited.jpg', version = version + 1 where id = $Y; select pg_sleep(3); commit;" >/dev/null ) &
 sleep 1
 batch_files=("$OUT"/002_cdn_normalization_*_of_*.sql)
+rollback_files=("$OUT"/003_cdn_rollback_*_of_*.sql)
 peak=$db0; : > "$work/002.out"
-run_batches() { # $1 = pace seconds between batches (autovacuum), $2 = output file
-  local f t0 n=0
-  for f in "${batch_files[@]}"; do
+run_batches() { # $1 = pace seconds between batches (autovacuum), $2 = output file, $3 = "rollback" to run the 003 batches
+  local f t0 n=0 files=("${batch_files[@]}")
+  [ "${3:-}" = rollback ] && files=("${rollback_files[@]}")
+  for f in "${files[@]}"; do
     n=$((n+1)); t0=$(date +%s.%N)
     so -f - < "$f" >> "$2" || fail "002_batch_${n}_failed"
     read -r dbn reln lsnn <<< "$(sizes)"
-    echo "M5_CDN_REHEARSAL 002 batch=$n/${#batch_files[@]} seconds=$(echo "$(date +%s.%N) - $t0" | bc) db_bytes=$dbn"
+    echo "M5_CDN_REHEARSAL ${3:-002} batch=$n/${#files[@]} seconds=$(echo "$(date +%s.%N) - $t0" | bc) db_bytes=$dbn"
     [ "$dbn" -gt "$peak" ] && peak=$dbn
     sleep "$1"
   done
@@ -91,7 +93,10 @@ run_batches 0 /dev/null
 want "select sum(version) from dpg_app.products" "$vsum1" "rerun_not_idempotent_versions"
 want "select count(*) from dpg_control.m5_cdn_ledger" "$led1" "rerun_not_idempotent_ledger"
 # Rollback is exact for untouched rows and skips the edited ones.
-so -f - < "$REPO/supabase/m5-production/003_cdn_normalization_rollback.sql" | sed 's/^/M5_CDN_REHEARSAL 003 /'
+pre_rb="$(sizes | cut -d' ' -f1)"; peak=$pre_rb
+run_batches "${BATCH_PACE_SECONDS:-45}" "$work/003.out" rollback
+echo "M5_CDN_REHEARSAL 003 rollback_peak_growth_bytes=$((peak-pre_rb))"
+grep -E "^(restored|skipped_changed_since)" "$work/003.out" | sed 's/^/M5_CDN_REHEARSAL 003 batch_result /'
 other="$(sa -c "$(diff_q "where not (s.t = 'products' and s.id in ($X,$Y))")")"; IFS='|' read -r oc tc ms <<< "$other"
 [ "$oc" = 0 ] && [ "$ms" = 0 ] && [ "$tc" = 0 ] || fail "rollback_not_exact(other=$oc target=$tc missing=$ms)"
 echo "M5_CDN_REHEARSAL 003 rollback_exact=true old_origin_rows_after(images,main,docs,html,desc,specs)=$(old_count)"

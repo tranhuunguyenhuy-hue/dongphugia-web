@@ -8,7 +8,7 @@
 -- zone (list below, from Phase 0), every Blog field (the Public legacy-Blog rule only recognises old-origin files), and
 -- HTML/JSON rows that already contain the new origin (their rollback would be ambiguous).
 -- Ledger dpg_control.m5_cdn_ledger keeps (table, pk, column, md5 before, md5 after) for an exact, conditional rollback
--- (003_cdn_normalization_rollback.sql). Concurrency: rows are locked and updated only if still equal to the value read in
+-- (003_cdn_rollback_NN_of_MM.sql, batched like this file). Concurrency: rows are locked and updated only if still equal to the value read in
 -- the same statement; products.version + 1 once per touched product (open Admin editors get VERSION_CONFLICT and reload).
 -- updated_at is left unchanged (URL hygiene, not a content edit). Idempotent: a re-run only touches remaining old URLs.
 -- BATCH __BATCH__ of __BATCHES__ (product ids >= __LO__ and < __HI__). Measured: one transaction over all rows grows the database by
