@@ -43,6 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }
+      - name: Pull the pinned PostgreSQL client image
+        run: docker pull -q "$POSTGRES_IMAGE" >/dev/null
       - name: Probe the Production target (read-only)
         shell: bash
         run: |
@@ -52,7 +54,7 @@ jobs:
           if ! out="$(pg -c "select current_user || '|' || session_user || '|' || current_setting('transaction_read_only') || '|' || (select production_writes_allowed::text from dpg_control.target_contract where project_name = 'dongphugia-runtime') || '|' || (select count(*) from dpg_app.products)" 2>/tmp/probe.err)"; then
             echo "M4_BACKUP status=FAIL stage=probe"
             # Sanitised first error line: hosts, addresses and quoted values are redacted; only the error class and role names remain.
-            head -n 2 /tmp/probe.err | sed -E 's/"[^"]*(supabase|pooler)[^"]*"/"<host>"/g; s/\([0-9a-f:.]+\)/(<ip>)/g; s/postgres(ql)?:\/\/[^ ]*/<url>/g' | cut -c1-240
+            grep -vE '^(Unable to find image|[0-9a-f]+: |docker\.io/|Digest:|Status:)' /tmp/probe.err | tail -n 3 | sed -E 's/"[^"]*(supabase|pooler)[^"]*"/"<host>"/g; s/\([0-9a-f:.]+\)/(<ip>)/g; s/postgres(ql)?:\/\/[^ ]*/<url>/g' | cut -c1-240
             exit 1
           fi
           IFS='|' read -r current session readonly writes products <<<"$out"
