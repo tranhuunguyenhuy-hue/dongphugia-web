@@ -26,7 +26,7 @@ rc=0; docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-pri
 sa -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname='dpg_migration') then create role dpg_migration nologin; end if; end \$\$; create role sb_owner login createrole bypassrls; grant dpg_migration to sb_owner;"
 sa -c "do \$\$ declare o record; begin
   for o in select nspname from pg_namespace where nspname in ('dpg_app','dpg_control') loop execute format('alter schema %I owner to dpg_migration', o.nspname); end loop;
-  for o in select n.nspname, c.relname, c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','p','v','m','S') loop
+  for o in select n.nspname, c.relname, c.relkind from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','p','v','m','S') and not (c.relkind = 'S' and exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype in ('a','i'))) loop
     execute format('alter %s %I.%I owner to dpg_migration', case o.relkind when 'S' then 'sequence' when 'v' then 'view' when 'm' then 'materialized view' else 'table' end, o.nspname, o.relname); end loop;
   for o in select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) a from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('dpg_app','dpg_control') loop
     execute format('alter function %I.%I(%s) owner to dpg_migration', o.nspname, o.proname, o.a); end loop; end \$\$"
