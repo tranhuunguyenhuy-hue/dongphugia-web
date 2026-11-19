@@ -148,7 +148,9 @@ jobs:
           for _ in $(seq 1 40); do docker exec scratch pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
           sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
           # Roles referenced by policies/grants must exist for a faithful restore (names only, no credentials).
-          sql -c "do \$\$ declare r text; begin foreach r in array array['anon','authenticated','service_role','dpg_public_catalogue','dpg_readonly','dpg_runtime','dpg_migration','dpg_m2_snapshot_read','dpg_direct_read','dpg_direct_import'] loop if not exists (select 1 from pg_roles where rolname = r) then execute format('create role %I nologin', r); end if; end loop; end \$\$"
+          sql -c "do \$\$ declare r text; begin foreach r in array array['anon','authenticated','service_role','dpg_public_catalogue','dpg_readonly','dpg_runtime','dpg_migration','dpg_m2_snapshot_read','dpg_direct_read','dpg_direct_import','dpg_admin_api'] loop if not exists (select 1 from pg_roles where rolname = r) then execute format('create role %I nologin', r); end if; end loop; end \$\$"
+          # Supabase platform objects referenced by some policies (auth.uid()/auth.role()); stubs only, never data.
+          sql -c "create schema if not exists auth; create or replace function auth.uid() returns uuid language sql stable as 'select null::uuid'; create or replace function auth.role() returns text language sql stable as 'select null::text'; create or replace function auth.jwt() returns jsonb language sql stable as 'select null::jsonb'"
           docker cp production.dump scratch:/tmp/production.dump
           docker exec scratch pg_restore -U postgres -d postgres --no-owner --no-privileges /tmp/production.dump > restore.log 2>&1 || true
           errors="$(grep -c '^pg_restore: error' restore.log || true)"
