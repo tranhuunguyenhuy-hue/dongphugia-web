@@ -11,7 +11,10 @@
 -- (003_cdn_normalization_rollback.sql). Concurrency: rows are locked and updated only if still equal to the value read in
 -- the same statement; products.version + 1 once per touched product (open Admin editors get VERSION_CONFLICT and reload).
 -- updated_at is left unchanged (URL hygiene, not a content edit). Idempotent: a re-run only touches remaining old URLs.
--- Run ONCE in the Supabase SQL Editor, whole file, after a verified backup. Then VACUUM (ANALYZE) the five tables.
+-- BATCH __BATCH__ of __BATCHES__ (product ids >= __LO__ and < __HI__). Measured: one transaction over all rows grows the database by
+-- ~124 MB (dead row versions, TOAST, indexes) and exceeds the 350 MiB free-tier hard stop, so the work is split into batches.
+-- Run the batches IN ORDER, each as its own SQL Editor run, waiting ~2 minutes between runs (autovacuum, tuned by batch 1, reuses
+-- the space). After the last batch run once: VACUUM (ANALYZE) on the five tables (optional, see the report).
 begin;
 set local lock_timeout = '5s';
 set local statement_timeout = '10min';
@@ -25,6 +28,7 @@ do $$ begin
   end if;
 end $$;
 
+__PROLOGUE__
 create table if not exists dpg_control.m5_cdn_ledger (
   tbl text not null, pk integer not null, col text not null,
   old_md5 text not null, new_md5 text not null, product_id integer,
@@ -54,7 +58,7 @@ create function pg_temp.m5_doc_ok(v text) returns boolean language sql stable as
         and not exists (select 1 from m5_cdn_excluded e where position(e.url || '"' in v) > 0 or position(e.url || '''' in v) > 0) $f$;
 
 -- 1. Gallery images.
-with c as (select t.id, t.product_id, t.image_url as old_v from dpg_app.product_images t where pg_temp.m5_col_ok(t.image_url) for update),
+with c as (select t.id, t.product_id, t.image_url as old_v from dpg_app.product_images t where t.product_id >= __LO__ and t.product_id < __HI__ and pg_temp.m5_col_ok(t.image_url) for update),
 u as (update dpg_app.product_images t set image_url = pg_temp.m5_col(c.old_v) from c where t.id = c.id and t.image_url = c.old_v
       returning t.id, t.product_id, c.old_v, t.image_url as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
@@ -62,7 +66,7 @@ select 'product_images', id, 'image_url', md5(old_v), md5(new_v), product_id fro
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;
 
 -- 2. Product documents.
-with c as (select t.id, t.product_id, t.url as old_v from dpg_app.product_documents t where pg_temp.m5_col_ok(t.url) for update),
+with c as (select t.id, t.product_id, t.url as old_v from dpg_app.product_documents t where t.product_id >= __LO__ and t.product_id < __HI__ and pg_temp.m5_col_ok(t.url) for update),
 u as (update dpg_app.product_documents t set url = pg_temp.m5_col(c.old_v) from c where t.id = c.id and t.url = c.old_v
       returning t.id, t.product_id, c.old_v, t.url as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
@@ -70,7 +74,7 @@ select 'product_documents', id, 'url', md5(old_v), md5(new_v), product_id from u
 on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = excluded.new_md5, migrated_at = now(), rolled_back_at = null;
 
 -- 3. Description HTML used by the Public product page.
-with c as (select t.id, t.product_id, t.clean_html as old_v from dpg_app.product_descriptions t where pg_temp.m5_doc_ok(t.clean_html) for update),
+with c as (select t.id, t.product_id, t.clean_html as old_v from dpg_app.product_descriptions t where t.product_id >= __LO__ and t.product_id < __HI__ and pg_temp.m5_doc_ok(t.clean_html) for update),
 u as (update dpg_app.product_descriptions t set clean_html = pg_temp.m5_doc(c.old_v) from c where t.id = c.id and t.clean_html = c.old_v
       returning t.id, t.product_id, c.old_v, t.clean_html as new_v)
 insert into dpg_control.m5_cdn_ledger (tbl, pk, col, old_md5, new_md5, product_id)
@@ -80,7 +84,7 @@ on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = e
 -- 4. Products: main image, Admin description HTML, specs JSON; version + 1 once per changed product.
 with c as (
   select p.id, p.version, p.image_main_url, p.description, p.specs from dpg_app.products p
-  where pg_temp.m5_col_ok(p.image_main_url) or pg_temp.m5_doc_ok(p.description) or pg_temp.m5_doc_ok(p.specs::text) for update),
+  where p.id >= __LO__ and p.id < __HI__ and (pg_temp.m5_col_ok(p.image_main_url) or pg_temp.m5_doc_ok(p.description) or pg_temp.m5_doc_ok(p.specs::text)) for update),
 n as (
   select c.*,
     case when pg_temp.m5_col_ok(c.image_main_url) then pg_temp.m5_col(c.image_main_url) else c.image_main_url end as img2,
@@ -99,7 +103,7 @@ on conflict (tbl, pk, col) do update set old_md5 = excluded.old_md5, new_md5 = e
 
 -- 5. Products whose only change was in a child row: version + 1 so an open Admin editor reloads.
 update dpg_app.products p set version = p.version + 1
-where p.id in (select product_id from dpg_control.m5_cdn_ledger where migrated_at = now() and tbl <> 'products')
+where p.id >= __LO__ and p.id < __HI__ and p.id in (select product_id from dpg_control.m5_cdn_ledger where migrated_at = now() and tbl <> 'products')
   and p.id not in (select pk from dpg_control.m5_cdn_ledger where migrated_at = now() and tbl = 'products');
 
 -- Result (expected values are in the Phase 0 / rehearsal report).
@@ -112,4 +116,5 @@ union all select 'remaining_old_origin', 'products.description', count(*) from d
 union all select 'remaining_old_origin', 'products.specs', count(*) from dpg_app.products where position('https://cdn.dongphugia.com.vn/' in specs::text) > 0
 union all select 'database_bytes', 'after', pg_database_size(current_database())
 order by 1, 2;
+__EPILOGUE__
 commit;

@@ -74,7 +74,7 @@ jobs:
           pgp -f - < scripts/m5-cdn/products.sql > "$p0/products.tsv"
           node scripts/m5-cdn/phase0.mjs "$p0/objects.tsv" "$p0/refs.tsv" "$p0/products.tsv" "$p0"
           node scripts/m5-cdn/head-check.mjs "$p0/head-urls.txt" "$p0/head.tsv"
-          node scripts/m5-cdn/build-sql.mjs "$p0" "run $GITHUB_RUN_ID (main ${GITHUB_SHA::7})" 262144000 out
+          node scripts/m5-cdn/build-sql.mjs "$p0" "run $GITHUB_RUN_ID (main ${GITHUB_SHA::7})" 320000000 out 6
           cp "$p0/summary.json" "$p0/excluded-urls.txt" "$p0/tiles-decision.json" "$p0/distinct-paths.tsv" "$p0/head.tsv" out/
           # Same discipline as the backup: the exclusion list is public media paths only.
           ! grep -qiE 'postgres(ql)?://|accesskey|password' out/*.sql
