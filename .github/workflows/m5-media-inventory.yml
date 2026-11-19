@@ -57,3 +57,18 @@ jobs:
                 const files=r.filter(x=>!x.IsDirectory); console.log(`M5_MEDIA dir=${sd} files=${files.length} bytes=${files.reduce((a,x)=>a+x.Length,0)} subdirs=${r.length-files.length}`);' "$sd"
             done < sub.txt
           done < dirs.txt
+      - name: List product document names (metadata only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS -m 300 -K <(printf 'header = "AccessKey: %s"\n' "$MEDIA_KEY") -H 'accept: application/json' "$STORAGE/product_docs/" > docs.json
+          node -e '
+            const r=JSON.parse(require("fs").readFileSync("docs.json","utf8")).filter(x=>!x.IsDirectory);
+            require("fs").writeFileSync("product-docs.tsv", r.map(f=>[f.ObjectName,f.Length,f.Checksum||"",f.LastChanged].join("\t")).join("\n")+"\n");
+            console.log(`M5_MEDIA product_docs names=${r.length}`);'
+          rm -f docs.json *.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m5-product-docs-names
+          path: product-docs.tsv
+          retention-days: 7
