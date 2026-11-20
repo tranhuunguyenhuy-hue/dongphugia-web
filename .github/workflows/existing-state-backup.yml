@@ -32,7 +32,7 @@ concurrency:
 jobs:
   gate:
     if: >-
-      contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' &&
       github.ref == 'refs/heads/main' &&
       github.actor == 'tranhuunguyenhuy-hue' &&
       github.run_attempt == 1

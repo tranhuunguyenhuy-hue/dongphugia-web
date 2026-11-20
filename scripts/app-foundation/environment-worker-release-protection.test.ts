@@ -5,7 +5,7 @@ import {
   verifyEnvironmentWorkerReleaseProtection,
 } from './verify-environment-worker-release-protection.mjs'
 
-const repository = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+const repository = 'tranhuunguyenhuy-hue/dongphugia-web'
 const token = 'test-github-token'
 
 function configuration() {
@@ -63,8 +63,8 @@ describe('Staging GitHub release protection', () => {
       .resolves.toMatchObject({ protectionVerified: true, branch: 'main' })
     expect(fetchImpl).toHaveBeenCalledTimes(2)
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual([
-      'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/environments/cloudflare-staging',
-      'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/environments/cloudflare-staging/deployment-branch-policies',
+      'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia-web/environments/cloudflare-staging',
+      'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia-web/environments/cloudflare-staging/deployment-branch-policies',
     ])
     expect(fetchImpl.mock.calls[0][1]?.headers).toMatchObject({ Authorization: `Bearer ${token}` })
   })

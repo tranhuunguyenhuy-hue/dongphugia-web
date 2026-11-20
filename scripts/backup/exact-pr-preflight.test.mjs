@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import { validateExactPrCandidate } from './exact-pr-preflight.mjs'
 
-const repository = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+const repository = 'tranhuunguyenhuy-hue/dongphugia-web'
 const candidateSha = 'a'.repeat(40)
 const mergeSha = 'd'.repeat(40)
 

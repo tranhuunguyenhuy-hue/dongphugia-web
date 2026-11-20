@@ -7,7 +7,7 @@ import { validateEnvironmentWorkerSource } from './validate-environment-worker-s
 
 const builderSource = readFileSync(resolve(process.cwd(), 'scripts/app-foundation/build-environment-worker.mts'), 'utf8')
 
-const repository = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+const repository = 'tranhuunguyenhuy-hue/dongphugia-web'
 const sourceSha = 'a'.repeat(40)
 const token = 'test-github-token'
 

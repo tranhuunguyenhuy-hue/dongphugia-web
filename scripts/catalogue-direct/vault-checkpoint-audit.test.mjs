@@ -91,7 +91,7 @@ function runnerEnv(extra = {}) {
   return {
     GITHUB_ACTIONS: 'true',
     GITHUB_EVENT_NAME: 'workflow_dispatch',
-    GITHUB_REPOSITORY: `${OWNER}/dongphugia.com.vn`,
+    GITHUB_REPOSITORY: `${OWNER}/dongphugia-web`,
     GITHUB_REF: 'refs/heads/main',
     GITHUB_ACTOR: OWNER,
     GITHUB_RUN_ATTEMPT: '1',

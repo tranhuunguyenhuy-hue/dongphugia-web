@@ -22,7 +22,7 @@ from b11_rewrap_io import (
 EXPECTED_BYTES = 9_240_647
 EXPECTED_SHA256 = "15d8ec3d1d22e884ed280fd9eb810ce8a7f7257553e180a2aa9e9aff7a49b50a"
 BACKUP_ID = "leo540-38915575745"
-ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia.com.vn", "tranhuunguyenhuy-hue/dongphugia-web")  # TRANSITIONAL (#426): drop the old name after the rename is verified
+ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia-web",)
 
 
 def source_repository() -> str:

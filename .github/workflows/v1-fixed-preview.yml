@@ -23,7 +23,7 @@ jobs:
   prepare:
     if: >-
       !endsWith(inputs.operation, '-m3') && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
-      contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) && inputs.approved_source_sha == github.sha
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && inputs.approved_source_sha == github.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: catalogue-direct-migration
@@ -227,7 +227,7 @@ jobs:
           APPROVED_SOURCE_SHA: ${{ inputs.approved_source_sha }}
         run: |
           [ "$GITHUB_REF" = refs/heads/main ] && [ "$GITHUB_ACTOR" = tranhuunguyenhuy-hue ] \
-            && { [ "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia.com.vn ] || [ "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia-web ]; } \
+            && [ "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia-web ] \
             && [ "$APPROVED_SOURCE_SHA" = "$GITHUB_SHA" ]
       - uses: actions/checkout@v5
         with:

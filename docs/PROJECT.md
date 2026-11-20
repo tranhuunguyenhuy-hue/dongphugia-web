@@ -27,10 +27,10 @@ Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `cod
 
 | Milestone | Outcome | Issue |
 | --- | --- | --- |
-| M1 | Production Public on PostgreSQL Products and Blog | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) |
-| M2 | Fixed Preview `staging`, Public parity | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308) |
-| M3 | Legacy Admin on Preview with real Auth/RBAC/CRUD | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) |
-| M4 | Accepted Admin promoted to Production | [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310) |
-| M5 | Audit, backup gate, CDN normalization | [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) |
+| M1 | Production Public on PostgreSQL Products and Blog | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/307) |
+| M2 | Fixed Preview `staging`, Public parity | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/308) |
+| M3 | Legacy Admin on Preview with real Auth/RBAC/CRUD | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/309) |
+| M4 | Accepted Admin promoted to Production | [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/310) |
+| M5 | Audit, backup gate, CDN normalization | [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/311) |
 
-Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306). Older procedure documents are in Git history. SQL, safety/backup controls, fixtures and proof manifests stay untouched unless the assigned issue requires a reviewed change.
+Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/306). Older procedure documents are in Git history. SQL, safety/backup controls, fixtures and proof manifests stay untouched unless the assigned issue requires a reviewed change.

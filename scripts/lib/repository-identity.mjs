@@ -1,9 +1,8 @@
 // Repository identity for active GitHub guards (Issue #426).
-// TRANSITIONAL: exactly two allowed names while the repository is renamed
-// dongphugia.com.vn -> dongphugia-web. Remove the old name in Phase 3 once the rename is verified.
+// Exactly one allowed repository (renamed from dongphugia.com.vn on 2026-11-20, Issue #426).
 // Never widen to wildcards; owner, branch, actor, SHA and Owner-GO gates stay separate.
 export const OWNER = 'tranhuunguyenhuy-hue'
-export const REPOSITORY_NAMES = Object.freeze(['dongphugia.com.vn', 'dongphugia-web'])
+export const REPOSITORY_NAMES = Object.freeze(['dongphugia-web'])
 export const ALLOWED_REPOSITORIES = Object.freeze(REPOSITORY_NAMES.map((name) => `${OWNER}/${name}`))
 export const DEFAULT_REPOSITORY = ALLOWED_REPOSITORIES[0]
 
