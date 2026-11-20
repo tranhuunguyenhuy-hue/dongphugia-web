@@ -2,12 +2,10 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const image = "/test-promotion.jpg"
-const destination = "https://www.dongphugia.vn/uudaicuoinam2026/"
-const sessionKey = "dpg:home-promotion:toto-year-end-2026"
+const destination = "/uudaicuoinam2026/"
 
 beforeEach(() => {
     vi.resetModules()
-    sessionStorage.clear()
     vi.spyOn(document, "readyState", "get").mockReturnValue("complete")
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
         configurable: true,
@@ -47,11 +45,10 @@ describe("HomePromotion", () => {
         expect(container).toBeEmptyDOMElement()
     })
 
-    it("waits for the image, links the entire image, and closes separately once per tab", async () => {
+    it("waits for the image, links the entire image, and closes separately", async () => {
         const { HomePromotion } = await import("./home-promotion")
-        const { container, unmount } = render(<HomePromotion image={image} destination={destination} />)
+        const { container } = render(<HomePromotion image={image} />)
         expect(screen.queryByRole("dialog")).toBeNull()
-        expect(sessionStorage.getItem(sessionKey)).toBeNull()
 
         fireEvent.load(container.querySelector("img")!)
         const dialog = screen.getByRole("dialog", { name: "Khuyến mãi TOTO cuối năm" })
@@ -65,17 +62,9 @@ describe("HomePromotion", () => {
         fireEvent.click(close)
         expect(screen.queryByRole("dialog")).toBeNull()
         expect(document.documentElement.style.overflow).toBe("")
-        expect(sessionStorage.getItem(sessionKey)).toBe("1")
-
-        unmount()
-        vi.resetModules()
-        const { HomePromotion: ReloadedPromotion } = await import("./home-promotion")
-        expect(render(<ReloadedPromotion image={image} />).container).toBeEmptyDOMElement()
     })
 
-    it("suppresses repeat mounts when session storage is blocked", async () => {
-        vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("Blocked") })
-        vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("Blocked") })
+    it("shows again in a new document and suppresses remounts in the same document", async () => {
         const { HomePromotion } = await import("./home-promotion")
         const first = render(<HomePromotion image={image} />)
         fireEvent.load(first.container.querySelector("img")!)
@@ -84,5 +73,11 @@ describe("HomePromotion", () => {
         first.unmount()
         expect(document.documentElement.style.overflow).toBe("")
         expect(render(<HomePromotion image={image} />).container).toBeEmptyDOMElement()
+
+        vi.resetModules()
+        const { HomePromotion: ReloadedPromotion } = await import("./home-promotion")
+        const reloaded = render(<ReloadedPromotion image={image} />)
+        fireEvent.load(reloaded.container.querySelector("img")!)
+        expect(screen.getByRole("dialog")).toBeInTheDocument()
     })
 })
