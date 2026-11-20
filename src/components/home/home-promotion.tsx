@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import styles from "./home-promotion.module.css"
 
 const PROMOTION_URL = "https://www.dongphugia.vn/uudaicuoinam2026/"
-const PROMOTION_IMAGE: string | null = null // Set to the Owner-approved JPEG path.
+const PROMOTION_IMAGE = "/images/campaigns/toto-year-end-2026.jpg"
 const SESSION_KEY = "dpg:home-promotion:toto-year-end-2026"
 let shownInDocument = false
 
