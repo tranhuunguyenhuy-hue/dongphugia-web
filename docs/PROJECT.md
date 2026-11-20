@@ -1,33 +1,36 @@
 # Đông Phú Gia V1 — technical handbook
 
-[AGENTS.md](../AGENTS.md) is the shared policy; [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) and the active issue contain Owner/Tech Lead decisions. [Current checkpoint](ops/project-current-state.md) holds mutable state. Keep scope small; open only the relevant references below.
+[AGENTS.md](../AGENTS.md) is the shared policy; [current checkpoint](ops/project-current-state.md) holds mutable state; your assigned issue holds the task. Keep scope small; open only the references you need.
 
-## Delivery and acceptance
+## Architecture
 
-| Gate | Outcome | Issue |
-| --- | --- | --- |
-| M1 | Production Public serves PostgreSQL Products and Blog, verified visible routes and snapshot fallback | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) |
-| M2 | ONE fixed named Preview `staging`, Public parity, rollback artifact | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308) |
-| M3 | All legacy Admin on that Preview, real Auth/RBAC/CRUD; distinct TEST DB and Admin-to-Public freshness | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) |
-| M4 | Owner-accepted Admin at Production `/admin`, backed up and verified | [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310) |
-| M5 | Audit routes/UI/mobile, SEO, product/price/media/Blog, auth/RLS, backups, CPU/performance, monitoring and cost; prioritized fixes/backlog | [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) |
+- Cloudflare account `d54f3402b9d112ab64d6135e0e3f1fb1`, one Worker `dongphugia-v1-public-production`. Production https://www.dongphugia.vn; fixed Preview `staging` https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev (Access-protected). Never publish a second Worker.
+- Source roots: Public runtime `apps/public/worker.ts`; canonical Public UI `src/app/(public)/` and `src/components/`; canonical Admin `src/app/admin/` with its SPA/gateway under `apps/admin-spa/`; database sources `prisma/`, `db/`, `supabase/` (do not apply blindly). `apps/admin/` is not a release target.
+- Production artifact: combined Public+Admin Worker built by `npm run build:m3-combined-worker` and released only through `.github/workflows/m4-production-admin-release.yml` (see [CI/CD](ops/v1-fast-release.md)). Node 24.13.0, npm 11.6.2, locked dependencies.
+- Supabase Free organization Đông Phú Gia Runtime (Singapore): Production `dongphugia-production` `bonxyxluzlxfkdetryoo` (schema `dpg_app`); TEST `dongphugia-staging` `uybumsnyqpwcidjxmfsv`. Separate roles, Hyperdrive and secrets. Do not assume a TEST schema is cleared for writes. Preserve the migration ledger and reviewed checksums.
+- Bunny is the media provider (`dpg-products.b-cdn.net`); keep Bunny bytes and DB media metadata distinct.
+- Data identity and provenance are authoritative: product model/SKU, canonical path, status, relationships, verified price provenance, Blog dates/body/media. Do not infer missing attributes, price or stock.
+- Back up exact targets with a validated restore/reverse plan before live changes. Worker rollback does not undo SQL. Incremental infrastructure cost $0.
 
-Products+Blog only is not full Admin. Restore actual existing modules, not new features. For M3/M4 verify dashboard, auth/session/CSRF/roles, products/SKU, Blog/tags, categories, banners/content, PIM brands/types/specs, customers, orders, quote requests, partners, projects and users as applicable to the source inventory. Do not expose private data to Public or fabricate features. Login, authorization denials, writes, independent read-back and Public refresh require real hosted proof. Owner UAT gates M4; M5 follows M4.
+## Typical task path
 
-## Architecture and data
-
-- Cloudflare account `d54f3402b9d112ab64d6135e0e3f1fb1`, Worker `dongphugia-v1-public-production`. Production domain https://www.dongphugia.vn; named staging Preview https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev (Access-protected). Separate deployments/settings; never publish a new Worker.
-- Supabase Free organization Đông Phú Gia Runtime, Singapore: Production `dongphugia-production` ref `bonxyxluzlxfkdetryoo`; TEST `dongphugia-staging` ref `uybumsnyqpwcidjxmfsv`. Production uses `dpg_app`; do not assume same TEST schema cleared for writes. Separate roles, Hyperdrive and secrets. Old internal target-contract labels are not provider identity; never alter them just to rename a project. Preserve migration ledger and reviewed checksums.
-- Public runtime `apps/public/worker.ts`, canonical UI `src/app/(public)/`, `src/components/`; Admin `src/app/admin/`; combined M3 build `npm run build:m3-combined-worker`. Existing `apps/admin/` is not a release target. Keep Public query bounding/cache, genuine PostgreSQL reads and snapshot rollback. Staging M2 snapshot is acceptable only for M2 or M2 recovery; M3 must prove dynamic same-TEST-data freshness.
-- Data identity and provenance are authoritative. Keep product model/SKU, canonical path, status, category/relationships, verified price provenance, Blog dates/body/media. Do not infer missing attributes, price or stock. Keep Bunny bytes and DB media metadata distinct; do not overwrite Production media during TEST.
-- Back up exact targets with a validated restore/reverse plan before live changes. Release code rollback does not undo SQL. Incremental infrastructure cost $0. No new paid resources.
+Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → Tech Lead review → Owner acceptance → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the deployed Worker version in the checkpoint.
 
 ## References — read only as needed
 
-- [Fixed Preview and release](deploy/cloudflare-fixed-preview-production.md); [M2 accepted rollback](deploy/m2-fixed-preview-runbook.md); [CI/CD](ops/v1-fast-release.md).
-- [Production read path and reconciliation](deploy/postgresql-production-adoption-contract.md); [database security](deploy/supabase-runtime-security-boundary.md).
-- [Encrypted backup/restore](deploy/runtime-backup-recovery.md); [recovered database backup candidate](deploy/existing-state-backup.md); [backup bootstrap constraints](deploy/supabase-backup-role-bootstrap.md).
-- [Product/Family preservation](deploy/product-family-preservation-contract.md); [Product pricing](adr/0020-v1-product-pricing-contract.md); [canonical Public UI](adr/0023-preserve-canonical-public-ui-through-cloudflare-runtime-adapters.md); [historical price display](adr/0024-restore-historical-public-prices-on-cloudflare.md).
-- [Existing publishing API source reference](integrations/README.md) is for regression/audit only, not a work order.
+- Release and rollback: [CI/CD](ops/v1-fast-release.md); [M4 Admin plan](deploy/m4-production-admin-plan.md); [fixed Preview](deploy/cloudflare-fixed-preview-production.md); [M2 rollback](deploy/m2-fixed-preview-runbook.md); [M3 Preview runbook](deploy/m3-fixed-preview-runbook.md); [Admin API runbook](deploy/m3-admin-api-runbook.md).
+- Database and backup: [Production read path](deploy/postgresql-production-adoption-contract.md); [database security](deploy/supabase-runtime-security-boundary.md); [backup/restore](deploy/runtime-backup-recovery.md); [backup recovery runbook](ops/m5-backup-recovery-runbook.md); [CDN normalization](ops/m5-legacy-cdn-normalization-plan.md).
+- Product and UI contracts: [Product/Family preservation](deploy/product-family-preservation-contract.md); [pricing](adr/0020-v1-product-pricing-contract.md); [canonical Public UI](adr/0023-preserve-canonical-public-ui-through-cloudflare-runtime-adapters.md); [historical price display](adr/0024-restore-historical-public-prices-on-cloudflare.md).
+- [Publishing API source reference](integrations/README.md): regression/audit only, not a work order.
 
-Historical procedure documents are removed from the active tree; earlier revisions and issues remain in Git history for recovery. SQL, executable safety/backup controls, fixtures and proof manifests remain untouched unless the assigned milestone needs a reviewed change.
+## History — completed restoration (not gates for new work)
+
+| Milestone | Outcome | Issue |
+| --- | --- | --- |
+| M1 | Production Public on PostgreSQL Products and Blog | [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307) |
+| M2 | Fixed Preview `staging`, Public parity | [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308) |
+| M3 | Legacy Admin on Preview with real Auth/RBAC/CRUD | [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309) |
+| M4 | Accepted Admin promoted to Production | [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310) |
+| M5 | Audit, backup gate, CDN normalization | [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) |
+
+Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306). Older procedure documents are in Git history. SQL, safety/backup controls, fixtures and proof manifests stay untouched unless the assigned issue requires a reviewed change.
