@@ -44,9 +44,19 @@ For Production incident: stop overlapping releases, inspect Worker version/traff
 
 For M2: use [fixed Preview runbook](../deploy/m2-fixed-preview-runbook.md). Recovery re-uploads a verified accepted artifact to named staging only; first deployment without accepted predecessor has recovery UNKNOWN. Credential PASS does not constitute hosted UAT or Gate B acceptance.
 
-## Owner decisions still open (none is PASS; nothing here is authorised)
+## Owner-approved cleanup — pending execution (#348, final GO comment 7038428744)
 
-1. Export name-only secret/variable metadata per scope so the registry can be reconciled with the real store (inventory remains UNKNOWN).
-2. Remove the fallback `M4_BACKUP_DATABASE_URL` after a successful `dpg_backup_reader` run, and decide any `postgres` password rotation.
-3. Archive legacy Environments (`pr-preview`, `Preview`, `staging`, old Production-labelled ones) only after proving no consumer or recovery dependency.
-4. Decide the remaining tier-2 workflows (6 deferred, 1 UNKNOWN), which determines which credentials can then be retired. After phase 1, the credentials whose last consumer was removed are listed in the registry under `references_without_remaining_source_consumer`: they stay in the store until an Owner-approved retirement.
+Authorised, exact, and **not yet executed or verified** (the session proxy returns 403 on Environment and Secret endpoints; completion is recorded only from Owner evidence):
+
+- **A. Restrict to `main` only** (Deployment branches and tags → Selected branches → `main`; no reviewers; secrets and variables unchanged): `m4-production-functions`, `m3-test-functions`.
+- **B. Delete six legacy Environments** by exact name: `Preview`, `Production – dongphugia`, `Production – dongphugia-com-vn`, `restore-rehearsal`, `staging`, `pr-preview`. Never `Production`, `cloudflare-staging`, `runtime-backup`, `catalogue-direct-migration`, `m4-production-functions`, `m3-test-functions`. Deletion also removes their Environment-scoped secrets/variables.
+- **C. Delete two repository secrets:** `CLOUDFLARE_LEO563_PREVIEW_TOKEN`, `PHASE2_PREVIEW_ORDER_INTAKE_SIGNING_SECRET`.
+- **Retained:** the repository Variables, `M4_BACKUP_DATABASE_URL`, and all Production, backup and fixed-Preview credentials. The `production` environment name in `production-promotion.yml` is the core `Production` Environment.
+
+Rollback: deleted Environments and secrets cannot be restored; recreate by name and have the Owner re-enter any needed value. Since the Owner confirmed these are obsolete, no rollback is planned.
+
+## Owner decisions still open
+
+1. Remove the fallback `M4_BACKUP_DATABASE_URL` after a successful `dpg_backup_reader` run (technically eligible; Owner-only), and decide any `postgres` password rotation.
+2. Decide the remaining tier-2 workflows (6 deferred, `c-actions-recovery`) and `production-promotion` (external `workflow_call` callers UNKNOWN); retained by default.
+3. Optionally add the Owner as required reviewer on `Production` (currently branch-restricted to `main` only, no reviewer).
