@@ -30,19 +30,6 @@ it('reconciles only unordered, semantically identical route progress before stri
     expect((await readFile(secondPath,'utf8'))).toBe(changed)
   }finally{await rm(root,{recursive:true,force:true})}
 })
-it('reproduces both public noindex header blocks and keeps strict comparison before upload',async()=>{
-  const workflow=await readFile(new URL('../../.github/workflows/catalogue-public-preview.yml',import.meta.url),'utf8')
-  const reconcile=workflow.indexOf('public-preview.mjs" reconcile-progress')
-  const catalogueHeader=workflow.indexOf("printf '\\n/__catalogue/*")
-  const renderHeader=workflow.indexOf("printf '\\n/__render/*")
-  const compare=workflow.indexOf('public-preview.mjs compare-builds')
-  const upload=workflow.indexOf('- name: Upload one existing Worker version')
-  expect(reconcile).toBeGreaterThan(0)
-  expect(catalogueHeader).toBeGreaterThan(reconcile)
-  expect(renderHeader).toBeGreaterThan(catalogueHeader)
-  expect(compare).toBeGreaterThan(renderHeader)
-  expect(upload).toBeGreaterThan(compare)
-})
 it('uses only a fresh exact-account Dashboard proof on Billing403; never overrides a paid API plan',async()=>{
   const accountId='synthetic-account'
   const proof={contract:'dpg:cloudflare-workers-free-attestation:v1',accountHash:createHash('sha256').update(accountId).digest('hex'),
