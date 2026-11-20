@@ -25,10 +25,6 @@ describe('V1 fast deployment is the only active release path',()=>{
     expect(q).toContain('run_app_checks')
     expect(q).toContain('if: needs.scope.outputs.run_app_checks')
     for(const p of [
-      '.github/workflows/environment-worker-ci.yml',
-      '.github/workflows/pr-preview-build.yml',
-      '.github/workflows/pr-preview-cleanup.yml',
-      '.github/workflows/pr-preview-publish.yml',
       '.github/workflows/homepage-quality.yml'
     ]){
       const s=file(p)

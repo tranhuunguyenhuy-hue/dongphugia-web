@@ -6,7 +6,7 @@ describe('homepage CI risk-based scope', () => {
     for (const path of [
       'docs/PROJECT.md', 'AGENTS.md', 'apps/admin/app/page.tsx',
       'scripts/backup/create-encrypted-backup.sh',
-      '.github/workflows/production-promotion.yml',
+      '.github/workflows/m4-production-backup.yml',
     ]) expect(needsHomepageChecks([path])).toBe(false)
   })
 

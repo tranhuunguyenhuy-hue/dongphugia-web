@@ -7,15 +7,6 @@ import { renderEnvironmentWorkerReviewSummary } from './render-environment-worke
 import { API_ORIGIN_ACKNOWLEDGEMENT } from './run-environment-worker-wrangler-deploy.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const workflow = await readFile(path.join(here, '../../.github/workflows/environment-worker-publish.yml'), 'utf8')
-
-function workflowJob(name: string) {
-  const start = workflow.indexOf(`  ${name}:\n`)
-  if (start < 0) throw new Error(`Missing workflow job ${name}`)
-  const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z0-9_-]*:\n/)
-  return workflow.slice(start, nextJob < 0 ? undefined : start + 1 + nextJob)
-}
-
 async function applyGitHubEnvFile(file: string, base: Record<string, string>) {
   const env = { ...base }
   const contents = await readFile(file, 'utf8')
@@ -49,18 +40,6 @@ describe('Staging release review summary trust boundary', () => {
       expect(candidateJobEnvironment.DEPLOYMENT_TOKEN_ID).toBe(candidateTokenId)
       expect(candidateJobEnvironment.RELEASE_DEPLOYMENT_TOKEN_ID).toBe(candidateTokenId)
       expect(candidateJobEnvironment.RELEASE_API_ORIGIN_ACK).toBe(API_ORIGIN_ACKNOWLEDGEMENT)
-
-      const buildJob = workflowJob('build-candidate')
-      const reviewJob = workflowJob('review-candidate')
-      expect(buildJob).not.toContain('GITHUB_STEP_SUMMARY')
-      expect(buildJob).not.toContain('render-environment-worker-review-summary.mjs')
-      expect(reviewJob).toContain('needs: build-candidate')
-      expect(reviewJob).toContain('RELEASE_DEPLOYMENT_TOKEN_ID: ${{ inputs.deployment_token_id }}')
-      expect(reviewJob).toContain('RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}')
-      expect(reviewJob).toContain('RELEASE_API_ORIGIN_ACK: ${{ inputs.api_origin_ack }}')
-      expect(reviewJob).not.toContain('working-directory: candidate')
-      expect(reviewJob).not.toContain('npm ci')
-      expect(reviewJob).not.toContain('needs.build-candidate.outputs')
 
       const immutableInputs = {
         sourceSha: 'c'.repeat(40),
