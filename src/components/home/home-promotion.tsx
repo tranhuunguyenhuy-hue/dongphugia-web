@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState } from "react"
 import styles from "./home-promotion.module.css"
 
-const PROMOTION_URL = "https://www.dongphugia.vn/uudaicuoinam2026/"
+const PROMOTION_URL = "/uudaicuoinam2026/"
 const PROMOTION_IMAGE = "/images/campaigns/toto-year-end-2026.jpg"
-const SESSION_KEY = "dpg:home-promotion:toto-year-end-2026"
 let shownInDocument = false
 
 function isPromotionUrl(value: string) {
@@ -22,24 +21,6 @@ function isPromotionUrl(value: string) {
     }
 }
 
-function hasShownPromotion() {
-    if (shownInDocument) return true
-    try {
-        return sessionStorage.getItem(SESSION_KEY) === "1"
-    } catch {
-        return false
-    }
-}
-
-function markPromotionShown() {
-    shownInDocument = true
-    try {
-        sessionStorage.setItem(SESSION_KEY, "1")
-    } catch {
-        // A document-level guard still covers client-side navigation.
-    }
-}
-
 export function HomePromotion({
     image = PROMOTION_IMAGE,
     destination = PROMOTION_URL,
@@ -53,7 +34,7 @@ export function HomePromotion({
     const enabled = Boolean(image && isPromotionUrl(destination))
 
     useEffect(() => {
-        if (!enabled || hasShownPromotion()) return
+        if (!enabled || shownInDocument) return
 
         const prepare = () => setReady(true)
         if (document.readyState === "complete") prepare()
@@ -69,7 +50,7 @@ export function HomePromotion({
 
     function openAfterImageLoad() {
         const dialog = dialogRef.current
-        if (!dialog?.showModal || hasShownPromotion()) return
+        if (!dialog?.showModal || shownInDocument) return
 
         dialog.showModal()
         const root = document.documentElement
@@ -79,7 +60,7 @@ export function HomePromotion({
             root.style.overflow = previousOverflow
             restoreScroll.current = null
         }
-        markPromotionShown()
+        shownInDocument = true
     }
 
     return (
