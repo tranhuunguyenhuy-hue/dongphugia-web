@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { customers } from '@prisma/client'
 import { ArrowLeft, Save } from 'lucide-react'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { saveCustomer } from './actions'
 
 export function CustomerForm({ initialData }: { initialData: customers | null }) {

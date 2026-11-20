@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { ChevronLeft } from 'lucide-react'
 import { notFound } from 'next/navigation'
 import prisma from '@/lib/prisma'

@@ -23,7 +23,7 @@ describe('Supabase Management token preflight workflow', () => {
 
     expect(workflow).toContain('secrets.SUPABASE_MANAGEMENT_TOKEN')
     expect(workflow).toContain('/v1/organizations/$SUPABASE_ORGANIZATION_SLUG')
-    expect(workflow).toContain('/v1/organizations/$SUPABASE_ORGANIZATION_SLUG/projects?search=dongphugia-runtime&limit=100')
+    expect(workflow).toContain('/v1/organizations/$SUPABASE_ORGANIZATION_SLUG/projects?search=dongphugia-production&limit=100')
     expect(workflow).toContain('curl --config - --silent --show-error')
     expect(workflow).toContain('node scripts/backup/supabase-management-response.mjs "$ORGANIZATION_RESULT" "$PROJECTS_RESULT"')
     expect(workflow).toContain('http_status=%s')
@@ -55,20 +55,20 @@ describe('Supabase Management token preflight workflow', () => {
       {
         projects: [{
           ref: 'bonxyxluzlxfkdetryoo',
-          name: 'dongphugia-runtime',
+          name: 'dongphugia-production',
           region: 'ap-southeast-1',
           status: 'ACTIVE_HEALTHY',
         }],
         pagination: { offset: 0, limit: 100 },
       },
-      { ref: 'bonxyxluzlxfkdetryoo', name: 'dongphugia-runtime', region: 'ap-southeast-1' },
+      { ref: 'bonxyxluzlxfkdetryoo', name: 'dongphugia-production', region: 'ap-southeast-1' },
     )
 
     expect(result).toEqual({ ok: true })
   })
 
   it('rejects old account-wide response shapes, missing pagination, and target drift', () => {
-    const expected = { ref: 'bonxyxluzlxfkdetryoo', name: 'dongphugia-runtime', region: 'ap-southeast-1' }
+    const expected = { ref: 'bonxyxluzlxfkdetryoo', name: 'dongphugia-production', region: 'ap-southeast-1' }
     const project = {
       ref: expected.ref,
       name: expected.name,
@@ -84,6 +84,14 @@ describe('Supabase Management token preflight workflow', () => {
       { plan: 'free' },
       { projects: [project], pagination: {} },
       { ...expected, region: 'wrong-region' },
+    )).toEqual({ ok: false, reason: 'exact_project_identity_mismatch' })
+    expect(validateSupabaseManagementResponses(
+      { plan: 'free' },
+      {
+        projects: [{ ...project, name: 'dongphugia-runtime' }],
+        pagination: { offset: 0, limit: 100 },
+      },
+      expected,
     )).toEqual({ ok: false, reason: 'exact_project_identity_mismatch' })
   })
 })

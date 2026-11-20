@@ -1,0 +1,113 @@
+name: M4 admin-api Edge Function (Production only)
+
+# Deploys supabase/functions/admin-api to the Production project bonxyxluzlxfkdetryoo ONLY and sets its function secrets.
+# Owner-dispatched on main. Credentials (environment `m4-production-functions`): SUPABASE_PRODUCTION_ACCESS_TOKEN (project-scoped),
+# ADMIN_API_HMAC_SECRET (the same value is stored in environment `Production` for the Worker). No value is ever printed.
+#   operation=verify : checks scopes/wiring only (token reaches exactly this project, secrets present and well formed). No change.
+#   operation=deploy : requires the Owner's confirmation that the Production target contract flag and migrations 001/002 are done.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+      operation:
+        description: verify = no change; deploy = deploy the function and set its secrets
+        required: true
+        type: choice
+        options: [verify, deploy]
+        default: verify
+      owner_flag_and_migrations_confirmed:
+        description: Deploy only. true = Owner set production_writes_allowed and 001/002 are applied and verified
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m4-production-function-deploy
+  cancel-in-progress: false
+
+env:
+  PRODUCTION_PROJECT_REF: bonxyxluzlxfkdetryoo
+  TEST_PROJECT_REF: uybumsnyqpwcidjxmfsv
+  PRODUCTION_ORIGIN: https://www.dongphugia.vn
+  # Hosts of the images already stored on products (the form re-submits existing URLs) plus the Production media CDN.
+  # Existing rows keep their legacy hosts (the edit form re-submits them); new uploads use the verified default pull zone host.
+  MEDIA_HOSTS: dpg-products.b-cdn.net,cdn.dongphugia.com.vn,cdn.hita.com.vn,hita.com.vn,vietceramics.com
+  SUPABASE_CLI_VERSION: 3.2.0
+
+jobs:
+  function:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: m4-production-functions
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_PRODUCTION_ACCESS_TOKEN }}
+      HMAC: ${{ secrets.ADMIN_API_HMAC_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Guard target and credential presence (values are never printed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$PRODUCTION_PROJECT_REF" != "$TEST_PROJECT_REF"
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'M4_FUNCTION status=FAIL reason=access_token_missing'; exit 1; }
+          test "${#HMAC}" -ge 32 || { echo 'M4_FUNCTION status=FAIL reason=hmac_missing_or_short'; exit 1; }
+          [[ "$HMAC" =~ ^[0-9a-f]{64}$ ]] || echo 'M4_FUNCTION note=hmac_is_not_64_hex (accepted, length >= 32)'
+          grep -q 'verify_jwt = false' supabase/config.toml
+          echo "M4_FUNCTION status=PASS stage=guard token_present=true hmac_length=${#HMAC}"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+      - name: Verify the token reaches exactly the Production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase functions list --project-ref "$PRODUCTION_PROJECT_REF" | tee /tmp/functions-before.txt >/dev/null
+          echo "M4_FUNCTION status=PASS stage=token_scope project=$PRODUCTION_PROJECT_REF functions_listed=$(grep -c . /tmp/functions-before.txt)"
+          # The same token must NOT be able to manage the TEST project (project-scoped), otherwise it is broader than agreed.
+          if supabase functions list --project-ref "$TEST_PROJECT_REF" >/dev/null 2>&1; then echo 'M4_FUNCTION note=token_also_reaches_test_project'; else echo 'M4_FUNCTION token_scoped_to_production=true'; fi
+      - name: Deploy function and set its secrets (Production only)
+        if: inputs.operation == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ inputs.owner_flag_and_migrations_confirmed }}' = 'true' || { echo 'M4_FUNCTION status=FAIL reason=owner_confirmation_required'; exit 1; }
+          echo "::add-mask::$HMAC"
+          supabase functions deploy admin-api --project-ref "$PRODUCTION_PROJECT_REF" --no-verify-jwt --use-api --yes
+          supabase secrets set --yes --project-ref "$PRODUCTION_PROJECT_REF" \
+            "ADMIN_API_HMAC_SECRET=$HMAC" "ADMIN_API_ALLOWED_ORIGIN=$PRODUCTION_ORIGIN" "ADMIN_API_MEDIA_HOSTS=$MEDIA_HOSTS" "ADMIN_API_DB_ROLE=dpg_admin_api" >/dev/null
+          supabase functions list --project-ref "$PRODUCTION_PROJECT_REF" | grep -q 'admin-api'
+          echo 'M4_FUNCTION status=PASS stage=deploy'
+      - name: Verify the deployed function rejects unsigned requests (expects 401 INVALID_SIGNATURE, not 404)
+        if: inputs.operation == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' "https://${PRODUCTION_PROJECT_REF}.supabase.co/functions/v1/admin-api/me")
+          echo "unsigned GET /me -> $code"; head -c 120 /tmp/body.txt; echo
+          test "$code" = "401"; grep -q 'INVALID_SIGNATURE' /tmp/body.txt
+          code=$(curl -sS -o /tmp/body2.txt -w '%{http_code}' -X POST -H 'content-type: application/json' --data '{"email":"x@example.test","password":"x"}' "https://${PRODUCTION_PROJECT_REF}.supabase.co/functions/v1/admin-api/login")
+          echo "unsigned POST /login -> $code"; test "$code" = "401"
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### M4 Production function (${{ inputs.operation }})"
+            echo "- Source SHA: $GITHUB_SHA"
+            echo "- Project: $PRODUCTION_PROJECT_REF (TEST $TEST_PROJECT_REF refused)"
+            echo "- Supabase CLI: $SUPABASE_CLI_VERSION (pinned)"
+            echo "- Role: dpg_admin_api; allowed origin: $PRODUCTION_ORIGIN; media hosts: $MEDIA_HOSTS"
+            echo "- Rollback: supabase functions delete admin-api --project-ref $PRODUCTION_PROJECT_REF"
+          } >> "$GITHUB_STEP_SUMMARY"

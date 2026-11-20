@@ -94,9 +94,10 @@ function runRestorePreflight(envOverrides: Record<string, string>) {
 describe('backup restore rehearsal workflow contract', () => {
     it('is scheduled/manual and restricted to protected main', () => {
         expect(workflow).toContain('workflow_dispatch:')
-        expect(workflow).toContain("cron: '17 2 * * 1-6'")
-        expect(workflow).toContain("cron: '17 3 * * 0'")
-        expect(workflow).not.toContain("cron: '17 2 * * *'")
+        // M5: the legacy schedule is retired (its target project was deleted); the scheduled Production backup is m4-production-backup.yml.
+        expect(workflow).not.toMatch(/^\s*schedule:/m)
+        expect(workflow).toContain('RETIRED schedule')
+        expect(readFileSync('.github/workflows/m4-production-backup.yml', 'utf8')).toMatch(/schedule:\s*\n\s*- cron: '/)
         expect(workflow).toContain("github.event.schedule == '17 3 * * 0'")
         expect(workflow).toContain("github.event_name == 'workflow_dispatch' && inputs.rehearse_restore == true")
         expect(workflow).not.toMatch(/^\s*(push|pull_request):/m)

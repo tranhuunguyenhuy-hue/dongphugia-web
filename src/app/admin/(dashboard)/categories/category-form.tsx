@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, LayoutGrid, Image as ImageIcon, SearchIcon, Layers, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'

@@ -1,9 +1,9 @@
 name: Encrypted runtime backup and restore rehearsal
 
+# RETIRED schedule (M5, #311): this lane targets the deleted runtime project behind SUPABASE_RUNTIME_DATABASE_URL and a
+# `dpg_backup` role that does not exist in Production, so every scheduled run failed. The scheduled Production backup is the
+# M4 Production backup lane (m4-production-backup). Manual dispatch is kept for recovery reference only.
 on:
-  schedule:
-    - cron: '17 2 * * 1-6' # Monday-Saturday encrypted backup.
-    - cron: '17 3 * * 0' # Weekly encrypted backup and isolated restore.
   workflow_dispatch:
     inputs:
       rehearse_restore:
@@ -204,7 +204,7 @@ jobs:
         run: |
           {
             echo '### LEO-540 backup: PASS'
-            echo '- Source target: the existing Owner-configured dongphugia-runtime Preview target'
+            echo '- Source project: Supabase Production dongphugia-production (bonxyxluzlxfkdetryoo); internal target-contract environment: preview'
             echo '- Coverage: dpg_app, dpg_v1, and dpg_control; V1 Product/Family/media/staff/commerce state is included'
             echo '- Logical archive: encrypted before artifact upload'
             echo '- Manifest: schema metadata, row counts, and row hashes only; no row payloads'

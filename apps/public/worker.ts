@@ -1,17 +1,18 @@
 import { withPublicReadScope } from './src/runtime/public-read-scope'
+// Static import is required: vinext's fetch-handler resolves sibling modules (vinext-client-assets.js)
+// relative to the Worker entry. A dynamic import moved it into _next/static/ and broke every render in
+// the packaged artifact (#360 P1 readiness, verified in workerd).
 import vinextHandler from 'vinext/server/fetch-handler'
 import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnostic-safety.mjs'
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
 import {readBoundedPublicAssetText} from './src/runtime/bounded-public-asset'
 import {serveCampaignLanding} from './src/runtime/campaign-landing'
+import {entryFreshness, hasRenderErrorMarker, isStorablePage, pageCacheKey, planPageCache, remainingTtlSeconds} from './src/runtime/page-cache'
 
 import {
   assertPublicRuntime,
   classifyPublicApiRequest,
-  createCacheKey,
-  isAnonymousCacheCandidate,
-  isCacheableResponse,
   isForbiddenInternalControlRequest,
   isMalformedCataloguePagePath,
   PRIVATE_CACHE_CONTROL,
@@ -122,7 +123,10 @@ export default {
         'Cache-Control':PRIVATE_CACHE_CONTROL,...robotHeaders,...sourceIdentityHeader,
       }})
     }
-    if (!databaseMode) {
+    // M2's pinned staging snapshot uses dynamic SSR over local ASSETS. Only
+    // legacy snapshot releases carry the __render prerender proof and pages.
+    const stagingSnapshot = environment.APP_ENV === 'staging' && environment.PUBLIC_CATALOGUE_SOURCE === 'snapshot'
+    if (!databaseMode && !stagingSnapshot) {
       const prerendered=await servePrerenderedCatalogue(request,environment,__DPG_BUILD_SOURCE_SHA__)
       if(prerendered)return prerendered
     }
@@ -142,27 +146,50 @@ export default {
         'Cache-Control':PRIVATE_CACHE_CONTROL,...robotHeaders,...sourceIdentityHeader,
       }})
     }
-    // Production keeps its existing anonymous HTML cache. Preview and Staging
-    // always reflect the current published catalogue and never persist page
-    // responses in the local/deployment Worker Cache API.
-    const cacheCandidate = environment.APP_ENV === 'production' && isAnonymousCacheCandidate(request)
-    const cacheKey = cacheCandidate ? createCacheKey(request, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint()) : null
-    const workerCache = cacheKey ? await caches.open('dongphugia-public-v1') : null
+    // Cache-first for anonymous HTML (#360 P1). Production and the isolated TEST staging pilot only;
+    // Flight/RSC, cookies, unknown query parameters and non-GET requests always bypass (see page-cache.ts).
+    const cacheEnabled = environment.APP_ENV === 'production'
+      || (environment.APP_ENV === 'staging' && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true')
+    const plan = cacheEnabled ? planPageCache(request) : null
+    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint()) : null
+    const workerCache = cacheKey ? await caches.open('dongphugia-public-v2') : null
+    const edgeControl = plan ? `public, max-age=${plan.ttlSeconds}, must-revalidate` : PUBLIC_EDGE_CACHE_CONTROL
+    let staleEntry: Response | null = null
 
-    if (cacheKey && workerCache) {
+    if (cacheKey && workerCache && plan) {
       const cached = await workerCache.match(cacheKey)
       if (cached) {
-        return withHeaders(cached, {
-          ...sourceIdentityHeader,
-          'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
-          'CDN-Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
-          'X-DPG-Cache': 'HIT',
-          ...robotHeaders,
-        })
+        const cachedAt = Number(cached.headers.get('x-dpg-cached-at'))
+        const freshness = entryFreshness(cachedAt, Date.now(), plan.ttlSeconds, plan.staleSeconds)
+        if (freshness === 'fresh') {
+          return withHeaders(cached, {
+            ...sourceIdentityHeader,
+            'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
+            'CDN-Cache-Control': `public, max-age=${remainingTtlSeconds(cachedAt, Date.now(), plan.ttlSeconds)}, must-revalidate`,
+            'X-DPG-Cache': 'HIT',
+            ...robotHeaders,
+          }, ['x-dpg-cached-at'])
+        }
+        if (freshness === 'stale-usable') staleEntry = cached
       }
     }
+    // A bounded stale copy is served only when rendering fails; it never masks a successful 404/redirect.
+    const serveStale = () => withHeaders(staleEntry!, {
+      ...sourceIdentityHeader,
+      'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
+      'CDN-Cache-Control': 'public, max-age=0, must-revalidate',
+      'X-DPG-Cache': 'STALE',
+      ...robotHeaders,
+    }, ['x-dpg-cached-at'])
 
-    const rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
+    let rendered: Response
+    try {
+      rendered = await withPublicReadScope(request.signal, () => vinextHandler.fetch(request, environment, context))
+    } catch (renderError) {
+      if (staleEntry) return serveStale()
+      throw renderError
+    }
+    if (staleEntry && rendered.status >= 500) return serveStale()
     if(environment.PUBLIC_DB_DIAGNOSTICS==='true'&&rendered.status>=500){
       const marker=rendered.headers.get('X-DPG-Render-Failure')??''
       const safeMarkers=new Set(['CROSS_REQUEST_IO','GLOBAL_SCOPE_IO','SUBREQUEST_LIMIT','CPU_LIMIT','MEMORY_LIMIT','NO_RESPONSE','STREAM_CLOSED','BODY_USED','NETWORK_LOST','ASSET_UNAVAILABLE','UNCLASSIFIED_EXCEPTION'])
@@ -173,27 +200,33 @@ export default {
         contentTypeClass,
         hasRenderFailureMarker:safeMarkers.has(marker),...(safeMarkers.has(marker)?{renderFailure:marker}:{})}))
     }
-    if (!cacheKey || !isCacheableResponse(rendered)) {
+    if (!cacheKey || !plan || request.method !== 'GET' || !isStorablePage(rendered)) {
       return withHeaders(rendered, {
         ...sourceIdentityHeader,
         'Cache-Control': PRIVATE_CACHE_CONTROL,
         'X-DPG-Cache': 'BYPASS',
+        // Non-sensitive reason code so cache behaviour is observable without logs.
+        'X-DPG-Cache-Reason': !cacheEnabled ? 'disabled' : !plan ? 'not-eligible' : request.method !== 'GET' ? 'head' : 'not-storable',
         ...robotHeaders,
       })
     }
 
     const stored = withHeaders(rendered.clone(), {
       ...sourceIdentityHeader,
-      'Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
+      'Cache-Control': `public, max-age=${plan.ttlSeconds + plan.staleSeconds}`,
+      'X-DPG-Cached-At': String(Date.now()),
       'X-DPG-Cache': 'STORED',
       ...robotHeaders,
     })
-    context.waitUntil(workerCache!.put(cacheKey, stored))
+    // Buffer once off the response path; a body with a render-error marker or a broken stream is never stored.
+    context.waitUntil(stored.text().then(html => hasRenderErrorMarker(html)
+      ? undefined
+      : workerCache!.put(cacheKey, new Response(html, {status: stored.status, headers: stored.headers}))).catch(() => undefined))
 
     return withHeaders(rendered, {
       ...sourceIdentityHeader,
       'Cache-Control': PUBLIC_BROWSER_CACHE_CONTROL,
-      'CDN-Cache-Control': PUBLIC_EDGE_CACHE_CONTROL,
+      'CDN-Cache-Control': edgeControl,
       'X-DPG-Cache': 'MISS',
       ...robotHeaders,
     })

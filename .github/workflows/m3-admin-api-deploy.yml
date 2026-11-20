@@ -1,0 +1,72 @@
+name: M3 admin-api Edge Function (TEST only)
+
+# Deploys supabase/functions/admin-api to the isolated TEST project uybumsnyqpwcidjxmfsv ONLY and sets its function
+# secrets. Owner-dispatched on main; the Production project ref is rejected. Requires (Owner-provisioned):
+#   environment `m3-test-functions` secret SUPABASE_TEST_ACCESS_TOKEN (scope: this TEST project, Edge Functions + Secrets write)
+#   repository secret M3_ADMIN_API_HMAC_SECRET (32 random bytes, hex) shared with the staging Worker publisher.
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m3-admin-api-deploy
+  cancel-in-progress: false
+
+env:
+  TEST_PROJECT_REF: uybumsnyqpwcidjxmfsv
+  PRODUCTION_PROJECT_REF: bonxyxluzlxfkdetryoo
+  STAGING_ORIGIN: https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev
+  MEDIA_HOSTS: dpg-media-staging.b-cdn.net
+
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: m3-test-functions
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Guard target and secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_TEST_ACCESS_TOKEN }}
+          HMAC: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
+        run: |
+          set -euo pipefail
+          test "$TEST_PROJECT_REF" != "$PRODUCTION_PROJECT_REF"
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo 'SUPABASE_TEST_ACCESS_TOKEN missing'; exit 1; }
+          test "${#HMAC}" -ge 32 || { echo 'M3_ADMIN_API_HMAC_SECRET missing or too short'; exit 1; }
+          grep -q 'verify_jwt = false' supabase/config.toml
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.2.0
+      - name: Deploy function and set secrets (TEST project only)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_TEST_ACCESS_TOKEN }}
+          HMAC: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$HMAC"
+          supabase functions deploy admin-api --project-ref "$TEST_PROJECT_REF" --no-verify-jwt --use-api --yes
+          supabase secrets set --yes --project-ref "$TEST_PROJECT_REF" \
+            "ADMIN_API_HMAC_SECRET=$HMAC" "ADMIN_API_ALLOWED_ORIGIN=$STAGING_ORIGIN" "ADMIN_API_MEDIA_HOSTS=$MEDIA_HOSTS"
+          supabase functions list --project-ref "$TEST_PROJECT_REF" | tee /tmp/functions.txt
+          grep -q 'admin-api' /tmp/functions.txt
+      - name: Verify the deployed function rejects unsigned requests (expects 401, not 404)
+        run: |
+          set -euo pipefail
+          sleep 10
+          code=$(curl -sS -o /tmp/body.txt -w '%{http_code}' "https://${TEST_PROJECT_REF}.supabase.co/functions/v1/admin-api/me")
+          echo "unsigned GET /me -> $code"; head -c 200 /tmp/body.txt; echo
+          test "$code" = "401"
+          grep -q 'INVALID_SIGNATURE' /tmp/body.txt

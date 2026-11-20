@@ -1,36 +1,49 @@
-# V1 — current state / evidence boundary
+# Current checkpoint — POST-M5, active development
 
-**Last read-only Cloudflare verification: 2026-11-13.** This file records observations, **not** a claim that recovery is complete. Revalidate before applying any Production changes.
+Updated 2026-11-20 (UTC) under [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412). This file is the only mutable state snapshot; policy lives in [AGENTS.md](../../AGENTS.md). History (closed, not instructions): [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) Master, [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307), [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308), [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309), [M4 #310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310), [M5 #311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) (Owner UAT PASS, closed 2026-11-20; [acceptance](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032996976)).
 
-## Decision and milestone state
+## Merged vs deployed — do not conflate
 
-- [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) — approved V1 reset / sole authority.
-- [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307): **ACTIVE, NOT YET ACCEPTED**. Hosted DB completeness and Production DB-backed Public routes: **UNKNOWN / not demonstrated**.
-- [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308): **QUEUED**. One fixed named Worker Preview `staging` INSIDE Production Worker chosen, but no deployed URL/functional parity verified yet.
-- [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309): **QUEUED**. Owner permits full legacy Admin+Hyperdrive+real Auth on the SAME fixed Preview, isolated TEST DB. Hosted end-to-end not verified.
-- [M4 #310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310): **QUEUED**. No current Admin Production deploy verified.
-- [M5 #311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311): **QUEUED**.
-
-## Provider observations
-
-| Item | Last observed | Limitations |
+| | State | Verified |
 | --- | --- | --- |
-| Cloudflare primary account | `d54f3402b9d112ab64d6135e0e3f1fb1` | V1 only; do not use V2 account |
-| Fixed Preview `staging` INSIDE `dongphugia-v1-public-production` | Approved new M2/M3 destination; current deployed URL unknown/not proven | Explicit Preview bindings/secrets, isolated test DB/Hyperdrive and real auth required |
-| Old separate Worker `dpg-staging` (obsolete) | Earlier version `f0cabc41-f024-46cc-8978-510c3d8c1216` | Leave untouched; no M2/M3 deployment there |\n| Production Worker | `dongphugia-v1-public-production`; version `7d0194d7-b007-4fb0-9fd9-d365ca9de834` deployed 2026-11-04 15:05 UTC | Public snapshot, not verified live PostgreSQL |
-| Public domains | `www.dongphugia.vn`, `dongphugia.vn` → Worker Production deployment | Fixed Preview has independent URL after first successful deployment, no new custom domain |
-| Worker bindings | Both `nodejs_compat` and assets; **no Hyperdrive binding**, no listed Worker secrets | Does not prove external DB cannot be used by other paths; actual code path must be inspected |
-| Supabase V1 candidate | `bonxyxluzlxfkdetryoo`, schema proposed `dpg_app` | Hosted schema/rows, auth and source-of-truth **not reverified** |
-| Recovery source | PR #300 legacy Admin Products/Blog; PR #301 local Workerd; PR #304 local scoped DB role | Local proof only, no hosted production DB import or Admin acceptance |
-| Local recovery count | about **17,752 Products, 10 Blog posts** in a documented local restoration | Reconcile actual source and hosted target; never treat as already in Supabase |
+| `main` (merged source) | `91df7a1e4710135e1e07ae680559acc81edb75ab` (PR #417). Contains the homepage promotion popup and campaign prize update (#409/#411/#413/#414, last app change `e070986a19fd`) | git, 2026-11-20 |
+| Deployed Production Worker | deployment `d9961b42-6d23-46eb-9a8a-aa5bb20d5652`, version `45c1e9e7-63a7-4695-b8ae-a671eb6dc1f5`, 100% since 2026-11-20 08:31:02 UTC, message `M4 Admin release e070986a19fd` | Cloudflare API, read-only, 2026-11-20 |
+| Previous deployment (rollback target) | deployment `d3b28b83-4971-4b8d-a7b9-09701a1c1ca5`, version `e7dda372-7cfa-418f-b729-b8d34ed5dcb6`, source `24a5479` | Cloudflare API, read-only, 2026-11-20 |
 
-## Next real work
+The live Worker was built from `e070986a19fd`. `main` is ahead of it only by documentation, issue/PR templates, one one-off branch-cleanup workflow and one policy test (#415, #417): no application or runtime source differs from what is deployed. A deployment record is **not** hosted acceptance: Owner UAT of the popup and prizes on the live site is **UNKNOWN** here, and who ran the deployment is not verified. Re-check the deployment read-only before documenting or deploying: state changes with every release.
 
-Agent assigned to M1 must: verify actual target/source; capture backup and restore proof; reconcile hosted product/blog inventory; implement live read-only Product+Blog Public path with cached DB reads; keep snapshot rollback; verify actual Production URL and counts. **No Phase 2 work. M1 first; one fixed Preview reserved for M2/M3.**
+## Production
 
-After M1 succeeds, update this file with deployed SHA, measured DB counts, source/freshness evidence, acceptance URL, rollback and remaining issues. Keep UNKNOWNs visible rather than inventing success.
+- Worker `dongphugia-v1-public-production` (account `d54f3402b9d112ab64d6135e0e3f1fb1`) serves canonical Public plus the accepted Admin under `/admin-next`; legacy `/admin*` redirects (302). Domains `www.dongphugia.vn`, `dongphugia.vn`.
+- Database `dongphugia-production` (`bonxyxluzlxfkdetryoo`), schema `dpg_app`; Public Hyperdrive `905f5791…`, role `dpg_public_catalogue`. Edge Function `admin-api` on the same project; `production_writes_allowed = true`; migrations `001`/`002` applied; one admin account.
+- Scope: catalogue master data is Dev-managed (read-only lookups). Partners/Projects are hidden in Admin (gateway 404) pending review. Homepage hero banners are DB-managed (`dpg_app.banners`, HERO, `sort_order`) with the verified historical hero as fallback.
+- Staging: fixed Preview `staging` inside the same Worker, TEST database `dongphugia-staging` (`uybumsnyqpwcidjxmfsv`), Access-protected. Public-only M2 snapshot is recovery material, not the current staging artifact.
+- Denylisted historical database ref `tlmgudfhsyzayiazuugf` (deleted runtime project) is neither approved target. Do not use it.
 
+## Release and rollback
 
-## Archived identity — never confuse with V1 Production
+- Release lane: `.github/workflows/m4-production-admin-release.yml` (`verify` then `publish`; exact reviewed SHA; the active version must equal the recorded rollback target; secrets passed with `--secrets-file`; paced smoke; no automatic rollback; concurrency group `v1-production-worker-release`). `v1-worker-release.yml` refuses to publish while Production carries the Admin — never use it to publish.
+- Function: `.github/workflows/m4-production-function-deploy.yml` (Supabase CLI pinned 3.2.0).
+- Rollback order: Worker `wrangler rollback <previous version>` (does not undo SQL) → delete function → revoke banner grant/policy → `002`/`001` rollbacks; restore from backup only for data loss. Plan: [m4-production-admin-plan](../deploy/m4-production-admin-plan.md).
 
-Historical LEO-539 isolated, synthetic-only Supabase test project: `tlmgudfhsyzayiazuugf`, name `dongphugia-runtime`, Singapore `ap-southeast-1`. This is **historical evidence, not the selected Production target**; it is kept here solely to preserve security-boundary provenance and avoid accidental use in M1. The active candidate V1 project requires fresh verification as described above.
+## Backup
+
+- `.github/workflows/m4-production-backup.yml`: daily 19:41 UTC, encrypted (age), SHA256SUMS, isolated restore rehearsal comparing row counts and schema objects, hard-fails on any restore, row-count, schema-object or ACL difference. Legacy `runtime-backup.yml` schedule is retired (its target project was deleted).
+- Credential `dpg_backup_reader` via `M4_BACKUP_READER_DATABASE_URL` (least privilege, read-only). `M4_BACKUP_DATABASE_URL` remains as fallback until the Owner approves removal. Runbook: [m5-backup-recovery-runbook](m5-backup-recovery-runbook.md). Latest verified backup after the CDN change: fresh encrypted backup and scratch restore gate PASS ([#311 acceptance](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032996976)). One scheduled run started about 5h45m after its cron — watch for drift.
+
+## Media / CDN (M5 Option A, complete)
+
+- Stored legacy-CDN URLs were normalised to `https://dpg-products.b-cdn.net/`: 137,980 ledger values, 16,252 products, 111 tile-image repairs. Production read-only verification: 17,752 products, 110,321 product images, database ~293 MB (hard stop 367 MB). Evidence: [m5-legacy-cdn-normalization-plan](m5-legacy-cdn-normalization-plan.md), [#311 / 7032644022](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032644022).
+- Rollback ledgers `dpg_control.m5_cdn_ledger` and `m5_tile_ledger` are retained; rollback `003` was **not** run.
+- Still on the old origin by design: 16 unusual image paths (`%`-encoded or `//`) + 1 main image, Blog legacy images, third-party hosts. Display mapping stays. The legacy host `cdn.dongphugia.com.vn` has no public DNS record. Bunny: 7 storage zones, 6 pull zones (dashboard 2026-11-20). No deletion, hostname or DNS change is authorised.
+
+## Open work (none authorised unless its issue says so)
+
+- [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412) agent documentation (this change).
+- [#343](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/343) TOTO campaign landing (acceptance/live status UNKNOWN); Codex PR [#414](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/414) (campaign prize update) is merged and included in the deployed source `e070986a19fd`; live Owner acceptance UNKNOWN.
+- [#348](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/348) credential governance with PR [#350](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/350) — pending Owner decision; actual secret-store reconciliation UNKNOWN.
+- Owner-decision backlog from M5: remove the fallback backup secret and any `postgres` password rotation; Bunny zone/hostname cleanup candidates (`dpg-publishing-production-r2`, `dpg-publishing-staging`, `dpg-v1-preview-*`, `cdn.dongphugia.com.vn`), each needing a dependency check and approval; manufacturer PDF↔SKU attachment; hotlink independence; A4 print check on the first real quote; evidence before editing the 17 exception references; watch Cloudflare 1102 spikes on the next release.
+
+## M2 recovery artifact — time-sensitive
+
+[Artifact #14253475719](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/actions/runs/43918034548/artifacts/14253475719), 37,736,963 bytes, SHA-256 `74cc0631ad1c37898f4b76476a50963b2518332ff11c0af52b2f965499c72bc0`, reported expiry **2026-11-23**. The Owner reports having saved a copy locally on 2026-11-20; the checksum comparison is **UNKNOWN** until the Owner confirms it. Never upload it to a public repository. Re-upload is staging only; no automatic Production rollback. See [M2 rollback runbook](../deploy/m2-fixed-preview-runbook.md).

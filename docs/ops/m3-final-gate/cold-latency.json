@@ -1,0 +1,19 @@
+{
+ "cold": {
+  "login": 2213,
+  "loginStatus": 200,
+  "firstDashboard": 493,
+  "firstProducts": 287
+ },
+ "warm": {
+  "loginN": 10,
+  "loginP50": 884,
+  "loginP95": 1140,
+  "loginMax": 1140,
+  "getN": 96,
+  "getP50": 271,
+  "getP95": 474,
+  "getMax": 704,
+  "non200": 0
+ }
+}

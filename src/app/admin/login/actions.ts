@@ -121,7 +121,7 @@ export async function logoutAction(): Promise<void> {
         await deleteSession(token)
     }
 
-    cookieStore.delete(ADMIN_SESSION_COOKIE)
+    cookieStore.delete({ name: ADMIN_SESSION_COOKIE, path: '/' })
     redirect('/admin/login')
 }
 

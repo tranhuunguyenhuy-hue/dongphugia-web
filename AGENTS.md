@@ -1,50 +1,39 @@
-# ĐÔNG PHÚ GIA V1 — instructions for every AI agent
+# Đông Phú Gia V1 — shared instructions for Codex and Claude Code
 
-**CURRENT OWNER DECISION (2026-11-13).** This file is the **sole active work policy** for repository `tranhuunguyenhuy-hue/dongphugia.com.vn`. Read it and the assigned Issue. If needed, read `docs/PROJECT.md` and the **specific** deployment/data reference. Older issues, PRs, ADRs, plans and tool-generated handoffs are historical evidence only, **not** authority. Never start old work just because a document or open branch mentions it.
+This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST-M5 / ACTIVE DEVELOPMENT.** The V1 restoration (M1–M5, Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306)) is complete and Owner-accepted; those issues are **history, not instructions**.
 
-## One goal, five milestones, strictly ordered
+## Read in this order — nothing else by default
+1. This file.
+2. [Current checkpoint](docs/ops/project-current-state.md): live state, release lane, backup, open work.
+3. **The issue the Owner assigned to you**, including its latest comments. The latest explicit Owner/Tech Lead direction in that issue prevails over dated status or examples here.
+4. Only the runbook the task needs, via the [technical handbook](docs/PROJECT.md). Do not load the whole docs tree or old conversation history.
 
-Master: [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306).
+## Who does what
+- **Owner**: states needs, decides, and holds final UAT and release authority, including approval of any Production deploy. Not required to know technical detail.
+- **ChatGPT = Tech Lead / coordinator**: plans issues (following `.github/ISSUE_TEMPLATE/agent-task.md`), coordinates the agents, and reviews agent outcomes and PRs, recording LGTM / CHANGES REQUESTED in the issue. Anything an agent needs (images, URLs, decisions) must be in the issue or repo, never only in a chat.
+- **Claude Code** = implementation agent for the *Infra / Database / Operations / Documentation* lane. It may analyse independently and self-review, but it cannot accept its own PR as Tech Lead.
+- **Codex** = implementation agent for the *UI / Frontend* lane (`src/app/(public)/`, `src/components/`, UI tests).
+- A task outside your lane needs explicit Owner authorisation in the issue. Never start another agent or thread without Owner direction.
 
-1. **ACTIVE M1 [#307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307):** Public **Production** connects to V1 Supabase PostgreSQL; full restored Products/SKUs and Blog are verified **in hosted DB and served by actual Public read path**. Protect current storefront and preserve an immediately usable snapshot fallback.
-2. **QUEUED M2 [#308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308):** create/use **ONE fixed Worker Preview named `staging` INSIDE `dongphugia-v1-public-production`**, not the separate `dpg-staging` Worker. Verify Public parity with Production; snapshot allowed; fixed Preview URL, desktop/mobile and exact deployment evidence.
-3. **QUEUED M3 [#309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309):** restore **ALL legacy Admin** under `/admin` ON THE SAME FIXED Preview `staging`, including **real Hyperdrive, PostgreSQL, authentication, sessions, roles and full necessary features/CRUD**, against an **isolated test PostgreSQL database**. Reuse `src/app/admin`; no disabled login shell or substitute CMS.
-4. **QUEUED M4 [#310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310):** deploy Owner-accepted Admin to Production, verify protected login, DB permissions, Product/Blog writes and freshness on Public, backups and rollback.
-5. **QUEUED M5 [#311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311):** post-restoration audit and separate future-upgrade proposal. No implementation of unapproved additions.
+## Authority and scope
+- Work only on the issue assigned to you. Open issues and PRs are **not** authorised just because they exist.
+- No unapproved features, new architecture, new commerce/checkout, crawler, AWS/Coolify, separate Admin site or infrastructure cleanup/decommissioning. Old source, scripts and workflows may be needed for recovery but carry no work authority.
+- A merge, local test, HTTP 200 or deployment record is not acceptance. Record **PASS / FAIL / UNKNOWN** per criterion; the Owner accepts UI and live behaviour.
 
-**Never substitute:** PR merge / local synthetic test / HTTP 200 / Cloudflare deployment record for deployed real-flow acceptance. Record **PASS / FAIL / UNKNOWN** and evidence.
+## Environment and source boundaries
+- Source of truth: canonical Public UI `src/app/(public)/` and `src/components/`; deployed Public handler `apps/public/worker.ts`; canonical Admin `src/app/admin/`. Do not extend `apps/admin/` or replace the Public handler. The Production artifact is the combined Public+Admin Worker (see handbook), not root Next.js.
+- Cloudflare account `d54f3402b9d112ab64d6135e0e3f1fb1`; one Worker `dongphugia-v1-public-production`; Production `www.dongphugia.vn` and `dongphugia.vn`. Fixed Preview `staging` inside that Worker: https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev. No per-branch Preview, separate staging Worker or new domain. Never use Production `wrangler deploy` for staging.
+- Supabase Free organization Đông Phú Gia Runtime: Production `dongphugia-production` ref `bonxyxluzlxfkdetryoo`; Staging/TEST `dongphugia-staging` ref `uybumsnyqpwcidjxmfsv`. Verify immutable ref, schema/roles/grants, consumers and quota before any mutation; healthy/renamed does not prove isolation. Never touch V2 or other projects. Historical ref `tlmgudfhsyzayiazuugf` is a deleted project: do not use.
+- Keep Public read-only vs Admin least-privilege roles/Hyperdrive, separate Production vs TEST secrets, Access plus app Auth on Preview, noindex, redacted auth logs, isolated media. Only public/synthetic data in staging.
+- Preserve Product/SKU identity, slugs, variants, price provenance, Blog/media and UI. Unknown price = `Liên hệ báo giá`; verified historical price is labelled as reference. Never invent data or stock. Preserve migration ledgers, backups/checksums, rollback and security tests.
+- **Never** put secrets, `.env`, private dumps, PII or raw logs in GitHub or chat.
+- No destructive data loss or reset. Incremental infrastructure budget **$0**: no paid branching, plan upgrades, VPS or additional paid resource. New costs, destructive changes, DNS/zone/credential changes and Production deploys need explicit Owner approval.
 
-## Environment contract
-
-- **Localhost:** development and focused tests; no automatic Preview per Git branch/PR.
-- **Fixed Preview `staging`:** a named Preview inside Production Worker `dongphugia-v1-public-production` (same Worker, independent Preview deployment and URL), M2/M3 acceptance target. Worker Previews **do not inherit Production settings**: explicit Preview vars/secrets and **distinct Hyperdrive config pointing at isolated TEST DB/schema**. Owner AUTHORIZES **full legacy Admin, Hyperdrive, real login/auth/session and other needed functionality** there. Preview URLs public by default: use Cloudflare Access/equivalent plus app authorization. No Production write credentials or Production DB mutations from Preview. Old `dpg-staging` Worker is superseded, not to be used or deleted in this docs-only change.
-- Production: existing `dongphugia-v1-public-production` Worker, serving `www.dongphugia.vn` and `dongphugia.vn`. Target Admin: **same origin /admin**. Do not switch to `admin.dongphugia.vn` on your own.
-- V1 Cloudflare account (verify live before any write): `d54f3402b9d112ab64d6135e0e3f1fb1`. V1 Supabase candidate `bonxyxluzlxfkdetryoo`: **verify the current actual target/schema/permissions**. V2 is a separate project. Never touch V2.
-- Cloudflare Workers for both Public and Admin is approved **Option A**; Node.js compatibility support is not proof the legacy Admin passes Cloudflare CPU/Prisma/auth constraints.
-
-## Workflow for the *single active milestone*
-
-1. Read assigned Issue #307 (then next milestone only after acceptance). Check fresh `main`, exact deployed Worker version and target database state. Do **not** automatically spawn more agents, start multiple competing implementations, or resume old PR queues.
-2. Select the shortest working path. Reuse existing code/commits when verified (legacy Admin #300, local workerd #301, DB role #304 are **reference only**). One integration branch/PR for the current milestone. No lengthy speculative research, new governance layers or unrelated redesign.
-3. Develop and test on localhost; use **exactly one fixed Preview** for M2/M3 hosted verification: `npx wrangler preview --worker-name dongphugia-v1-public-production --name staging` with correct repo Wrangler settings. No per-PR Preview automation or new Worker. Run focused tests, relevant typecheck/build and real Preview login/CRUD smoke. On two repeated failures change approach; record blocker.
-4. For shared/Production database actions: confirm correct target, current backup, recoverability, schema, row counts and data provenance **before** imports/migrations. Prefer idempotent, reversible steps; read-only Public DB role; minimal Admin write permissions. Never expose credentials or store them in code. No destructive data loss, security bypass or unapproved costs.
-5. After each delivery, update its **one** milestone Issue with source SHA/PR, deployed URL + version, DB count and sample evidence, specific PASS/FAIL/UNKNOWN, rollback path, and whether Owner acceptance remains. Do not declare milestone done without direct runtime proof.
-6. Do not silently deploy changes to Production merely because a PR merged. Owner's approved M1–M5 plan sets priority; risky cutovers, destructive data changes and promotion M4 need recorded target-specific acceptance. Complete independent safe work instead of waiting unnecessarily.
-
-## Scope freeze and source truth
-
-**Canceled / not active:** legacy Phase 2, cart/order/checkout, variant research, catalogue crawling, new Admin, **automatic per-branch Cloudflare Preview builds**, **using separate `dpg-staging` Worker**, AWS/EC2/Coolify staging, extra Workers/DNS/domain, unrelated SEO/marketing, extra approval workflows, multi-agent auto-dispatch. Old issues/PRs remain closed as superseded; preserve useful source/rollback.
-
-**Preserve while restoring:** correct canonical UI (home/banner/menu/category/PDP), known products/SKUs/slug/price provenance, Blog/media/SEO, actual database backups, migrations, evidence and reversible rollback scripts. Missing/uncertain price = `Liên hệ báo giá`; verified historical price must be labeled as reference, never current stock or confirmed price. Do not manufacture relationships or data.
-
-Docs hierarchy: `AGENTS.md` → active Issue → `docs/PROJECT.md` → `docs/ops/project-current-state.md` → specific technical recovery/runbook. Archived Git history is for provenance only. Any conflicting legacy document loses to this decision. GitHub issues are closed rather than deleted to retain verifiable work history.
-
-## Fixed Preview technical authority (Owner-approved)
-
-M1 Production DB-backed Public stays first. M2/M3 use the *single* `staging` Preview inside the Production Worker with a stable URL and independent Preview version history. Preview may have full legacy Admin functionality **only with real auth and isolated test data**, never a Production writable Hyperdrive binding. `wrangler preview` does not deploy Production. Protect Preview's public URL, check Cloudflare CPU fit and Hyperdrive behavior in hosted Preview, and record URL/ID/auth/CRUD proof. See `docs/deploy/cloudflare-fixed-preview-production.md`. Worker code rollback does not restore SQL writes. Do not decommission `dpg-staging` yet.
-
-## CI/CD fast lane (Owner priority: get code to Production)
-
-GitHub branch rule requires the sole `quality` check. Docs-only PRs should skip PostgreSQL, npm install, lint and tests entirely. Affected application changes get the real existing tests. Historical Preview-per-PR/AWS/`dpg-staging` CI is not run automatically; run deep regression manually only when its scope requires it.
-
-**Cloudflare Workers Builds direct Git integration is NOT the release authority:** it was misconfigured to run root `npm run build` + root `npx wrangler deploy` and failed with a non-existent `WORKER_SELF_REFERENCE`. Release through **ONE approved workflow `.github/workflows/v1-worker-release.yml`** from `main`, with `publish=false` to build/validate and `publish=true` only after source/data acceptance. This uses the actual `apps/public` vinext/Worker toolchain, packages the existing Worker, checks Worker identity and does a hosted smoke. Never deploy a root Next.js artifact as Production Worker. No auto-push directly to Production from unrelated docs commits. Do not skip M1 database and blog reconciliation just to claim release PASS. See `docs/ops/v1-fast-release.md`.
+## Workflow
+1. **Start**: `git status --short --branch`, fetch, compare with `main`, read the issue's latest comments. Do not discard WIP or restart finished work. If a cloud app created its own branch, keep the checkpoint ancestry and name the continuation branch.
+2. **Branch/PR**: one branch and one PR per issue, named `codex/<issue>-<slug>` or `claude/<issue>-<slug>`. Declare in the issue which files you will touch so parallel lanes do not collide. Rebase or merge `main` before opening the PR.
+3. **Verify**: run affected tests, typecheck/build and, when applicable, a real hosted smoke. Node 24.13.0, npm 11.6.2, committed lockfiles. Required CI status: `quality` (`.github/workflows/quality.yml`); the docs-only classifier is not a bypass for source changes. On repeated failure change approach and report the exact blocker. Do independent safe work instead of waiting on CI.
+4. **Review and accept**: the Tech Lead (ChatGPT) reviews the PR; the Owner gives final UAT of UI/live behaviour. An implementing agent never accepts its own PR. PR/CI success or a deployment record alone is not runtime acceptance.
+5. **Release**: Production deploys are **serialized** (one at a time, Owner approval, exact reviewed SHA) because Public and Admin share one Worker. Use only the reviewed lane in the handbook; never publish a stale or Public-only artifact over the Admin; do not dispatch unrelated legacy workflows; do not bypass identity gates or change protected settings to turn CI green. If an actor or scoped credential is missing, state the exact Owner action.
+6. **Before hosted writes** confirm target, backup + restore/rollback, schema/permissions, free quota, non-sensitive seed and existing consumers. Worker rollback and PostgreSQL rollback are separate; Worker rollback does not undo SQL.
+7. **Handoff** (before stopping or switching agent): commit, push, verify the SHA, then comment in the issue: branch/SHA, completed work, PASS/FAIL/UNKNOWN, next concrete command or blocker, deployment/version if applicable, backup status, Owner action. Never claim local-only state transferred. No merge or deploy solely for handoff. Keep reports short.

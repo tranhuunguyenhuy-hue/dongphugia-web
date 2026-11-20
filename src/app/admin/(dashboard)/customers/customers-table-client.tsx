@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { type ColumnDef } from '@tanstack/react-table'
 import { customers } from '@prisma/client'
 import { DataTable } from '@/components/admin/data-table'

@@ -24,6 +24,15 @@ describe('live public Blog projection', () => {
     expect(mocks.readPublicRows).not.toHaveBeenCalled()
   })
 
+  it('reads the isolated TEST database, not the pinned M2 snapshot, on M3 staging', async () => {
+    vi.stubEnv('APP_ENV', 'staging')
+    vi.stubEnv('PREVIEW_TEST_DATABASE_ISOLATED', 'true')
+    mocks.readPublicRows.mockResolvedValueOnce([])
+    await expect(getPublicBlogPosts()).resolves.toEqual([])
+    expect(mocks.readPublicRows).toHaveBeenCalledTimes(1)
+    vi.unstubAllEnvs()
+  })
+
   it('selects only public article fields, filters published rows and drops internal publishing metadata', async () => {
     mocks.readPublicRows.mockResolvedValueOnce([{
       post: {

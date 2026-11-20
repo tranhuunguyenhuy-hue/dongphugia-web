@@ -388,6 +388,24 @@ jobs:
         run: |
           echo 'Only the verified PostgreSQL build can be published; snapshot recovery uses the recorded previous Worker version.' >&2
           exit 1
+      - name: Refuse to replace the Production Admin with a Public-only build
+        if: inputs.publish
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # M4 put the Admin into this Worker; a Public-only artifact would silently remove it. Use m4-production-admin-release.yml.
+          wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
+          node "$wrangler" deployments list --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/v1-guard-deployments.json"
+          active="$(node -e "const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const l=Array.isArray(d)?d:(d.deployments??d.result?.deployments);const c=l.reduce((a,i)=>!a||i.created_on>a.created_on?i:a,null);const a=c.versions.filter(v=>v.percentage===100);process.stdout.write(a.length===1?a[0].version_id:'')" "$RUNNER_TEMP/v1-guard-deployments.json")"
+          test -n "$active"
+          node "$wrangler" versions view "$active" --name dongphugia-v1-public-production --json > "$RUNNER_TEMP/v1-guard-version.json"
+          if node -e "const r=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const b=(r.version??r.result??r).resources?.bindings??[];process.exit(b.some(x=>x.name==='ADMIN_API_URL')?0:1)" "$RUNNER_TEMP/v1-guard-version.json"; then
+            echo 'V1_RELEASE_REFUSED: the active Production version carries the Admin; publish through m4-production-admin-release.yml.' >&2
+            exit 1
+          fi
       - name: Publish only when explicitly requested
         if: inputs.publish && inputs.data_source == 'postgresql'
         id: deploy

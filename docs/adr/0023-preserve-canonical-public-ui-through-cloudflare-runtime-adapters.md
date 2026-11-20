@@ -13,8 +13,7 @@ migration target is an isolated, noindex Cloudflare Worker Preview. The current
 Production Public component tree and visual language remain the Owner-approved
 UI authority; the closed historical static Pages candidate is not a UI source.
 
-ADR 0017 selected a separate Public Worker runtime and deprecated the legacy
-runtime composition. That decision does not require a second visual
+The Public Worker runtime is a runtime adapter, not a replacement visual implementation. That decision does not require a second visual
 implementation. Reimplementing current pages as independent static markup would
 create two UI authorities and repeat the divergence already observed in the
 historical Pages candidate.

@@ -2,6 +2,7 @@
 
 import { assertAdminLaunchModuleEnabled } from '@/lib/admin-launch-scope'
 import prisma from '@/lib/prisma'
+import { requirePermission } from '@/lib/auth/get-current-user'
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ export interface RevenueDataPoint {
  */
 export async function getDashboardStats() {
     assertAdminLaunchModuleEnabled('dashboard')
+  await requirePermission('dashboard:read')
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -99,27 +101,16 @@ export async function getDashboardStats() {
  */
 export async function getRevenueChart(period: RevenuePeriod = 'month'): Promise<RevenueDataPoint[]> {
     assertAdminLaunchModuleEnabled('dashboard')
-  let truncUnit: string
-  let intervalDays: number
-
-  switch (period) {
-    case 'day':
-      truncUnit = 'day'
-      intervalDays = 30
-      break
-    case 'week':
-      truncUnit = 'week'
-      intervalDays = 84 // 12 weeks
-      break
-    case 'month':
-      truncUnit = 'month'
-      intervalDays = 365 // 12 months
-      break
-    case 'year':
-      truncUnit = 'year'
-      intervalDays = 365 * 5 // 5 years
-      break
+  await requirePermission('dashboard:read')
+  const periods: Record<RevenuePeriod, { truncUnit: string; intervalDays: number }> = {
+    day: { truncUnit: 'day', intervalDays: 30 },
+    week: { truncUnit: 'week', intervalDays: 84 },
+    month: { truncUnit: 'month', intervalDays: 365 },
+    year: { truncUnit: 'year', intervalDays: 365 * 5 },
   }
+  const selectedPeriod = periods[period]
+  if (!selectedPeriod) throw new Error('DASHBOARD_PERIOD_INVALID')
+  const { truncUnit, intervalDays } = selectedPeriod
 
   const rows = await prisma.$queryRawUnsafe<
     { date: Date; revenue: bigint; order_count: bigint }[]
@@ -128,7 +119,7 @@ export async function getRevenueChart(period: RevenuePeriod = 'month'): Promise<
       DATE_TRUNC('${truncUnit}', created_at AT TIME ZONE 'Asia/Ho_Chi_Minh') AS date,
       SUM(total) AS revenue,
       COUNT(*) AS order_count
-    FROM orders
+    FROM dpg_app.orders
     WHERE
       status = 'delivered'
       AND payment_status = 'paid'
@@ -151,6 +142,7 @@ export async function getRevenueChart(period: RevenuePeriod = 'month'): Promise<
  */
 export async function getPendingQuotes() {
     assertAdminLaunchModuleEnabled('dashboard')
+  await requirePermission('dashboard:read')
   const quotes = await prisma.quote_requests.findMany({
     where: { status: 'pending' },
     orderBy: { created_at: 'desc' },
@@ -185,6 +177,7 @@ export async function getPendingQuotes() {
  */
 export async function getPendingOrders() {
     assertAdminLaunchModuleEnabled('dashboard')
+  await requirePermission('dashboard:read')
   const orders = await prisma.orders.findMany({
     where: { status: 'pending' },
     orderBy: { created_at: 'desc' },
@@ -217,6 +210,8 @@ export async function getPendingOrders() {
  */
 export async function getTopProductsBySales(limit = 5) {
     assertAdminLaunchModuleEnabled('dashboard')
+  await requirePermission('dashboard:read')
+  const safeLimit = Number.isInteger(limit) && limit >= 1 && limit <= 20 ? limit : 5
   const rows = await prisma.$queryRawUnsafe<
     {
       product_id: number
@@ -232,13 +227,13 @@ export async function getTopProductsBySales(limit = 5) {
       oi.product_sku,
       SUM(oi.quantity) AS total_sold,
       p.image_main_url AS image_url
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    JOIN products p ON oi.product_id = p.id
+    FROM dpg_app.order_items oi
+    JOIN dpg_app.orders o ON oi.order_id = o.id
+    JOIN dpg_app.products p ON oi.product_id = p.id
     WHERE o.status = 'delivered'
     GROUP BY oi.product_id, oi.product_name, oi.product_sku, p.image_main_url
     ORDER BY total_sold DESC
-    LIMIT ${limit}
+    LIMIT ${safeLimit}
   `)
 
   return rows.map(row => ({
@@ -258,6 +253,8 @@ export async function getTopProductsBySales(limit = 5) {
  */
 export async function getTopProductsByQuotes(limit = 5) {
     assertAdminLaunchModuleEnabled('dashboard')
+  await requirePermission('dashboard:read')
+  const safeLimit = Number.isInteger(limit) && limit >= 1 && limit <= 20 ? limit : 5
   const rows = await prisma.$queryRawUnsafe<
     {
       product_id: number
@@ -273,11 +270,11 @@ export async function getTopProductsByQuotes(limit = 5) {
       p.sku,
       COUNT(qi.id) AS quote_count,
       p.image_main_url AS image_url
-    FROM quote_items qi
-    JOIN products p ON qi.product_id = p.id
+    FROM dpg_app.quote_items qi
+    JOIN dpg_app.products p ON qi.product_id = p.id
     GROUP BY qi.product_id, p.name, p.sku, p.image_main_url
     ORDER BY quote_count DESC
-    LIMIT ${limit}
+    LIMIT ${safeLimit}
   `)
 
   return rows.map(row => ({

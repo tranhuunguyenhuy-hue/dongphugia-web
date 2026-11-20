@@ -1,9 +1,25 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
+import Link from '@/components/admin/admin-link'
 import { usePathname } from "next/navigation"
-import { BookOpen, LayoutGrid, LogOut, Package2 } from "lucide-react"
+import {
+  BookOpen,
+  Building2,
+  ClipboardList,
+  FolderTree,
+  Handshake,
+  Images,
+  LayoutDashboard,
+  LayoutGrid,
+  Layers3,
+  LogOut,
+  Package2,
+  ShoppingCart,
+  Tags,
+  UserCog,
+  Users,
+} from "lucide-react"
 
 import {
   Sidebar,
@@ -29,20 +45,52 @@ type LaunchNavItem = {
   title: string
   href: string
   icon: React.ElementType
-  permission: Permission
+  permissions: Permission[]
 }
 
 const LAUNCH_NAV_GROUPS: Array<{ label: string; items: LaunchNavItem[] }> = [
   {
+    label: "TỔNG QUAN",
+    items: [
+      { title: "Dashboard", href: "/admin", icon: LayoutDashboard, permissions: ["dashboard:read"] },
+    ],
+  },
+  {
     label: "SẢN PHẨM",
     items: [
-      { title: "Tất cả sản phẩm", href: "/admin/products", icon: Package2, permission: "products:read" },
+      { title: "Tất cả sản phẩm", href: "/admin/products", icon: Package2, permissions: ["products:read"] },
+      { title: "Danh mục", href: "/admin/categories", icon: FolderTree, permissions: ["categories:read"] },
+      { title: "PIM", href: "/admin/pim", icon: Layers3, permissions: ["brands:read"] },
+    ],
+  },
+  {
+    label: "KINH DOANH",
+    items: [
+      { title: "Đơn hàng", href: "/admin/orders", icon: ShoppingCart, permissions: ["orders:read", "orders:read_assigned"] },
+      { title: "Yêu cầu báo giá", href: "/admin/quote-requests", icon: ClipboardList, permissions: ["quotes:read", "quotes:read_assigned"] },
+      { title: "Khách hàng", href: "/admin/customers", icon: Users, permissions: ["customers:read"] },
     ],
   },
   {
     label: "NỘI DUNG",
     items: [
-      { title: "Blog Posts", href: "/admin/blog/posts", icon: BookOpen, permission: "blog:read" },
+      { title: "Banner trang chủ", href: "/admin/banners", icon: Images, permissions: ["blog:write"] },
+      { title: "Blog Posts", href: "/admin/blog/posts", icon: BookOpen, permissions: ["blog:read"] },
+      { title: "Blog Tags", href: "/admin/blog/tags", icon: Tags, permissions: ["blog:read"] },
+      { title: "Banner nội dung", href: "/admin/content/banners", icon: Images, permissions: ["blog:read"] },
+    ],
+  },
+  {
+    label: "ĐỐI TÁC & DỰ ÁN",
+    items: [
+      { title: "Đối tác", href: "/admin/doi-tac", icon: Handshake, permissions: ["blog:write"] },
+      { title: "Dự án", href: "/admin/du-an", icon: Building2, permissions: ["blog:write"] },
+    ],
+  },
+  {
+    label: "HỆ THỐNG",
+    items: [
+      { title: "Người dùng", href: "/admin/users", icon: UserCog, permissions: ["users:read"] },
     ],
   },
 ]
@@ -52,7 +100,7 @@ export default function SidebarNav({ currentUser }: SidebarNavProps) {
   const visibleNavGroups = LAUNCH_NAV_GROUPS
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => can(currentUser.role, item.permission)),
+      items: group.items.filter((item) => item.permissions.some((permission) => can(currentUser.role, permission))),
     }))
     .filter((group) => group.items.length > 0)
 
@@ -60,7 +108,7 @@ export default function SidebarNav({ currentUser }: SidebarNavProps) {
     <Sidebar collapsible="icon" className="border-r border-transparent bg-[#f9fafb]">
       <SidebarHeader className="py-4">
         <div className="flex items-center justify-between group-data-[collapsible=icon]:justify-center px-3">
-          <Link href="/admin/products" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
+          <Link href="/admin" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
             <div className="bg-primary text-primary-foreground p-1.5 rounded-md shrink-0">
               <LayoutGrid className="size-4" />
             </div>
@@ -77,7 +125,9 @@ export default function SidebarNav({ currentUser }: SidebarNavProps) {
             </SidebarGroupLabel>
             <SidebarMenu className="gap-0.5">
               {group.items.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+                const isActive = item.href === "/admin"
+                  ? pathname === item.href
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`)
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton

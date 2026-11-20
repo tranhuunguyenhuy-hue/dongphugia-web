@@ -1,6 +1,6 @@
 import { getAdminProducts, getProductStats } from '@/lib/public-api-products'
 import { getAdminCategories, getAdminSubcategories, getAdminBrands } from '@/lib/cache'
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { Button } from '@/components/ui/button'
 
 import { Plus } from 'lucide-react'

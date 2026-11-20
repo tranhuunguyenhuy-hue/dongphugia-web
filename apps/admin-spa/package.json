@@ -1,0 +1,6 @@
+{
+  "name": "@dpg/admin-spa",
+  "private": true,
+  "type": "module",
+  "description": "Static Admin shell for the M3 G4 pilot. Built with the Vite from apps/public; React comes from the repository root."
+}

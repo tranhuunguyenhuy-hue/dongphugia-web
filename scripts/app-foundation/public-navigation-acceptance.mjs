@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { chromium, webkit } from '@playwright/test'
-import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
+import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
 import { validatePublicNavigationResponse } from './public-navigation-response.mjs'
 const [base, sha] = process.argv.slice(2)
 assert.match(sha ?? '', /^[a-f0-9]{40}$/)
@@ -34,7 +34,9 @@ try {
     await applyM2BrowserAccess(context, origin, accessHeaders)
     const requestGet = (url, options = {}) => {
       assert.equal(new URL(url).origin, origin, 'M2_AUTH_ORIGIN_REQUIRED')
-      return context.request.get(url, { ...options, headers: { ...(options.headers || {}), ...accessHeaders }, ...(hosted ? { maxRedirects: 0 } : {}) })
+      const requestOptions = { ...options, headers: { ...(options.headers || {}), ...accessHeaders } }
+      return snapshotMode ? getM2PublicResponse(context.request, origin, url, requestOptions)
+        : context.request.get(url, requestOptions)
     }
     const page = await context.newPage()
     page.setDefaultTimeout(30000)

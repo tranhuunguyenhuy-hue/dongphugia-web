@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from '@/components/admin/admin-link'
 import { ChevronLeft } from 'lucide-react'
 import { getCategories, getSubcategories, getBrands, getOrigins, getColors, getMaterials, getFilterDefinitions, getProductTypes, getCatalogTaxons, getNormalizedProductTypes } from '@/lib/cache'
 import { ProductForm } from '../product-form'

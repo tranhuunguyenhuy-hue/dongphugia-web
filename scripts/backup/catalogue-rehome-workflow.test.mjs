@@ -23,6 +23,7 @@ describe('Supabase runtime catalogue re-home workflow', () => {
     expect(workflow).toContain('SUPABASE_MANAGEMENT_TOKEN')
     expect(workflow).toContain('ymjvuwefhqqlymwlocqn')
     expect(workflow).toContain('bonxyxluzlxfkdetryoo')
+    expect(workflow).toContain('.name == "dongphugia-production"')
     expect(workflow).toContain("inputs.operation == 'migrate'")
     expect(workflow).toContain("inputs.operation == 'preflight'")
     expect(workflow).toContain("inputs.operation != 'preflight'")

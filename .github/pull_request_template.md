@@ -1,26 +1,26 @@
-## Active milestone only
+## Issue and lane
 
-- Milestone / Issue: M1 #307 / M2 #308 / M3 #309 / M4 #310 / M5 #311
-- Why it advances the **current** milestone:
+- Issue: #
+- Lane (UI = Codex / Infra-DB-Ops-Docs = Claude): 
+- Files I declared in the issue as touched:
 - What changed (no unrelated features):
 
-## Actual acceptance evidence
+## Evidence
 
 - Source SHA and changed paths:
 - Focused tests + relevant build/typecheck:
-- Functional results on localhost:
-- Fixed Preview `staging` URL / exact Preview deployment ID OR Production URL / Worker version, when applicable:
-- Hosted PostgreSQL count / read-path / CRUD evidence **if applicable**:
-- PASS / FAIL / UNKNOWN (each acceptance criterion):
-- Data/auth risk and documented rollback (Worker rollback ≠ SQL rollback):
+- Functional results on localhost (screenshots for UI):
+- Preview `staging` URL/deployment ID OR Production URL/Worker version, when applicable:
+- Hosted PostgreSQL / read-path / CRUD evidence **if applicable**:
+- PASS / FAIL / UNKNOWN (each acceptance criterion in the issue):
+- Data/auth risk and rollback (Worker rollback ≠ SQL rollback):
 
 ## Scope and release
 
-- [ ] Not a resumed Phase 2, per-branch Preview, separate `dpg-staging` Worker, V2 or competing Admin implementation
-- [ ] Fixed Preview (if used): dedicated Hyperdrive TEST DB, Preview-only secrets, real login/access protection
-- [ ] Verified correct V1 account/target; no credentials or PII committed
-- [ ] No destructive DB operation or unapproved additional costs
-- [ ] Diff reviewed against only the assigned Issue
-- [ ] Owner acceptance and target-specific release permission recorded where required
+- [ ] Diff matches only the assigned issue; no unapproved feature or infrastructure cleanup
+- [ ] Verified correct Production vs TEST target; no credentials, PII or raw logs committed
+- [ ] No destructive DB operation, no unapproved cost, no CI bypass
+- [ ] Merged ≠ deployed: no Production release without Owner approval, an exact reviewed SHA and the reviewed release lane
+- [ ] Tech Lead review and Owner acceptance recorded where required
 
 **PR/CI success alone does not equal runtime acceptance.** See `AGENTS.md`.

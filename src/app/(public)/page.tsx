@@ -5,6 +5,7 @@ import {
     getPublicHomeBanners,
     getPublicHomeContent,
 } from "@dpg/public-home-runtime"
+import { HomePromotion } from "@/components/home/home-promotion"
 import { HeroBanner } from "@/components/home/hero-banner"
 import { BrandSlider } from "@/components/home/brand-slider"
 import { BlogSection } from "@/components/home/blog-section"
@@ -98,6 +99,7 @@ export default async function HomePage() {
             >
                 <HomepageContentSections />
             </Suspense>
+            <HomePromotion />
         </div>
     )
 }

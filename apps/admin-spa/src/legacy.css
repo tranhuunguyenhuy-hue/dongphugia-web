@@ -1,0 +1,15 @@
+/* A4 print sheet of orders and quotes (mirrors the printed document of the legacy Admin). Scoped to .legacy so it cannot
+   leak into the shared primitives; everything else in the Admin uses the shadcn/ui primitives and Tailwind utilities. */
+@layer legacy {
+  @page { size: A4; margin: 0 }
+  .legacy .a4{background:#fff;color:#000;width:210mm;min-height:297mm;padding:18mm;margin:0 auto;border:1px solid oklch(0.92 0.004 286.32);font-size:13px;line-height:1.5}
+  .legacy .a4 table{width:100%;border-collapse:collapse;margin:12px 0}
+  .legacy .a4 th,.legacy .a4 td{border:1px solid #000;padding:6px;text-align:left;font-size:13px;height:auto}
+  .legacy .a4 p{margin:2px 0}
+  .legacy .a4-head{border-bottom:2px solid #000;padding-bottom:8px}.legacy .a4-head h2{color:#c00;margin:0;font-size:24px;font-weight:700}
+  .legacy .a4-title{text-align:center;text-transform:uppercase;font-size:20px;font-weight:700;margin:16px 0 4px}
+  .legacy .a4-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .legacy .a4-sign{display:flex;justify-content:space-around;text-align:center;margin-top:32px}.legacy .sign-space{height:80px}
+  .legacy .center-text{text-align:center}.legacy .pre{white-space:pre-wrap}
+  @media print{.legacy .a4{border:0;margin:0}}
+}

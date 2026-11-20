@@ -1,9 +1,5 @@
-# V1 Public — Cloudflare deployment runtime
+# Public Worker
 
-**Current roadmap:** [AGENTS.md](../../AGENTS.md) → [M1 Issue #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307).
+`apps/public/worker.ts` is the canonical Public runtime. Preserve canonical UI from `src/app/(public)/` and `src/components/`; Production serves PostgreSQL via the dedicated read-only Hyperdrive and retains snapshot fallback. M1 and M2 accepted; M3 restores full legacy Admin in the same named fixed Preview `staging` with isolated TEST PostgreSQL.
 
-This deployable serves `https://www.dongphugia.vn` on existing Worker `dongphugia-v1-public-production`. The verified earlier release was **snapshot-backed**; the urgent M1 task is to reconcile all recovered Products and Blog in **V1 Supabase PostgreSQL** and prove that deployed Public now reads them (cached DB reads permitted). Do not simply load DB while leaving all Public reads pointed to the bundled snapshot.
-
-Preserve approved Public UI/SEO/media/price provenance and snapshot fallback. M2 mirrors UI using **one named Preview `staging` INSIDE the existing Production Worker**; Public Preview may use read-only snapshot. Do not deploy to separate `dpg-staging` Worker or automatically create per-PR Previews. Do not expose staff secrets in Public/client.
-
-See `docs/deploy/postgresql-production-adoption-contract.md`, `docs/deploy/cloudflare-fixed-preview-production.md`. Existing scripts must be inspected for real build commands instead of trusting old handoff text.
+For M3 use `npm run build:m3-combined-worker` and the reviewed M3 artifact/publisher. Do not substitute a root Next.js build, change Public routing, reuse Production writable data or deploy separate staging. See [AGENTS.md](../../AGENTS.md), [current checkpoint](../../docs/ops/project-current-state.md) and [fixed Preview runbook](../../docs/deploy/cloudflare-fixed-preview-production.md).

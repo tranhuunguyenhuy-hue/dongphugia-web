@@ -7,9 +7,9 @@ on:
         required: true
         type: string
       operation:
-        description: Public capture, preflight, or fixed staging publication
+        description: M2 Public capture/preflight/publication, or M3 combined Admin preparation/publication
         type: choice
-        options: [verify-read-access, capture-snapshot, prepare-preview, publish]
+        options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3]
         default: verify-read-access
         required: true
 permissions:
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   prepare:
     if: >-
-      github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
+      !endsWith(inputs.operation, '-m3') && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
       github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && inputs.approved_source_sha == github.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -146,12 +146,23 @@ jobs:
           path: ${{ runner.temp }}/m2-public-snapshot
           if-no-files-found: error
           retention-days: 7
-      - name: Upload exact preflighted Preview artifact
-        if: inputs.operation == 'prepare-preview' || inputs.operation == 'publish'
+      - name: Upload isolated Preview candidate and preflight evidence
+        # Preserve the isolated candidate for local reproduction if preflight
+        # fails. Publication still requires prepare success and a PASS record.
+        if: always() && steps.assemble.outcome == 'success' && (inputs.operation == 'prepare-preview' || inputs.operation == 'publish')
         uses: actions/upload-artifact@v4
         with:
           name: m2-fixed-preview-${{ github.sha }}
-          path: ${{ runner.temp }}/m2-preview-artifact
+          # .vite manifests and .assetsignore are part of the recorded digests.
+          # Upload only the closed candidate paths, excluding local CLI state.
+          include-hidden-files: true
+          path: |
+            ${{ runner.temp }}/m2-preview-artifact/worker
+            ${{ runner.temp }}/m2-preview-artifact/assets
+            ${{ runner.temp }}/m2-preview-artifact/wrangler.fixed-preview.json
+            ${{ runner.temp }}/m2-preview-artifact/m2-artifact.json
+            ${{ runner.temp }}/m2-preview-artifact/snapshot-lock.json
+            ${{ runner.temp }}/m2-preview-artifact/m2-preflight.json
           if-no-files-found: error
           retention-days: 7
       - name: Upload local runtime evidence
@@ -202,3 +213,100 @@ jobs:
           path: ${{ runner.temp }}/m2-hosted-evidence
           if-no-files-found: ignore
           retention-days: 7
+  prepare-m3:
+    if: >-
+      inputs.operation == 'prepare-m3' || inputs.operation == 'publish-m3'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # Non-secret Preview configuration (Hyperdrive IDs, media target names) lives in this existing
+    # non-Production environment; no database or storage credential is available to the build.
+    environment: cloudflare-staging
+    steps:
+      - name: Identity gate
+        env:
+          APPROVED_SOURCE_SHA: ${{ inputs.approved_source_sha }}
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] && [ "$GITHUB_ACTOR" = tranhuunguyenhuy-hue ] \
+            && [ "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia.com.vn ] \
+            && [ "$APPROVED_SOURCE_SHA" = "$GITHUB_SHA" ]
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - name: Install locked tools
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+          npm ci --prefix tools/m2-preview
+      - name: Build exact-source combined Worker
+        env:
+          BUILD_SOURCE_SHA: ${{ github.sha }}
+        run: npm run build:m3-combined-worker
+      - name: Assemble source-pinned M3 artifact with TEST bindings
+        env:
+          # Non-secret, reviewed identifiers: dedicated TEST Hyperdrives (cache off) and the sole Production one to exclude.
+          M3_TEST_PUBLIC_HYPERDRIVE_ID: 948e4215eca5477f8f2f026b27e5d165
+          M3_TEST_ADMIN_HYPERDRIVE_ID: 9f81135c71ef4f74b144e544b62ca67e
+          M3_PRODUCTION_HYPERDRIVE_IDS: 905f5791e9d84cf285f7533b92d03f49
+          M3_PRODUCTION_HYPERDRIVE_INVENTORY_VERIFIED: 'true'
+          M3_PREVIEW_MEDIA_ZONE_ID: ${{ vars.M3_PREVIEW_MEDIA_ZONE_ID }}
+          M3_PRODUCTION_MEDIA_ZONE_ID: ${{ vars.M3_PRODUCTION_MEDIA_ZONE_ID }}
+          M3_PREVIEW_MEDIA_ZONE_NAME: ${{ vars.M3_PREVIEW_MEDIA_ZONE_NAME }}
+          M3_PREVIEW_MEDIA_STORAGE_HOSTNAME: ${{ vars.M3_PREVIEW_MEDIA_STORAGE_HOSTNAME }}
+          M3_PREVIEW_MEDIA_CDN_HOSTNAME: ${{ vars.M3_PREVIEW_MEDIA_CDN_HOSTNAME }}
+        run: node scripts/app-foundation/assemble-m3-fixed-preview.mjs --source-sha "$GITHUB_SHA" --output dist/m3-fixed-preview
+      - name: Upload M3 candidate (closed paths only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: m3-fixed-preview-${{ github.sha }}
+          include-hidden-files: true
+          path: |
+            dist/m3-fixed-preview/combined
+            dist/m3-fixed-preview/wrangler.m3-fixed-preview.json
+            dist/m3-fixed-preview/m3-artifact.json
+            dist/m3-fixed-preview/manifest.json
+          if-no-files-found: error
+          retention-days: 30
+  publish-m3:
+    needs: prepare-m3
+    if: inputs.operation == 'publish-m3' && needs.prepare-m3.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: cloudflare-staging
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.13.0
+          cache: npm
+      - name: Install locked tools before publication credentials
+        run: |
+          npm ci
+          npm ci --prefix apps/public
+          npm ci --prefix tools/m2-preview
+          npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: m3-fixed-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/m3-preview-artifact
+      - name: Publish only named staging and run hosted smoke
+        env:
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          M3_PREVIEW_BUNNY_STORAGE_API_KEY: ${{ secrets.M3_PREVIEW_BUNNY_STORAGE_API_KEY }}
+          M3_ADMIN_API_HMAC_SECRET: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+        run: npx --no-install tsx scripts/app-foundation/publish-m3-fixed-preview.mjs "$RUNNER_TEMP/m3-preview-artifact" "$GITHUB_SHA"
+      - name: Upload sanitized hosted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m3-hosted-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/m3-hosted-evidence
+          if-no-files-found: ignore
+          retention-days: 30

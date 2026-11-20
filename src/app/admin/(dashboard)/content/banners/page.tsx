@@ -14,7 +14,7 @@ export default async function BannersAdminPage() {
         banner_url: string | null
     }[]>`
         SELECT id, name, slug, thumbnail_url, banner_url
-        FROM categories
+        FROM dpg_app.categories
         WHERE is_active = true
         ORDER BY sort_order ASC
     `

@@ -13,7 +13,7 @@ vi.mock('./live-public-blog', () => ({ getPublicBlogPosts: async () => Array.fro
   published_at: '2026-11-15', category: { name: 'Category', slug: 'category' },
 })) }))
 
-import { getPublicHomeBanners, getPublicHomeContent } from './preview-public-home'
+import { getPublicHomeBanners, getPublicHomeContent, mapHomeBannerRows, safeHomeBannerImage, safeHomeBannerLink } from './preview-public-home'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -60,5 +60,47 @@ describe('fixed staging homepage parity', () => {
     vi.stubEnv('PUBLIC_CATALOGUE_SOURCE', 'snapshot')
     expect(await getPublicHomeBanners()).toEqual([])
     expect((await getPublicHomeContent()).posts).toEqual([])
+  })
+})
+
+describe('database-managed hero banners (M4)', () => {
+  const managed = 'https://dpg-products.b-cdn.net/banners/1776486977694-87cnaa.png'
+  const legacy = 'https://tygjmrhandbffjllxveu.supabase.co/storage/v1/object/public/images/banners/1776486977694-87cnaa.png'
+
+  it('maps active Admin rows, in order, with strictly validated images and links', () => {
+    const rows = [
+      { id: 11, title: 'Hero A', image_url: managed, link_url: '/thiet-bi-ve-sinh' },
+      { id: 12, title: null, image_url: legacy, link_url: 'https://www.dongphugia.vn/blog' },
+      { id: 13, title: 'Bad image', image_url: 'https://evil.example/banners/a.png', link_url: null },
+      { id: 14, title: 'Bad link', image_url: managed, link_url: 'javascript:alert(1)' },
+    ]
+    const mapped = mapHomeBannerRows(rows)
+    expect(mapped.map((banner) => banner.id)).toEqual([11, 12, 14])
+    expect(mapped[0]).toMatchObject({ imageUrl: managed, desktopImageUrl: managed, mobileImageUrl: managed, linkUrl: '/thiet-bi-ve-sinh' })
+    expect(mapped[1].linkUrl).toBe('https://www.dongphugia.vn/blog')
+    expect(mapped[2].linkUrl).toBeNull()
+  })
+
+  it('accepts only managed or archived banner image shapes', () => {
+    expect(safeHomeBannerImage(managed)).toBe(managed)
+    expect(safeHomeBannerImage(legacy)).toBe(legacy)
+    for (const value of [
+      'http://dpg-products.b-cdn.net/banners/a.png', 'https://dpg-products.b-cdn.net/products/a.png', 'https://dpg-products.b-cdn.net/banners/../a.png',
+      'https://dpg-products.b-cdn.net/banners/a.svg', 'https://dpg-products.b-cdn.net/banners/a.png?x=1', 'https://dpg-products.b-cdn.net/banners/a.png#x',
+      'https://dpg-products.b-cdn.net:444/banners/a.png', 'https://u:p@dpg-products.b-cdn.net/banners/a.png', 'https://dpg-products.b-cdn.net.evil.example/banners/a.png',
+      'https://cdn.dongphugia.com.vn/banners/a.png', null, 42, '',
+    ]) expect(safeHomeBannerImage(value), String(value)).toBeNull()
+  })
+
+  it('accepts only same-site paths and dongphugia.vn https links', () => {
+    for (const ok of ['/', '/blog/huong-dan-chon', '/thiet-bi-ve-sinh?brand=toto', 'https://dongphugia.vn/x']) expect(safeHomeBannerLink(ok), ok).not.toBeNull()
+    for (const bad of ['//evil.example', '/\\evil.example', 'javascript:alert(1)', 'http://www.dongphugia.vn/', 'https://evil.example/', 'https://u:p@www.dongphugia.vn/', '', null]) expect(safeHomeBannerLink(bad), String(bad)).toBeNull()
+  })
+
+  it('keeps the verified historical hero when the table is empty or unreadable, and serves DB rows once present', async () => {
+    vi.stubEnv('APP_ENV', 'production')
+    vi.stubEnv('PUBLIC_CATALOGUE_SOURCE', 'postgresql')
+    // ./public-db is mocked without readPublicRows here: the read throws, so the historical set must be served.
+    expect((await getPublicHomeBanners()).map(({ id }) => id)).toEqual([6, 4, 5])
   })
 })

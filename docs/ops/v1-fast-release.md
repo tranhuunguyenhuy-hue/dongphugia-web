@@ -1,25 +1,10 @@
-# Đông Phú Gia V1 — CI/CD fast lane
+# V1 CI/CD fast lane
 
-**Owner decision 2026-11-13:** prioritize real Production results; one critical GitHub quality gate and one explicit release workflow, not competing AWS/Pages/Preview/Staging worker pipelines.
+One branch and one PR per issue. Policy: [AGENTS.md](../../AGENTS.md); state: [checkpoint](project-current-state.md). No parallel deployment paths; Production deploys are serialized and need Owner approval.
 
-## Verified problem
+1. **Verify** affected source with focused tests, typecheck/build and PR. Required GitHub status: `quality`; documentation-only changes skip expensive application checks, but code, test and workflow changes must pass the actual required checks.
+2. **Release the combined Public+Admin Worker** only with `.github/workflows/m4-production-admin-release.yml` from reviewed `main`: run `operation=verify` first, then `publish` for the exact approved SHA, with `rollback_version_id` equal to the version active right now and `owner_ready_confirmed=true`. Supabase function changes use `.github/workflows/m4-production-function-deploy.yml`.
+3. **Do not** use `v1-worker-release.yml` (refuses to publish while Production carries the Admin), the M2 `v1-fixed-preview.yml` snapshot lane (recovery/staging only), or any publish of a snapshot/Public-only artifact over the Admin. Do not change DNS or Production settings to make a check pass.
+4. **Record** in the assigned issue: run, source SHA, artifact, deployment and version ID, effective DB/roles, real live smoke, PASS/FAIL/UNKNOWN and the rollback target. Worker rollback does not restore SQL.
 
-- Existing Cloudflare Workers Builds was linked to GitHub `main` with `build_command: npm run build`, `deploy_command: npx wrangler deploy`, root `/`, caching OFF, paths `*`. Root `build` runs legacy Next.js, **not** the `apps/public` Worker builder.
-- A Cloudflare Build on 2026-11-13 failed upload: service binding `WORKER_SELF_REFERENCE` referred to missing Worker `dongphugia-web` (Cloudflare API code 10143). This is why a GitHub push/merge did not create a valid Production update.
-- Repo had 36 workflow files; only the GitHub **`quality`** status was mandatory on `main`. Extra automatic homepage/local environment/PR preview jobs slowed down even docs PRs. Their automatic triggers are retired; historical manual flows are not work authority.
-
-## Standard path
-
-1. Codex edits active milestone on one branch; localhost tests. `quality` is the required check. For docs-only, classify and skip expensive PostgreSQL/npm/tests; for code, run actual tests, lint and typecheck.
-2. Owner/agent integrates the reviewed commit to protected `main`. Do **not** assume Cloudflare deployed that SHA just because `quality` passes.
-3. Go to **GitHub Actions → V1 Worker release → Run workflow → main**. First choose **`publish=false`** to build the actual Public Worker, produce a source-pinned artifact and run Wrangler dry-run and identity checks. If it fails, fix the source, don't deploy a fallback unreviewed root Next.js app.
-4. After M1 data/source acceptance or later M4 Preview Admin acceptance, rerun with **`publish=true`**, using the latest protected `main`. Workflow uses `Production` GitHub environment credentials (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`), builds and packages the exact `apps/public` Worker, deploys it to `dongphugia-v1-public-production`, and checks actual domain.
-5. Record GitHub run, source SHA, Worker deployed version, Public and Blog URL smoke, DB Products+Blog counts and rollback route in the active issue. A successful deploy **without M1 database-backed Product/Blog completeness** does NOT complete M1.
-
-## Environments and security
-
-- Localhost development; **one fixed Preview `staging` inside Production Worker** for M2/M3 and isolated TEST Hyperdrive/Auth; same Worker's Production deployment for M1/M4.
-- No automatic Production deploy on every `main` push. Existing Cloudflare direct Workers Builds is misconfigured and must not be a parallel publisher. Build-trigger exclusion/suspension is intentional until one pipeline is authoritative.
-- Never use Production secrets in Preview or privileged DB access in Public. Preview/auth/data writes need separate TEST DB/roles and Access; Production data migrations need backup/restore proof.
-- Worker rollback via Cloudflare Deployments only restores code; SQL changes and imports need separate restore/rollback.
-- At least homepage and Blog smoke, identity verification, and runtime error check on real Worker, not only a green GitHub job.
+Cloudflare automatic Git Builds and legacy separate/per-PR Preview workflows are not release authority; do not dispatch them. Preserve GitHub Environment secrets, actor/target checks and required protection. See [deployment](../deploy/cloudflare-fixed-preview-production.md) and the [M4 Admin plan](../deploy/m4-production-admin-plan.md).

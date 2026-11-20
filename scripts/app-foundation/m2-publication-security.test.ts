@@ -2,14 +2,31 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess } from './m2-navigation-context.mjs'
-import { diagnoseM2CaptureFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
+import { navigationTarget, readM2AccessHeaders, applyM2BrowserAccess, getM2PublicResponse } from './m2-navigation-context.mjs'
+import { diagnoseM2CaptureFailure, sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { validateM2PreviewConfig } from './publish-m2-fixed-preview.mjs'
 import { readFile } from 'node:fs/promises'
 const origin = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
 const checkpoint = 'a'.repeat(40)
 
 describe('M2 publisher safety boundaries', () => {
+  it('follows the observed same-path RSC cache-key redirect with scoped credentials', async () => {
+    const final = { status: () => 200, headers: () => ({}) }
+    const request = { get: vi.fn().mockResolvedValueOnce({ status: () => 307, headers: () => ({ location: '/blog?_rsc=synthetic-cache-key' }) }).mockResolvedValueOnce(final) }
+    const headers = { 'CF-Access-Client-Secret': 'synthetic-secret', RSC: '1' }
+    expect(await getM2PublicResponse(request, origin, origin + '/blog', { headers })).toBe(final)
+    expect(request.get.mock.calls[1]).toEqual([origin + '/blog?_rsc=synthetic-cache-key', { headers, maxRedirects: 0 }])
+  })
+  it.each(['https://cold-mode-bd20.cloudflareaccess.com/login', 'https://www.dongphugia.vn/blog', origin + '/api/health'])('never follows a credential-bearing redirect to %s', async location => {
+    const request = { get: vi.fn().mockResolvedValue({ status: () => 302, headers: () => ({ location }) }) }
+    await expect(getM2PublicResponse(request, origin, origin + '/blog', { headers: { 'CF-Access-Client-Secret': 'synthetic-secret' } })).rejects.toThrow('M2_RESPONSE_REDIRECT_TARGET_FORBIDDEN')
+    expect(request.get).toHaveBeenCalledTimes(1)
+  })
+  it('bounds redirect loops instead of hiding a broken endpoint', async () => {
+    const request = { get: vi.fn().mockResolvedValue({ status: () => 307, headers: () => ({ location: '/blog?_rsc=loop' }) }) }
+    await expect(getM2PublicResponse(request, origin, origin + '/blog')).rejects.toThrow('M2_RESPONSE_REDIRECT_LIMIT')
+    expect(request.get).toHaveBeenCalledTimes(3)
+  })
   it('reports only closed database diagnostic codes, never arbitrary connection details', () => {
     const privateError = Object.assign(new Error('postgresql://private-user:private-password@private-host/postgres'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' })
     expect(diagnoseM2CaptureFailure(privateError)).toEqual({ reason: 'M2_PROTECTED_CAPTURE_FAILED', connectionCode: 'SELF_SIGNED_CERT_IN_CHAIN' })
@@ -33,7 +50,7 @@ describe('M2 publisher safety boundaries', () => {
       expect(() => readM2AccessHeaders('https://www.dongphugia.vn', file)).toThrow()
       let handler: (route: unknown) => Promise<void> = async () => {}
       await applyM2BrowserAccess({ route: async (_pattern: string, callback: typeof handler) => { handler = callback } }, origin, headers)
-      for (const target of [origin + '/api/search', 'https://dpg-products.b-cdn.net/image.jpg', 'https://www.dongphugia.vn/']) {
+      for (const target of [origin + '/api/search', 'https://dpg-products.b-cdn.net/image.jpg', 'https://media.dongphugia.vn/publishing/image.webp', 'https://www.dongphugia.vn/']) {
         const next = vi.fn()
         await handler({ request: () => ({ url: () => target, headers: () => ({ 'cf-access-client-secret': 'previous' }) }), continue: next })
         const actual = next.mock.calls[0][0].headers
@@ -59,5 +76,28 @@ describe('M2 publisher safety boundaries', () => {
     expect(safe).not.toContain('private-key')
     expect(safe).not.toContain('signature=')
     expect(safe).not.toContain('Bearer')
+  })
+  it.each([
+    ['/workers/workers/worker-private-id', '/accounts/{account_id}/workers/workers/{worker_id}'],
+    ['/access/apps/app-private-id', '/accounts/{account_id}/access/apps/{app_id}'],
+    ['/workers/scripts/worker-private-name/settings', '/accounts/{account_id}/workers/scripts/{script_name}/settings'],
+    ['/workers/scripts/worker-private-name/deployments', '/accounts/{account_id}/workers/scripts/{script_name}/deployments'],
+    ['/workers/scripts/worker-private-name/subdomain', '/accounts/{account_id}/workers/scripts/{script_name}/subdomain'],
+    ['/access/apps/app-private-id/policies/policy-private-id', '/accounts/{account_id}/access/apps/{app_id}/policies/{policy_id}'],
+    ['/access/service_tokens/token-private-id', '/accounts/{account_id}/access/service_tokens/{service_token_id}'],
+    ['/workers/workers/worker-private-id/previews/preview-private-id/deployments/deployment-private-id', '/accounts/{account_id}/workers/workers/{worker_id}/previews/{preview_id}/deployments/{deployment_id}'],
+  ])('records Cloudflare denial for %s without identifiers or response text', (path, endpoint) => {
+    const diagnostic = sanitizeM2CloudflareApiFailure('GET', path, 403, [
+      { code: 9109, message: 'private response detail' },
+    ])
+    expect(diagnostic).toEqual({ method: 'GET', endpoint, status: 403, cloudflareErrorCodes: [9109] })
+    const serialized = JSON.stringify(diagnostic)
+    for (const privateValue of ['worker-private-id', 'worker-private-name', 'app-private-id', 'policy-private-id', 'token-private-id', 'preview-private-id', 'deployment-private-id', 'private response detail']) {
+      expect(serialized).not.toContain(privateValue)
+    }
+  })
+  it('uses a closed fallback when a Cloudflare route has no known endpoint template', () => {
+    expect(sanitizeM2CloudflareApiFailure('GET', '/private-resource/private-id', 403, [{ message: 'private' }]))
+      .toEqual({ method: 'GET', endpoint: '/accounts/{account_id}/{unclassified_endpoint}', status: 403, cloudflareErrorCodes: [] })
   })
 })
