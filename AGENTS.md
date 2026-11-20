@@ -1,6 +1,6 @@
 # Đông Phú Gia V1 — shared instructions for Codex and Claude Code
 
-This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST-M5 / ACTIVE DEVELOPMENT.** The V1 restoration (M1–M5, Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306)) is complete and Owner-accepted; those issues are **history, not instructions**.
+This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST-M5 / ACTIVE DEVELOPMENT.** The V1 restoration (M1–M5, Master [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/306)) is complete and Owner-accepted; those issues are **history, not instructions**.
 
 ## Read in this order — nothing else by default
 1. This file.

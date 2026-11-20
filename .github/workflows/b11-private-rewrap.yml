@@ -23,7 +23,7 @@ jobs:
   rewrap:
     if: >-
       github.ref == 'refs/heads/main' &&
-      contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' &&
       github.actor == 'tranhuunguyenhuy-hue' &&
       github.run_attempt == 1 &&
       vars.B11_REWRAP_APPROVED_SHA == github.sha &&
@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
-          test "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia.com.vn || test "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia-web
+          test "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia-web
           test "$GITHUB_ACTOR" = tranhuunguyenhuy-hue
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"

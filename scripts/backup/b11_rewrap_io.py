@@ -30,7 +30,7 @@ from b11_rewrap_core import (
     verify_approved_artifact_zip,
 )
 
-ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia.com.vn", "tranhuunguyenhuy-hue/dongphugia-web")  # TRANSITIONAL (#426): drop the old name after the rename is verified
+ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia-web",)
 
 
 def source_repository() -> str:

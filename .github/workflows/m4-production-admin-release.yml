@@ -50,7 +50,7 @@ jobs:
   release:
     name: Build, verify and optionally publish the Production Admin Worker
     if: >-
-      contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) && github.ref == 'refs/heads/main' &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && github.ref == 'refs/heads/main' &&
       github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
     runs-on: ubuntu-24.04
     environment: Production

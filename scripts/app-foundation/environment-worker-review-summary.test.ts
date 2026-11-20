@@ -48,7 +48,7 @@ describe('Staging release review summary trust boundary', () => {
       }
       const summary = renderEnvironmentWorkerReviewSummary({
         serverUrl: 'https://github.com',
-        repository: 'tranhuunguyenhuy-hue/dongphugia.com.vn',
+        repository: 'tranhuunguyenhuy-hue/dongphugia-web',
         runId: '43284051382',
         sourceSha: immutableInputs.sourceSha,
         artifactSha256: immutableInputs.artifactSha256,
@@ -69,7 +69,7 @@ describe('Staging release review summary trust boundary', () => {
   it('rejects malformed or multiline identity values before writing a review summary', () => {
     const valid = {
       serverUrl: 'https://github.com',
-      repository: 'tranhuunguyenhuy-hue/dongphugia.com.vn',
+      repository: 'tranhuunguyenhuy-hue/dongphugia-web',
       runId: '43284051382',
       sourceSha: 'c'.repeat(40),
       artifactSha256: 'd'.repeat(64),

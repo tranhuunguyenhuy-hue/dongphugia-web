@@ -71,7 +71,7 @@ jobs:
     needs: contract-tests
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) &&
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' &&
       github.actor == 'tranhuunguyenhuy-hue' && github.ref == 'refs/heads/main' &&
       github.run_attempt == 1 && inputs.approved_sha == github.sha
     runs-on: ubuntu-24.04
