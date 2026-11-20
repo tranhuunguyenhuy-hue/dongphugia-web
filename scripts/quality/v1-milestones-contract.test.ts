@@ -17,6 +17,9 @@ describe('V1 post-M5 agent delivery authority', () => {
       'Work only on the issue assigned to you',
       'agent-task.md',
       'serialized',
+      'self-merges when every objective gate passes',
+      'explicit Owner approval',
+      'Self-merge never permits bypassing CI',
     ]) {
       expect(agents).toContain(v)
     }

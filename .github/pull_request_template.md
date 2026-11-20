@@ -20,7 +20,8 @@
 - [ ] Diff matches only the assigned issue; no unapproved feature or infrastructure cleanup
 - [ ] Verified correct Production vs TEST target; no credentials, PII or raw logs committed
 - [ ] No destructive DB operation, no unapproved cost, no CI bypass
-- [ ] Merged ≠ deployed: no Production release without Owner approval, an exact reviewed SHA and the reviewed release lane
-- [ ] Tech Lead review and Owner acceptance recorded where required
+- [ ] Merged ≠ deployed: no Production release without explicit Owner approval, an exact approved SHA and the documented release lane
+- [ ] Exact diff and file list self-reviewed; required CI PASS on the exact head (SHA recorded)
+- [ ] Owner UAT (runtime/UI, via fixed staging) and explicit Production approval recorded where required
 
 **PR/CI success alone does not equal runtime acceptance.** See `AGENTS.md`.
