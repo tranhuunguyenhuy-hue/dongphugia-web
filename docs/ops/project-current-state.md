@@ -1,40 +1,48 @@
-# Current checkpoint — M4 accepted; M5 executed, awaiting Tech Lead verification and Owner UAT
+# Current checkpoint — POST-M5, active development
 
-Updated 2026-11-20 (UTC) by Claude Code under [#311 / 7013573147](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7013573147). M4 Owner UAT PASS: [#310 / 7013550757](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310#issuecomment-7013550757). Latest decisions: [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306), [#311 CDN scope / 7007320247](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7007320247).
+Updated 2026-11-20 (UTC) under [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412). This file is the only mutable state snapshot; policy lives in [AGENTS.md](../../AGENTS.md). History (closed, not instructions): [#306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306) Master, [M1 #307](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/307), [M2 #308](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/308), [M3 #309](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/309), [M4 #310](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/310), [M5 #311](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311) (Owner UAT PASS, closed 2026-11-20; [acceptance](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032996976)).
 
-## Status
+## Merged vs deployed — do not conflate
 
-- M1, M2, M3, M4: DONE / Owner UAT PASS. Active milestone: M5 (#311).
-- Production runs the combined Worker (canonical Public + Admin under `/admin-next`, legacy `/admin*` → 302) from main `24a5479`, Worker version `e7dda372-7cfa-418f-b729-b8d34ed5dcb6`; Edge Function `admin-api` on `bonxyxluzlxfkdetryoo`; `production_writes_allowed = true`; migrations `001`/`002` applied; 1 admin (`admin@dongphugia.vn`).
-- Scope: catalogue master data is Dev-managed (read-only lookups). Partners/Projects hidden in the Admin (gateway 404) pending M5 review. Homepage hero banners are DB-managed (`dpg_app.banners`, HERO, `sort_order`) with the verified historical hero as automatic fallback.
-- New uploads go to `dpg-products.b-cdn.net`; the legacy host `cdn.dongphugia.com.vn` has a TLS problem and is mapped to that host on display (Admin) and in Public rendering. Stored URLs are unchanged.
+| | State | Verified |
+| --- | --- | --- |
+| `main` | `e070986` (PR #414; includes #411/#413 homepage promotion popup and the updated TOTO campaign prizes) | git, 2026-11-20 |
+| Deployed Production Worker | deployment `d3b28b83-4971-4b8d-a7b9-09701a1c1ca5`, version `e7dda372-7cfa-418f-b729-b8d34ed5dcb6`, 100%, message `M4 Admin release 24a547952d92` | Cloudflare API, read-only, 2026-11-20 |
+
+The Production Worker was built from `24a5479` and has **not** been redeployed since. Merged changes after that SHA — including the homepage popup and campaign prize update (#409/#411/#413/#414) — are **not live**. Re-check the deployment before documenting or deploying: state changes with every release.
+
+## Production
+
+- Worker `dongphugia-v1-public-production` (account `d54f3402b9d112ab64d6135e0e3f1fb1`) serves canonical Public plus the accepted Admin under `/admin-next`; legacy `/admin*` redirects (302). Domains `www.dongphugia.vn`, `dongphugia.vn`.
+- Database `dongphugia-production` (`bonxyxluzlxfkdetryoo`), schema `dpg_app`; Public Hyperdrive `905f5791…`, role `dpg_public_catalogue`. Edge Function `admin-api` on the same project; `production_writes_allowed = true`; migrations `001`/`002` applied; one admin account.
+- Scope: catalogue master data is Dev-managed (read-only lookups). Partners/Projects are hidden in Admin (gateway 404) pending review. Homepage hero banners are DB-managed (`dpg_app.banners`, HERO, `sort_order`) with the verified historical hero as fallback.
+- Staging: fixed Preview `staging` inside the same Worker, TEST database `dongphugia-staging` (`uybumsnyqpwcidjxmfsv`), Access-protected. Public-only M2 snapshot is recovery material, not the current staging artifact.
+- Denylisted historical database ref `tlmgudfhsyzayiazuugf` (deleted runtime project) is neither approved target. Do not use it.
 
 ## Release and rollback
 
-- Release lane: `.github/workflows/m4-production-admin-release.yml` (verify/publish, exact SHA, active version must equal the recorded rollback target, secrets via `--secrets-file`, paced smoke with bounded identity retry, no automatic rollback). `v1-worker-release.yml` refuses to publish while Production carries the Admin.
-- Function: `m4-production-function-deploy.yml` (Supabase CLI pinned 3.2.0). Rollback order: Worker `wrangler rollback <previous version>` (does not undo SQL) → function delete → banner grant/policy revoke → `002`/`001` rollbacks; restore only for data loss.
+- Release lane: `.github/workflows/m4-production-admin-release.yml` (`verify` then `publish`; exact reviewed SHA; the active version must equal the recorded rollback target; secrets passed with `--secrets-file`; paced smoke; no automatic rollback; concurrency group `v1-production-worker-release`). `v1-worker-release.yml` refuses to publish while Production carries the Admin — never use it to publish.
+- Function: `.github/workflows/m4-production-function-deploy.yml` (Supabase CLI pinned 3.2.0).
+- Rollback order: Worker `wrangler rollback <previous version>` (does not undo SQL) → delete function → revoke banner grant/policy → `002`/`001` rollbacks; restore from backup only for data loss. Plan: [m4-production-admin-plan](../deploy/m4-production-admin-plan.md).
 
 ## Backup
 
-- `m4-production-backup.yml`: daily 19:41 UTC, encrypted (age), SHA256SUMS, isolated restore rehearsal comparing per-table row counts and schema objects, visible failure signal. The legacy `runtime-backup.yml` schedule is retired (its target project was deleted).
-- Credential: least-privilege `dpg_backup_reader` via `M4_BACKUP_READER_DATABASE_URL` (login, BYPASSRLS, SELECT only on `dpg_app`/`dpg_control`, read-only default, 2 connections); `M4_BACKUP_DATABASE_URL` stays as fallback until the Owner approves removal. The restore gate hard-fails on any restore error, row-count, schema-object or ACL difference. Recovery runbook: `docs/ops/m5-backup-recovery-runbook.md`. Latest verified backup before the CDN change: run 44684740410 (`m4-44684740410`); first scheduled run 44653583453 succeeded (GitHub started it ~5h45m after the cron).
+- `.github/workflows/m4-production-backup.yml`: daily 19:41 UTC, encrypted (age), SHA256SUMS, isolated restore rehearsal comparing row counts and schema objects, hard-fails on any restore, row-count, schema-object or ACL difference. Legacy `runtime-backup.yml` schedule is retired (its target project was deleted).
+- Credential `dpg_backup_reader` via `M4_BACKUP_READER_DATABASE_URL` (least privilege, read-only). `M4_BACKUP_DATABASE_URL` remains as fallback until the Owner approves removal. Runbook: [m5-backup-recovery-runbook](m5-backup-recovery-runbook.md). Latest verified backup after the CDN change: fresh encrypted backup and scratch restore gate PASS ([#311 acceptance](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032996976)). One scheduled run started about 5h45m after its cron — watch for drift.
 
-## Environment (verify before writes)
+## Media / CDN (M5 Option A, complete)
 
-- Production Worker `dongphugia-v1-public-production` (Hyperdrive `905f5791…`, role `dpg_public_catalogue`); fixed Preview `staging` inside it (TEST `uybumsnyqpwcidjxmfsv`).
-- Denylisted historical database ref `tlmgudfhsyzayiazuugf` (deleted runtime project) is neither of the approved targets. Do not use it.
+- Stored legacy-CDN URLs were normalised to `https://dpg-products.b-cdn.net/`: 137,980 ledger values, 16,252 products, 111 tile-image repairs. Production read-only verification: 17,752 products, 110,321 product images, database ~293 MB (hard stop 367 MB). Evidence: [m5-legacy-cdn-normalization-plan](m5-legacy-cdn-normalization-plan.md), [#311 / 7032644022](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/311#issuecomment-7032644022).
+- Rollback ledgers `dpg_control.m5_cdn_ledger` and `m5_tile_ledger` are retained; rollback `003` was **not** run.
+- Still on the old origin by design: 16 unusual image paths (`%`-encoded or `//`) + 1 main image, Blog legacy images, third-party hosts. Display mapping stays. The legacy host `cdn.dongphugia.com.vn` has no public DNS record. Bunny: 7 storage zones, 6 pull zones (dashboard 2026-11-20). No deletion, hostname or DNS change is authorised.
 
-## Media / CDN (M5, Option A, 20/11)
+## Open work (none authorised unless its issue says so)
 
-- Stored legacy-CDN URLs were normalised to `https://dpg-products.b-cdn.net/` by six guarded batches plus a targeted repair of 111 broken tile image refs (110 files, `.original.jpg` siblings): 137,980 ledger values, 16,252 products, `products.version` +16,363 as predicted, DB 242 -> 294 MB (hard stop 367 MB). Evidence/runbook: `docs/ops/m5-legacy-cdn-normalization-plan.md`; report #311 (comment 7032644022).
-- Still on the old origin by design: 16 non-exact image paths (`%`-encoded or `//`) + 1 main image, Blog legacy images, third-party hosts. Display mapping stays. Ledgers `dpg_control.m5_cdn_ledger` / `m5_tile_ledger` enable the conditional batched rollback (`003`, not run).
-- Bunny: 7 storage zones, 6 pull zones (dashboard 20/11). `cdn.dongphugia.com.vn` has no public DNS record. No deletion, hostname or DNS change authorised.
+- [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412) agent documentation (this change).
+- [#343](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/343) TOTO campaign landing (acceptance/live status UNKNOWN); Codex PR [#414](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/414) (campaign prize update) is merged, not deployed.
+- [#348](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/348) credential governance with PR [#350](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/350) — pending Owner decision; actual secret-store reconciliation UNKNOWN.
+- Owner-decision backlog from M5: remove the fallback backup secret and any `postgres` password rotation; Bunny zone/hostname cleanup candidates (`dpg-publishing-production-r2`, `dpg-publishing-staging`, `dpg-v1-preview-*`, `cdn.dongphugia.com.vn`), each needing a dependency check and approval; manufacturer PDF↔SKU attachment; hotlink independence; A4 print check on the first real quote; evidence before editing the 17 exception references; watch Cloudflare 1102 spikes on the next release.
 
-## Next steps
+## M2 recovery artifact — time-sensitive
 
-1. Tech Lead verification of the M5 Production result (#311 / 7032644022), then Owner UAT. Optional Cloudflare error check for the change window.
-2. Owner decisions still open: removal of the fallback backup secret and any `postgres` password rotation; zone/hostname cleanup candidates (`dpg-publishing-production-r2`, `dpg-publishing-staging`, `dpg-v1-preview-*`, Bunny hostname `cdn.dongphugia.com.vn`); each needs its own dependency check and approval. Post-M5: PDF↔SKU attachment, hotlink independence, A4 print on the first real quote.
-
-## M2 recovery — time-sensitive
-
-[Artifact #14253475719](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/actions/runs/43918034548/artifacts/14253475719), 37,736,963 bytes, SHA-256 `74cc0631ad1c37898f4b76476a50963b2518332ff11c0af52b2f965499c72bc0`; reported expiry 23 Nov 2026. Codex private workspace copy `/workspace/m2-recovery/m2-fixed-preview-00914b73.zip` verified by Agent; not necessarily accessible to Claude. Preserve/verifiably download to private storage available to Owner before expiry, never upload to public repo. See [M2 rollback runbook](../deploy/m2-fixed-preview-runbook.md). Re-upload is staging only; no automatic Production rollback.
+[Artifact #14253475719](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/actions/runs/43918034548/artifacts/14253475719), 37,736,963 bytes, SHA-256 `74cc0631ad1c37898f4b76476a50963b2518332ff11c0af52b2f965499c72bc0`, reported expiry **2026-11-23**. The Owner reports having saved a copy locally on 2026-11-20; the checksum comparison is **UNKNOWN** until the Owner confirms it. Never upload it to a public repository. Re-upload is staging only; no automatic Production rollback. See [M2 rollback runbook](../deploy/m2-fixed-preview-runbook.md).
