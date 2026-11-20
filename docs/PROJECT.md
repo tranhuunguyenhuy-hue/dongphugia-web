@@ -1,6 +1,6 @@
 # Đông Phú Gia V1 — technical handbook
 
-[AGENTS.md](../AGENTS.md) is the shared policy; [current checkpoint](ops/project-current-state.md) holds mutable state; your assigned issue holds the task. Keep scope small; open only the references you need.
+[AGENTS.md](../AGENTS.md) is the shared policy; your assigned GitHub issue holds the task; GitHub Issues, PRs and Actions hold progress, and live state is verified at the source (Cloudflare, Supabase, Bunny). Keep scope small; open only the references you need.
 
 ## Architecture
 
@@ -14,7 +14,7 @@
 
 ## Typical task path
 
-Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → Tech Lead review → Owner acceptance → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the deployed Worker version in the checkpoint.
+Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → Tech Lead review → Owner acceptance → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the live Worker deployment in Cloudflare.
 
 ## References — read only as needed
 

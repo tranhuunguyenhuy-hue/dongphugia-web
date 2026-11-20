@@ -4,9 +4,10 @@ This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST
 
 ## Read in this order — nothing else by default
 1. This file.
-2. [Current checkpoint](docs/ops/project-current-state.md): live state, release lane, backup, open work.
-3. **The issue the Owner assigned to you**, including its latest comments. The latest explicit Owner/Tech Lead direction in that issue prevails over dated status or examples here.
-4. Only the runbook the task needs, via the [technical handbook](docs/PROJECT.md). Do not load the whole docs tree or old conversation history.
+2. **The GitHub issue the Owner assigned to you**, including its latest comments. The latest explicit Owner/Tech Lead direction in that issue prevails over anything dated in the repository.
+3. **`main` and the open PRs**: `git fetch`, compare with `main`, read the PR and its CI. GitHub Issues, PRs and Actions are the only progress record; there is no hand-maintained status file.
+4. **Live infrastructure, only when the task needs it**: verify read-only at the source (Cloudflare Worker deployments, Supabase, Bunny), never from memory or an old comment. Merged is not deployed.
+5. Only the runbook the task needs, via the [technical handbook](docs/PROJECT.md). Do not load the whole docs tree or old conversation history.
 
 ## Who does what
 - **Owner**: states needs, decides, and holds final UAT and release authority, including approval of any Production deploy. Not required to know technical detail.
@@ -30,7 +31,7 @@ This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST
 - No destructive data loss or reset. Incremental infrastructure budget **$0**: no paid branching, plan upgrades, VPS or additional paid resource. New costs, destructive changes, DNS/zone/credential changes and Production deploys need explicit Owner approval.
 
 ## Workflow
-1. **Start**: `git status --short --branch`, fetch, compare with `main`, read the issue's latest comments. Do not discard WIP or restart finished work. If a cloud app created its own branch, keep the checkpoint ancestry and name the continuation branch.
+1. **Start**: `git status --short --branch`, fetch, compare with `main`, read the issue's latest comments. Do not discard WIP or restart finished work. If a cloud app created its own branch, keep the branch ancestry and name the continuation branch.
 2. **Branch/PR**: one branch and one PR per issue, named `codex/<issue>-<slug>` or `claude/<issue>-<slug>`. Declare in the issue which files you will touch so parallel lanes do not collide. Rebase or merge `main` before opening the PR.
 3. **Verify**: run affected tests, typecheck/build and, when applicable, a real hosted smoke. Node 24.13.0, npm 11.6.2, committed lockfiles. Required CI status: `quality` (`.github/workflows/quality.yml`); the docs-only classifier is not a bypass for source changes. On repeated failure change approach and report the exact blocker. Do independent safe work instead of waiting on CI.
 4. **Review and accept**: the Tech Lead (ChatGPT) reviews the PR; the Owner gives final UAT of UI/live behaviour. An implementing agent never accepts its own PR. PR/CI success or a deployment record alone is not runtime acceptance.

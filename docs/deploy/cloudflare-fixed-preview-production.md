@@ -1,6 +1,6 @@
 # Fixed Preview and Production release
 
-Authority: [AGENTS.md](../../AGENTS.md), [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306), active milestone and [current checkpoint](../ops/project-current-state.md). M2 Preview is accepted; no new Preview or Worker. V1 account `d54f3402b9d112ab64d6135e0e3f1fb1`; named Preview `staging` INSIDE `dongphugia-v1-public-production`; Production https://www.dongphugia.vn.
+Authority: [AGENTS.md](../../AGENTS.md), [Master #306](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/306), and the assigned GitHub issue. M2 Preview is accepted; no new Preview or Worker. V1 account `d54f3402b9d112ab64d6135e0e3f1fb1`; named Preview `staging` INSIDE `dongphugia-v1-public-production`; Production https://www.dongphugia.vn.
 
 ## Local and M3
 - Node 24.13.0/npm 11.6.2, committed lockfiles; use targeted source tests and `npm run build:m3-combined-worker`, `npm run assemble:m3-fixed-preview` after checking script arguments/target contract. Do not use the old separate Admin shell.
