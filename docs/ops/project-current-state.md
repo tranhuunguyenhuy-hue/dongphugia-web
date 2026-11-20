@@ -37,6 +37,11 @@ The live Worker was built from `e070986a19fd`. `main` is ahead of it only by doc
 - Rollback ledgers `dpg_control.m5_cdn_ledger` and `m5_tile_ledger` are retained; rollback `003` was **not** run.
 - Still on the old origin by design: 16 unusual image paths (`%`-encoded or `//`) + 1 main image, Blog legacy images, third-party hosts. Display mapping stays. The legacy host `cdn.dongphugia.com.vn` has no public DNS record. Bunny: 7 storage zones, 6 pull zones (dashboard 2026-11-20). No deletion, hostname or DNS change is authorised.
 
+## Repository hygiene (2026-11-20)
+
+- Branches: 211 stale remote branches deleted by the Owner-run one-off workflow ([#416](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/416), run `44706158843`: 211 deleted, 0 failed). Remaining: `main`, the working branch and the branches tied to open work (#343, #348/PR #350). The Owner holds a private git-bundle backup taken before the deletion; the reviewed name/SHA list stays in Git history of PR #417.
+- Workflows: 14 unused or one-time workflows with no remaining references were removed (one-off branch cleanup, legacy catalogue setup/diagnostics, completed M3/M4/M5 one-time jobs, legacy Public Production Worker lane, ghcr staging, recipient-swap diagnostics). Workflows still tied to their own contract tests, recovery or release lanes were kept; see the removal PR for the remaining inventory. GitHub Environments/secrets are unchanged (credential governance stays with #348).
+
 ## Open work (none authorised unless its issue says so)
 
 - [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412) agent documentation (this change).
