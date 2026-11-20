@@ -37,4 +37,6 @@ GITHUB_SHA="$accepted_source_sha" node tools/m2-preview/node_modules/wrangler/bi
 
 4. Record the **new** Preview deployment ID and actual URLs; check bindings, source/checkpoint, authorized and anonymous access, real navigation/data/media and unchanged Production. The immutable URL changes; the staging URL remains fixed. Restoration of older data is explicit snapshot staleness, not a database rollback.
 
+M2 recovery artifact: [#14253475719](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/actions/runs/43918034548/artifacts/14253475719), 37,736,963 bytes, SHA-256 `74cc0631ad1c37898f4b76476a50963b2518332ff11c0af52b2f965499c72bc0`, GitHub expiry 2026-11-23. Keep a private copy; never upload it to a public repository. Re-upload is staging only and never an automatic Production rollback.
+
 The normal publisher accepts the current main artifact only. Older-artifact recovery above is an explicit operator procedure, not an automatic workflow mode. A recovery rehearsal remains UNKNOWN until actually performed and recorded. M3/Admin/TEST DB and Production promotion are outside M2.

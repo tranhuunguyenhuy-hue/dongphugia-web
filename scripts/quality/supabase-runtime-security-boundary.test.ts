@@ -33,10 +33,7 @@ const runbook = readFileSync(
   'utf8',
 )
 const docsIndex = readFileSync(resolve(process.cwd(), 'docs/PROJECT.md'), 'utf8')
-const currentState = readFileSync(
-  resolve(process.cwd(), 'docs/ops/project-current-state.md'),
-  'utf8',
-)
+const agentsPolicy = readFileSync(resolve(process.cwd(), 'AGENTS.md'), 'utf8')
 
 describe('LEO-539 Supabase runtime security boundary', () => {
   it('locks the exact target and non-Production environment', () => {
@@ -51,7 +48,7 @@ describe('LEO-539 Supabase runtime security boundary', () => {
     ]) {
       expect(boundary).toContain(value)
     }
-    expect(currentState).toContain('tlmgudfhsyzayiazuugf')
+    expect(agentsPolicy).toContain('tlmgudfhsyzayiazuugf')
     expect(docsIndex).toContain('deploy/supabase-runtime-security-boundary.md')
   })
 
