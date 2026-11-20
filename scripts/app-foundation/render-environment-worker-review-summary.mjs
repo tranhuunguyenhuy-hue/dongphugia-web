@@ -1,7 +1,7 @@
 import { appendFile } from 'node:fs/promises'
+import { isAllowedRepository } from '../lib/repository-identity.mjs'
 import { API_ORIGIN_ACKNOWLEDGEMENT } from './run-environment-worker-wrangler-deploy.mjs'
 
-const REPOSITORY = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
 const ACCOUNT_ID = 'd54f3402b9d112ab64d6135e0e3f1fb1'
 const SOURCE_SHA = /^[a-f0-9]{40}$/
 const ARTIFACT_SHA256 = /^[a-f0-9]{64}$/
@@ -20,7 +20,7 @@ export function renderEnvironmentWorkerReviewSummary({
   deploymentTokenId,
   apiOriginAcknowledgement,
 }) {
-  if (serverUrl !== 'https://github.com' || repository !== REPOSITORY) {
+  if (serverUrl !== 'https://github.com' || !isAllowedRepository(repository)) {
     fail('ENVIRONMENT_WORKER_REVIEW_SUMMARY_REPOSITORY_INVALID')
   }
   if (!/^\d+$/.test(runId || '')) fail('ENVIRONMENT_WORKER_REVIEW_SUMMARY_RUN_ID_INVALID')

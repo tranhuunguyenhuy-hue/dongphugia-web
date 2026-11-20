@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { baselineSha, requireGate } from './contract.mjs'
-const REPO='tranhuunguyenhuy-hue/dongphugia.com.vn'
+import { isAllowedRepository, currentRepository } from '../../lib/repository-identity.mjs'
+const REPO=currentRepository()
 const OWNER='tranhuunguyenhuy-hue'
 const CLAIM='EXISTING-BACKUP-CLAIMED:'
 const api=(endpoint)=>JSON.parse(execFileSync('gh',['api',endpoint],{encoding:'utf8',stdio:['ignore','pipe','pipe']}))
@@ -13,7 +14,7 @@ export function validateApproval(comment, comments, input, mergeTime) {
   return nonce
 }
 export function main() {
-  requireGate(process.env.GITHUB_REPOSITORY===REPO && process.env.GITHUB_REF==='refs/heads/main' && process.env.GITHUB_ACTOR===OWNER && process.env.TRIGGERING_ACTOR===OWNER && process.env.GITHUB_RUN_ATTEMPT==='1','dispatch_identity_failed')
+  requireGate(isAllowedRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_REF==='refs/heads/main' && process.env.GITHUB_ACTOR===OWNER && process.env.TRIGGERING_ACTOR===OWNER && process.env.GITHUB_RUN_ATTEMPT==='1','dispatch_identity_failed')
   const sha=process.env.APPROVED_SOURCE_SHA
   const operation=process.env.OPERATION
   requireGate(/^[a-f0-9]{40}$/.test(sha ?? '') && sha===process.env.GITHUB_SHA && execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim()===sha,'source_failed')

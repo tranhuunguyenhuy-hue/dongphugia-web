@@ -22,12 +22,19 @@ from b11_rewrap_io import (
 EXPECTED_BYTES = 9_240_647
 EXPECTED_SHA256 = "15d8ec3d1d22e884ed280fd9eb810ce8a7f7257553e180a2aa9e9aff7a49b50a"
 BACKUP_ID = "leo540-38915575745"
-SOURCE_REPOSITORY = "tranhuunguyenhuy-hue/dongphugia.com.vn"
+ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia.com.vn", "tranhuunguyenhuy-hue/dongphugia-web")  # TRANSITIONAL (#426): drop the old name after the rename is verified
+
+
+def source_repository() -> str:
+    value = os.environ.get("GITHUB_REPOSITORY") or ALLOWED_SOURCE_REPOSITORIES[0]
+    if value not in ALLOWED_SOURCE_REPOSITORIES:
+        raise RewrapError("REPOSITORY_IDENTITY_INVALID")
+    return value
 
 
 def require_single_dispatch(token: str, run_id: int, head_sha: str) -> None:
     runs = _api_json(
-        f"/repos/{SOURCE_REPOSITORY}/actions/workflows/c-actions-recovery.yml/runs"
+        f"/repos/{source_repository()}/actions/workflows/c-actions-recovery.yml/runs"
         f"?event=workflow_dispatch&head_sha={head_sha}&per_page=2", token
     )
     listed = runs.get("workflow_runs")

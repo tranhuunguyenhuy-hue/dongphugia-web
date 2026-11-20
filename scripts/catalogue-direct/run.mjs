@@ -13,6 +13,7 @@ import {
   connectionConfig, assertBudget, assertManifest, assertSchema, rowsSql, insertSql, assertResume,
   SEQUENCE_BODY, HEADROOM_BODY,
 } from './contract.mjs'
+import { isAllowedRepository, currentRepository } from '../lib/repository-identity.mjs'
 
 const env = process.env
 let directory
@@ -433,13 +434,13 @@ async function importTarget(checkpoint, source) {
       && prior.tables.every((t) => t.count === 0), 'RESUME_BEFORE_STATE_MISMATCH')
     const id = env.DIRECT_RESUME_OWNER_COMMENT
     requireGate(/^\d+$/.test(id ?? ''), 'RESUME_OWNER_AUTHORITY_REQUIRED')
-    const response = await fetch(`https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/comments/${id}`,
+    const response = await fetch(`https://api.github.com/repos/${currentRepository()}/issues/comments/${id}`,
       { signal: AbortSignal.timeout(15000), redirect: 'error', headers: { Accept: 'application/vnd.github+json' } })
     requireGate(response.ok, 'RESUME_OWNER_AUTHORITY_REQUIRED')
     const approval = await response.json()
     const marker = `DIRECT_RESUME_GO source=${checkpoint} before=${env.DIRECT_RESUME_BEFORE_CHECKPOINT} code=${env.GITHUB_SHA}`
     requireGate(approval.user?.login === 'tranhuunguyenhuy-hue'
-      && approval.issue_url === 'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/160'
+      && `https://api.github.com/repos/${currentRepository()}/issues/160` === approval.issue_url
       && approval.body?.split('\n').includes(marker), 'RESUME_OWNER_AUTHORITY_REQUIRED')
     attemptRef = `resume-go-${id}`
   }
@@ -489,7 +490,7 @@ async function main() {
   const stage = env.DIRECT_STAGE
   assertResume(stage, env.DIRECT_CHECKPOINT)
   requireGate(env.GITHUB_ACTIONS === 'true' && env.GITHUB_REF === 'refs/heads/main'
-    && env.GITHUB_REPOSITORY === 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+    && isAllowedRepository(env.GITHUB_REPOSITORY)
     && env.GITHUB_ACTOR === 'tranhuunguyenhuy-hue' && env.GITHUB_RUN_ATTEMPT === '1'
     && SHA.test(env.GITHUB_SHA ?? '') && env.DIRECT_APPROVED_SHA === env.GITHUB_SHA, 'EXECUTION_AUTHORITY')
   assertBudget(JSON.parse(env.DIRECT_ZERO_COST_ATTESTATION ?? 'null'))

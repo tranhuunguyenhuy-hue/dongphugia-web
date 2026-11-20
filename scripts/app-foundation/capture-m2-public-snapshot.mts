@@ -13,6 +13,7 @@ const require = createRequire(import.meta.url)
 const { M1_PUBLIC_CAPTURE_SQL, M1_PUBLIC_CATEGORY_CAPTURE_SQL, mapLiveProduct, mapLiveProductDetail } = require('../../apps/public/src/runtime/live-public-catalogue.ts') as typeof import('../../apps/public/src/runtime/live-public-catalogue')
 const { LIVE_BLOG, PUBLIC_BLOG_CATEGORIES_SQL, mapPublicBlogRecords } = require('../../apps/public/src/runtime/live-public-blog.ts') as typeof import('../../apps/public/src/runtime/live-public-blog')
 import type { LegacyBlogCategory } from '../../apps/public/src/runtime/legacy-blog'
+import { isAllowedWorkflowRef } from '../lib/repository-identity.mjs'
 
 type CaptureRow = PublicProductRow & { listing_eligible: boolean; search_eligible: boolean; capture_priority: number | null; capture_sort_order: number | null }
 let phase = 'RUNNER_IDENTITY'
@@ -27,7 +28,7 @@ async function productionHealth() {
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REF !== 'refs/heads/main'
     || process.env.GITHUB_ACTOR !== 'tranhuunguyenhuy-hue'
-    || process.env.GITHUB_WORKFLOW_REF !== 'tranhuunguyenhuy-hue/dongphugia.com.vn/.github/workflows/v1-fixed-preview.yml@refs/heads/main'
+    || !isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF, 'v1-fixed-preview.yml')
     || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '') || !process.env.RUNNER_TEMP) throw new Error('M2_PROTECTED_RUNNER_REQUIRED')
   const before = await productionHealth()
   phase = 'CONNECT_READ'

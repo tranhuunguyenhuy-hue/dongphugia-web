@@ -7,6 +7,7 @@ import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-p
 import { digestEnvironmentWorkerArtifact } from './environment-worker-artifact-digest.mjs'
 import { validateM3FixedPreviewConfig } from './m3-fixed-preview-config.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
+import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
 
 // M3 publisher: ONE combined Public+Admin Worker artifact into the named Preview `staging` of the
 // existing Production Worker. Main-only, exact SHA, owner actor. Never deploys or alters Production.
@@ -42,7 +43,7 @@ async function cfEventually(path, attempts = 10, delayMs = 6000) {
   }
 }
 async function gh(path) {
-  const response = await fetch(`https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/${path}`, {
+  const response = await fetch(`https://api.github.com/repos/${currentRepository()}/${path}`, {
     headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' },
     signal: AbortSignal.timeout(20000), redirect: 'error' })
   if (!response.ok) throw new Error('M3_GITHUB_READ_REQUIRED')
@@ -153,8 +154,8 @@ async function adminSmoke(token, sourceSha) {
 async function main() {
   assert.equal(process.env.GITHUB_ACTIONS, 'true')
   assert.equal(process.env.GITHUB_REF, 'refs/heads/main')
-  assert.equal(process.env.GITHUB_REPOSITORY, 'tranhuunguyenhuy-hue/dongphugia.com.vn')
-  assert.equal(process.env.GITHUB_WORKFLOW_REF, 'tranhuunguyenhuy-hue/dongphugia.com.vn/.github/workflows/v1-fixed-preview.yml@refs/heads/main')
+  assert.ok(isAllowedRepository(process.env.GITHUB_REPOSITORY), 'REPOSITORY_IDENTITY_INVALID')
+  assert.ok(isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF, 'v1-fixed-preview.yml'), 'WORKFLOW_REF_INVALID')
   assert.equal(process.env.GITHUB_ACTOR, 'tranhuunguyenhuy-hue')
   assert.equal(process.env.CLOUDFLARE_ACCOUNT_ID, ACCOUNT)
   assert.ok(process.env.CLOUDFLARE_API_TOKEN, 'M3_PREVIEW_PUBLISHER_TOKEN_REQUIRED')

@@ -1,4 +1,5 @@
-const REPOSITORY = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+import { DEFAULT_REPOSITORY, isAllowedRepository } from '../lib/repository-identity.mjs'
+
 const ENVIRONMENT = 'cloudflare-staging'
 const REQUIRED_REVIEWER = 'tranhuunguyenhuy-hue'
 const API_VERSION = '2026-03-10'
@@ -7,7 +8,8 @@ function fail(code) {
   throw new Error(code)
 }
 
-export function validateEnvironmentWorkerReleaseProtection({ environment, branchPolicies }) {
+export function validateEnvironmentWorkerReleaseProtection({ environment, branchPolicies, repository = DEFAULT_REPOSITORY }) {
+  if (!isAllowedRepository(repository)) fail('ENVIRONMENT_WORKER_GITHUB_REPOSITORY_INVALID')
   if (environment?.name !== ENVIRONMENT) fail('ENVIRONMENT_WORKER_GITHUB_ENVIRONMENT_INVALID')
   if (environment.can_admins_bypass !== false) fail('ENVIRONMENT_WORKER_GITHUB_ADMIN_BYPASS_ENABLED')
   if (environment.deployment_branch_policy?.protected_branches !== false
@@ -33,7 +35,7 @@ export function validateEnvironmentWorkerReleaseProtection({ environment, branch
   }
 
   return {
-    repository: REPOSITORY,
+    repository,
     environment: ENVIRONMENT,
     requiredReviewer: REQUIRED_REVIEWER,
     branch: 'main',
@@ -69,17 +71,17 @@ export async function verifyEnvironmentWorkerReleaseProtection({
   token,
   fetchImpl = fetch,
 }) {
-  if (repository !== REPOSITORY) fail('ENVIRONMENT_WORKER_GITHUB_REPOSITORY_INVALID')
+  if (!isAllowedRepository(repository)) fail('ENVIRONMENT_WORKER_GITHUB_REPOSITORY_INVALID')
   if (typeof token !== 'string' || token.length === 0) {
     fail('ENVIRONMENT_WORKER_GITHUB_TOKEN_MISSING')
   }
 
-  const base = `https://api.github.com/repos/${REPOSITORY}/environments/${ENVIRONMENT}`
+  const base = `https://api.github.com/repos/${repository}/environments/${ENVIRONMENT}`
   const [environment, branchPolicies] = await Promise.all([
     getJson(fetchImpl, base, token),
     getJson(fetchImpl, `${base}/deployment-branch-policies`, token),
   ])
-  return validateEnvironmentWorkerReleaseProtection({ environment, branchPolicies })
+  return validateEnvironmentWorkerReleaseProtection({ environment, branchPolicies, repository })
 }
 
 async function main() {

@@ -4,10 +4,10 @@ import { pathToFileURL } from 'node:url'
 import {
   CHECKPOINT_CEILING, CONTRACT, HASH, RECOVERY_ID, SHA, SOURCE, TARGET,
 } from './contract.mjs'
+import { isAllowedRepository } from '../lib/repository-identity.mjs'
 
 const API_ROOT = 'https://api.github.com/repos/'
 const EXPECTED_OWNER = 'tranhuunguyenhuy-hue'
-const EXPECTED_REPOSITORY = 'tranhuunguyenhuy-hue/dongphugia.com.vn'
 const PART_BYTES = 16_000_000
 const MAX_PARTS = 13
 const MAX_REFS = 100
@@ -43,7 +43,7 @@ function validateRepository(repository) {
 function validateRunner(env) {
   requireAudit(env.GITHUB_ACTIONS === 'true'
     && env.GITHUB_EVENT_NAME === 'workflow_dispatch'
-    && env.GITHUB_REPOSITORY === EXPECTED_REPOSITORY
+    && isAllowedRepository(env.GITHUB_REPOSITORY)
     && env.GITHUB_REF === 'refs/heads/main'
     && env.GITHUB_ACTOR === EXPECTED_OWNER
     && env.GITHUB_RUN_ATTEMPT === '1'

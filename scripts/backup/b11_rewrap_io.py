@@ -30,7 +30,14 @@ from b11_rewrap_core import (
     verify_approved_artifact_zip,
 )
 
-SOURCE_REPOSITORY = "tranhuunguyenhuy-hue/dongphugia.com.vn"
+ALLOWED_SOURCE_REPOSITORIES = ("tranhuunguyenhuy-hue/dongphugia.com.vn", "tranhuunguyenhuy-hue/dongphugia-web")  # TRANSITIONAL (#426): drop the old name after the rename is verified
+
+
+def source_repository() -> str:
+    value = os.environ.get("GITHUB_REPOSITORY") or ALLOWED_SOURCE_REPOSITORIES[0]
+    if value not in ALLOWED_SOURCE_REPOSITORIES:
+        raise RewrapError("REPOSITORY_IDENTITY_INVALID")
+    return value
 ARTIFACT_NAME = f"leo540-runtime-backup-{HISTORICAL_RUN_ID}"
 DESTINATION_PATH = f"recovery/{OUTPUT_NAME}"
 API_ROOT = "https://api.github.com"
@@ -133,11 +140,11 @@ def fetch_exact_artifact(
     *,
     expected_expires_at: str | None = None,
 ) -> None:
-    run = _api_json(f"/repos/{SOURCE_REPOSITORY}/actions/runs/{HISTORICAL_RUN_ID}", token)
-    artifact = _api_json(f"/repos/{SOURCE_REPOSITORY}/actions/artifacts/{HISTORICAL_ARTIFACT_ID}", token)
+    run = _api_json(f"/repos/{source_repository()}/actions/runs/{HISTORICAL_RUN_ID}", token)
+    artifact = _api_json(f"/repos/{source_repository()}/actions/artifacts/{HISTORICAL_ARTIFACT_ID}", token)
     validate_source_metadata(run, artifact, expected_expires_at=expected_expires_at)
     request = urllib.request.Request(
-        f"{API_ROOT}/repos/{SOURCE_REPOSITORY}/actions/artifacts/{HISTORICAL_ARTIFACT_ID}/zip",
+        f"{API_ROOT}/repos/{source_repository()}/actions/artifacts/{HISTORICAL_ARTIFACT_ID}/zip",
         headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
     )
     try:
@@ -292,7 +299,7 @@ def validate_single_dispatch(runs: dict, run_id: int) -> None:
 
 def preflight_single_dispatch(token: str, run_id: int) -> None:
     runs = _api_json(
-        f"/repos/{SOURCE_REPOSITORY}/actions/workflows/b11-private-rewrap.yml/runs?event=workflow_dispatch&per_page=2",
+        f"/repos/{source_repository()}/actions/workflows/b11-private-rewrap.yml/runs?event=workflow_dispatch&per_page=2",
         token,
     )
     validate_single_dispatch(runs, run_id)

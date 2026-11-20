@@ -23,7 +23,7 @@ describe('one-time original authentic recovery', () => {
     const secret = workflow.indexOf('BACKUP_AGE_PRIVATE_KEY')
 
     expect(workflow).toContain('workflow_dispatch:')
-    expect(workflow).toContain("github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn'")
+    expect(workflow).toContain(`contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository)`)
     expect(workflow).toContain("github.ref == 'refs/heads/main'")
     expect(workflow).toContain("github.actor == 'tranhuunguyenhuy-hue'")
     expect(workflow).toContain('github.run_number == 1')

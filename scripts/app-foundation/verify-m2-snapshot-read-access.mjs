@@ -3,6 +3,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { diagnoseM2CaptureFailure } from './m2-public-diagnostics.mjs'
+import { isAllowedRepository, isAllowedWorkflowRef } from '../lib/repository-identity.mjs'
 
 export async function verifyM2SnapshotReadAccess(client, production) {
   // pg_stat_ssl observes the PostgreSQL backend connection. A session pooler's
@@ -47,9 +48,9 @@ export async function verifyM2SnapshotReadAccess(client, production) {
 
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REF !== 'refs/heads/main'
-    || process.env.GITHUB_REPOSITORY !== 'tranhuunguyenhuy-hue/dongphugia.com.vn'
+    || !isAllowedRepository(process.env.GITHUB_REPOSITORY)
     || process.env.GITHUB_ACTOR !== 'tranhuunguyenhuy-hue'
-    || process.env.GITHUB_WORKFLOW_REF !== 'tranhuunguyenhuy-hue/dongphugia.com.vn/.github/workflows/v1-fixed-preview.yml@refs/heads/main'
+    || !isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF, 'v1-fixed-preview.yml')
     || !/^[a-f0-9]{40}$/.test(process.env.GITHUB_SHA || '')) throw new Error('PROTECTED_RUNNER_REQUIRED')
   const response = await fetch('https://www.dongphugia.vn/api/health', { signal: AbortSignal.timeout(15000), redirect: 'error' })
   const productionSource = response.headers.get('x-dpg-source-sha')
