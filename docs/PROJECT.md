@@ -14,7 +14,7 @@
 
 ## Typical task path
 
-Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → Tech Lead review → Owner acceptance → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the live Worker deployment in Cloudflare.
+Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → agent self-review and self-merge (docs/CI/maintenance) or fixed-staging UAT by the Owner (runtime/UI) → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the live Worker deployment in Cloudflare.
 
 ## References — read only as needed
 
