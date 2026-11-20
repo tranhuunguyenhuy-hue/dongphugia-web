@@ -9,6 +9,7 @@ import type { ProductVisibilityInput } from '../../src/lib/public-product-visibi
 import type { ProductPathInput, ProductTaxonAssignmentRef } from '../../src/lib/taxonomy-paths'
 import { projectProduct, buildProjection, ROOTS } from './public-projection.mjs'
 import {projectPublicContent,publicText,PUBLIC_SPEC_KEYS,PUBLIC_LEGACY_SPEC_PATHS} from './public-product-content.mjs'
+import { isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
 
 // Root .ts modules are CommonJS; this protected .mts runner is ESM. Keep the
 // exact canonical implementations using tsx's registered CommonJS loader.
@@ -19,7 +20,7 @@ const {getCanonicalProductPath}=require('../../src/lib/taxonomy-paths.ts') as ty
 type ProjectionRow = ProductVisibilityInput & ProductPathInput & {id:number;name:string;display_name:string|null;sku:string;image_main_url:string|null;is_featured:boolean;brand_name:string|null;brand_slug:string|null;rootSortOrder:number;rootBrandId:number|null;rootBrandSortOrder:number|null;rootSubcategorySortOrder:number|null;rootSubcategoryThumbnailUrl:string|null;product_taxon_assignments:ProductTaxonAssignmentRef[]}
 type LegacyVariantRow=ProjectionRow & {variant_group:string|null;variant_group_id:number|null;variant_label:string|null;variant_type:string|null;is_combo:boolean}
 let projectionPhase='PRECHECK'
-const REPO='tranhuunguyenhuy-hue/dongphugia.com.vn'
+const REPO=currentRepository()
 function parseBudgetEvidence(raw:string|undefined) {
   try{return JSON.parse(raw??'null')}catch{throw new Error('ZERO_COST_EVIDENCE_INVALID')}
 }
@@ -28,7 +29,7 @@ function assertPreviewBudget() {
   // This workflow unit reads a private target and writes only a sanitized local
   // candidate artifact. Billing remains UNKNOWN; it does not claim zero cost.
   if(publicationMode==='false') {
-    if(process.env.GITHUB_WORKFLOW_REF!==`${REPO}/.github/workflows/catalogue-public-preview-v2.yml@refs/heads/main`)
+    if(!isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF,'catalogue-public-preview-v2.yml'))
       throw new Error('PREVIEW2_READ_ONLY_SCOPE_REQUIRED')
     return
   }

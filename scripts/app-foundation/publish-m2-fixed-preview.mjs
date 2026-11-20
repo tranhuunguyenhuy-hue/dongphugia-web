@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { digestDirectory } from './public-worker-artifact.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
+import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
 
 const ACCOUNT = 'd54f3402b9d112ab64d6135e0e3f1fb1'
 const WORKER_ID = 'e50647603f1b4e73bed14e2e79c15d26'
@@ -58,7 +59,7 @@ async function cf(path, method = 'GET', body) {
   return value.result
 }
 async function gh(path) {
-  const response = await fetch(`https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia.com.vn/${path}`, {
+  const response = await fetch(`https://api.github.com/repos/${currentRepository()}/${path}`, {
     headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json' },
     signal: AbortSignal.timeout(20000), redirect: 'error' })
   if (!response.ok) throw new Error('M2_GITHUB_READ_REQUIRED')
@@ -126,8 +127,8 @@ async function cleanup() {
 async function main() {
   assert.equal(process.env.GITHUB_ACTIONS, 'true')
   assert.equal(process.env.GITHUB_REF, 'refs/heads/main')
-  assert.equal(process.env.GITHUB_REPOSITORY, 'tranhuunguyenhuy-hue/dongphugia.com.vn')
-  assert.equal(process.env.GITHUB_WORKFLOW_REF, 'tranhuunguyenhuy-hue/dongphugia.com.vn/.github/workflows/v1-fixed-preview.yml@refs/heads/main')
+  assert.ok(isAllowedRepository(process.env.GITHUB_REPOSITORY), 'REPOSITORY_IDENTITY_INVALID')
+  assert.ok(isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF, 'v1-fixed-preview.yml'), 'WORKFLOW_REF_INVALID')
   assert.equal(process.env.GITHUB_ACTOR, 'tranhuunguyenhuy-hue')
   assert.equal(process.env.CLOUDFLARE_ACCOUNT_ID, ACCOUNT)
   assert.ok(process.env.CLOUDFLARE_API_TOKEN, 'M2_PREVIEW_PUBLISHER_TOKEN_REQUIRED')

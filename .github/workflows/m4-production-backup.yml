@@ -35,7 +35,7 @@ env:
 
 jobs:
   backup:
-    if: github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue'
+    if: contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     environment: runtime-backup

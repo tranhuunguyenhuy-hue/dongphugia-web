@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   audit:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn' && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' && github.run_attempt == 1
+    if: github.event_name == 'workflow_dispatch' && contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository) && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' && github.run_attempt == 1
     environment: catalogue-direct-migration
     runs-on: ubuntu-24.04
     timeout-minutes: 12

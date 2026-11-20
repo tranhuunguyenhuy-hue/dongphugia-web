@@ -7,7 +7,7 @@ describe('Supabase Management token preflight workflow', () => {
     const workflow = await readFile('.github/workflows/supabase-management-token-preflight.yml', 'utf8')
 
     expect(workflow).toContain('workflow_dispatch:')
-    expect(workflow).toContain("github.repository == 'tranhuunguyenhuy-hue/dongphugia.com.vn'")
+    expect(workflow).toContain(`contains(fromJSON('["tranhuunguyenhuy-hue/dongphugia.com.vn","tranhuunguyenhuy-hue/dongphugia-web"]'), github.repository)`)
     expect(workflow).toContain("github.ref == 'refs/heads/main'")
     expect(workflow).toContain("github.actor == 'tranhuunguyenhuy-hue'")
     expect(workflow).toContain('github.run_attempt == 1')

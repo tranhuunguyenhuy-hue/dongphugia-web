@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { SOURCE, TARGET, SHA, connectionConfig, provisioningSql, requireGate, digest, assertBudget, identifier } from './contract.mjs'
 import { attestRole, connect, closeConnections } from './run.mjs'
 import { setupState, assertBeforeSetup } from './setup-state.mjs'
+import { isAllowedRepository } from '../lib/repository-identity.mjs'
 
 const env=process.env
 const clients=[]
@@ -93,7 +94,7 @@ function loginUrl(config,role,password,project) {
 }
 async function main() {
   requireGate(env.GITHUB_ACTIONS==='true' && env.GITHUB_REF==='refs/heads/main'
-    && env.GITHUB_REPOSITORY==='tranhuunguyenhuy-hue/dongphugia.com.vn'
+    && isAllowedRepository(env.GITHUB_REPOSITORY)
     && env.GITHUB_ACTOR==='tranhuunguyenhuy-hue' && env.GITHUB_RUN_ATTEMPT==='1'
     && SHA.test(env.GITHUB_SHA??'') && env.APPROVED_SHA===env.GITHUB_SHA,'SETUP_AUTHORITY')
   requireGate(['source','target'].includes(env.SETUP_PURPOSE),'SETUP_PURPOSE')

@@ -10,8 +10,8 @@ describe('M3 fixed Preview publisher gates', () => {
     for (const gate of [
       "GITHUB_REF, 'refs/heads/main'",
       "GITHUB_ACTOR, 'tranhuunguyenhuy-hue'",
-      "GITHUB_REPOSITORY, 'tranhuunguyenhuy-hue/dongphugia.com.vn'",
-      '.github/workflows/v1-fixed-preview.yml@refs/heads/main',
+      "isAllowedRepository(process.env.GITHUB_REPOSITORY)",
+      "isAllowedWorkflowRef(process.env.GITHUB_WORKFLOW_REF, 'v1-fixed-preview.yml')",
       'assert.equal(sourceSha, process.env.GITHUB_SHA)',
       "M3_MAIN_ADVANCED",
     ]) expect(publisher, gate).toContain(gate)
