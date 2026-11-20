@@ -6,10 +6,10 @@ Updated 2026-11-20 (UTC) under [#412](https://github.com/tranhuunguyenhuy-hue/do
 
 | | State | Verified |
 | --- | --- | --- |
-| `main` | `b463ea6` (PR #413, includes #411 homepage promotion popup) | git, 2026-11-20 |
+| `main` | `e070986` (PR #414; includes #411/#413 homepage promotion popup and the updated TOTO campaign prizes) | git, 2026-11-20 |
 | Deployed Production Worker | deployment `d3b28b83-4971-4b8d-a7b9-09701a1c1ca5`, version `e7dda372-7cfa-418f-b729-b8d34ed5dcb6`, 100%, message `M4 Admin release 24a547952d92` | Cloudflare API, read-only, 2026-11-20 |
 
-The Production Worker was built from `24a5479` and has **not** been redeployed since. Merged changes after that SHA — including the homepage popup (#409/#411/#413) — are **not live**. Re-check the deployment before documenting or deploying: state changes with every release.
+The Production Worker was built from `24a5479` and has **not** been redeployed since. Merged changes after that SHA — including the homepage popup and campaign prize update (#409/#411/#413/#414) — are **not live**. Re-check the deployment before documenting or deploying: state changes with every release.
 
 ## Production
 
@@ -39,7 +39,7 @@ The Production Worker was built from `24a5479` and has **not** been redeployed s
 ## Open work (none authorised unless its issue says so)
 
 - [#412](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/412) agent documentation (this change).
-- [#343](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/343) TOTO campaign landing (acceptance/live status UNKNOWN); PR [#414](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/414) Codex campaign prize update (open, UI lane).
+- [#343](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/343) TOTO campaign landing (acceptance/live status UNKNOWN); Codex PR [#414](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/414) (campaign prize update) is merged, not deployed.
 - [#348](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/issues/348) credential governance with PR [#350](https://github.com/tranhuunguyenhuy-hue/dongphugia.com.vn/pull/350) — pending Owner decision; actual secret-store reconciliation UNKNOWN.
 - Owner-decision backlog from M5: remove the fallback backup secret and any `postgres` password rotation; Bunny zone/hostname cleanup candidates (`dpg-publishing-production-r2`, `dpg-publishing-staging`, `dpg-v1-preview-*`, `cdn.dongphugia.com.vn`), each needing a dependency check and approval; manufacturer PDF↔SKU attachment; hotlink independence; A4 print check on the first real quote; evidence before editing the 17 exception references; watch Cloudflare 1102 spikes on the next release.
 
