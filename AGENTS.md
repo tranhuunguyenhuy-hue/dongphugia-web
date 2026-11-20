@@ -9,10 +9,10 @@ This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST
 4. Only the runbook the task needs, via the [technical handbook](docs/PROJECT.md). Do not load the whole docs tree or old conversation history.
 
 ## Who does what
-- **Owner**: states needs, decides, accepts (UAT), approves any Production deploy. Not required to know technical detail.
-- **ChatGPT**: research and planning only. Its output must be an issue following `.github/ISSUE_TEMPLATE/agent-task.md`; it does not edit the repository or deploy. Anything an agent needs (images, URLs, decisions) must be in the issue or repo, never only in a chat.
-- **Claude Code** = Tech Lead and the *Infra / Database / Operations / Documentation* lane. Reviews PRs and records LGTM / CHANGES REQUESTED in the issue.
-- **Codex** = the *UI / Frontend* lane (`src/app/(public)/`, `src/components/`, UI tests).
+- **Owner**: states needs, decides, and holds final UAT and release authority, including approval of any Production deploy. Not required to know technical detail.
+- **ChatGPT = Tech Lead / coordinator**: plans issues (following `.github/ISSUE_TEMPLATE/agent-task.md`), coordinates the agents, and reviews agent outcomes and PRs, recording LGTM / CHANGES REQUESTED in the issue. Anything an agent needs (images, URLs, decisions) must be in the issue or repo, never only in a chat.
+- **Claude Code** = implementation agent for the *Infra / Database / Operations / Documentation* lane. It may analyse independently and self-review, but it cannot accept its own PR as Tech Lead.
+- **Codex** = implementation agent for the *UI / Frontend* lane (`src/app/(public)/`, `src/components/`, UI tests).
 - A task outside your lane needs explicit Owner authorisation in the issue. Never start another agent or thread without Owner direction.
 
 ## Authority and scope
@@ -33,7 +33,7 @@ This is the only repository agent policy; `CLAUDE.md` imports it. **Status: POST
 1. **Start**: `git status --short --branch`, fetch, compare with `main`, read the issue's latest comments. Do not discard WIP or restart finished work. If a cloud app created its own branch, keep the checkpoint ancestry and name the continuation branch.
 2. **Branch/PR**: one branch and one PR per issue, named `codex/<issue>-<slug>` or `claude/<issue>-<slug>`. Declare in the issue which files you will touch so parallel lanes do not collide. Rebase or merge `main` before opening the PR.
 3. **Verify**: run affected tests, typecheck/build and, when applicable, a real hosted smoke. Node 24.13.0, npm 11.6.2, committed lockfiles. Required CI status: `quality` (`.github/workflows/quality.yml`); the docs-only classifier is not a bypass for source changes. On repeated failure change approach and report the exact blocker. Do independent safe work instead of waiting on CI.
-4. **Review and accept**: Tech Lead reviews the PR; the Owner accepts UI/live behaviour. PR/CI success alone is not runtime acceptance.
+4. **Review and accept**: the Tech Lead (ChatGPT) reviews the PR; the Owner gives final UAT of UI/live behaviour. An implementing agent never accepts its own PR. PR/CI success or a deployment record alone is not runtime acceptance.
 5. **Release**: Production deploys are **serialized** (one at a time, Owner approval, exact reviewed SHA) because Public and Admin share one Worker. Use only the reviewed lane in the handbook; never publish a stale or Public-only artifact over the Admin; do not dispatch unrelated legacy workflows; do not bypass identity gates or change protected settings to turn CI green. If an actor or scoped credential is missing, state the exact Owner action.
 6. **Before hosted writes** confirm target, backup + restore/rollback, schema/permissions, free quota, non-sensitive seed and existing consumers. Worker rollback and PostgreSQL rollback are separate; Worker rollback does not undo SQL.
 7. **Handoff** (before stopping or switching agent): commit, push, verify the SHA, then comment in the issue: branch/SHA, completed work, PASS/FAIL/UNKNOWN, next concrete command or blocker, deployment/version if applicable, backup status, Owner action. Never claim local-only state transferred. No merge or deploy solely for handoff. Keep reports short.
