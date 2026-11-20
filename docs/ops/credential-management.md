@@ -27,7 +27,7 @@ To complete actual inventory, Owner exports **names and metadata only** from rep
 
 - Retain sole Production release, fixed M2 publisher, required CI and backup/restore workflows. Retain source-validation PR checks. Performance monitoring remains scheduled; its failing budget is not credential evidence.
 - Already removed by PR #420 (no remaining source consumer; their credentials are NOT touched and are listed under `references_without_remaining_source_consumer`): `public-production-worker`, `staging-ghcr`, `catalogue-checkpoint-key`, `catalogue-direct-setup`, `catalogue-preview-diagnostic` and the one-time M3/M4/M5 and recipient-diagnostic jobs. Removed in #348 phase 1 (10 Owner-approved removals, no secret/variable/Environment touched): `c-actions-original-authentic-recovery-once`, `leo560-shadow-import`, `catalogue-public-preview`, `catalogue-public-preview-v2`, `environment-worker-ci`, `environment-worker-publish`, `pr-preview-build`, `pr-preview-cleanup`, `pr-preview-publish`, `production-candidate`. **`production-promotion` was approved but deferred:** it declares `workflow_call` in a public repository, so cross-repository callers cannot be ruled out (UNKNOWN); it stays until that is resolved. Still retained and NOT approved for removal: the six deferred workflows (`supabase-backup-role-bootstrap`, `supabase-database-preflight`, `supabase-management-token-preflight`, `supabase-runtime-rehome`, `catalogue-direct-migration`, `catalogue-checkpoint-vault-audit`), the UNKNOWN `c-actions-recovery` and the five KEEP recovery workflows. Review for archive or disable Check callers, manual recovery dependencies, retained artifacts and Owner acceptance first. YAML workflow names containing `v2` are historical V1-repo filenames; this is no authority to access V2 resources.
-- Review `Preview`, `staging`, old Production-labelled Environments and `pr-preview` for archival after proving no live consumer or recovery dependency. Keep existing branch protections and reviewer gates. Dynamic environment consumers need special review.
+- The legacy Environments `Preview`, `staging`, the two old Production-labelled ones, `restore-rehearsal` and `pr-preview` were deleted on 2026-11-20 by Owner decision (see executed cleanup below).
 - Do not mark any credential UNUSED until actual configured name inventory and dependency verification agree. No delete, move, rotate, workflow-disable or protection mutation is included in this PR.
 
 ## Safe operational sequence
@@ -44,19 +44,20 @@ For Production incident: stop overlapping releases, inspect Worker version/traff
 
 For M2: use [fixed Preview runbook](../deploy/m2-fixed-preview-runbook.md). Recovery re-uploads a verified accepted artifact to named staging only; first deployment without accepted predecessor has recovery UNKNOWN. Credential PASS does not constitute hosted UAT or Gate B acceptance.
 
-## Owner-approved cleanup — pending execution (#348, final GO comment 7038428744)
+## Owner-approved cleanup — executed 2026-11-20 (#348, final GO comment 7038428744)
 
-Authorised, exact, and **not yet executed or verified** (the session proxy returns 403 on Environment and Secret endpoints; completion is recorded only from Owner evidence):
+Verified from Owner screenshots (names/counts only; the integration cannot read these endpoints):
 
-- **A. Restrict to `main` only** (Deployment branches and tags → Selected branches → `main`; no reviewers; secrets and variables unchanged): `m4-production-functions`, `m3-test-functions`.
-- **B. Delete six legacy Environments** by exact name: `Preview`, `Production – dongphugia`, `Production – dongphugia-com-vn`, `restore-rehearsal`, `staging`, `pr-preview`. Never `Production`, `cloudflare-staging`, `runtime-backup`, `catalogue-direct-migration`, `m4-production-functions`, `m3-test-functions`. Deletion also removes their Environment-scoped secrets/variables.
-- **C. Delete two repository secrets:** `CLOUDFLARE_LEO563_PREVIEW_TOKEN`, `PHASE2_PREVIEW_ORDER_INTAKE_SIGNING_SECRET`.
-- **Retained:** the repository Variables, `M4_BACKUP_DATABASE_URL`, and all Production, backup and fixed-Preview credentials. The `production` environment name in `production-promotion.yml` is the core `Production` Environment.
+- **A. PASS** `m4-production-functions` and `m3-test-functions`: Deployment branches = selected, `main` only (1 branch, 0 tags); no reviewers; secrets unchanged.
+- **B. PASS** Environments remaining: `Production`, `cloudflare-staging`, `catalogue-direct-migration`, `runtime-backup`, `m4-production-functions`, `m3-test-functions`. Deleted: `Preview`, `Production – dongphugia`, `Production – dongphugia-com-vn`, `restore-rehearsal`, `staging`, `pr-preview`. Secret/variable counts of the kept Environments are unchanged.
+- **C. PASS** Repository secrets remaining: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_READONLY_DISCOVERY_TOKEN`, `DATABASE_URL`, `DIRECT_URL`, `M3_ADMIN_API_HMAC_SECRET`, `MIGRATION_PREVIEW_DATABASE_URL`. Deleted: `CLOUDFLARE_LEO563_PREVIEW_TOKEN`, `PHASE2_PREVIEW_ORDER_INTAKE_SIGNING_SECRET`.
+- **Retained, UNVERIFIED after the change:** the repository Variables (not re-shown), `M4_BACKUP_DATABASE_URL` and all Production/backup/fixed-Preview credentials. The `production` environment name in `production-promotion.yml` is the core `Production` Environment.
 
-Rollback: deleted Environments and secrets cannot be restored; recreate by name and have the Owner re-enter any needed value. Since the Owner confirmed these are obsolete, no rollback is planned.
+Deletions cannot be undone; recreate by exact name and have the Owner re-enter any value if ever needed.
 
 ## Owner decisions still open
 
 1. Remove the fallback `M4_BACKUP_DATABASE_URL` after a successful `dpg_backup_reader` run (technically eligible; Owner-only), and decide any `postgres` password rotation.
 2. Decide the remaining tier-2 workflows (6 deferred, `c-actions-recovery`) and `production-promotion` (external `workflow_call` callers UNKNOWN); retained by default.
+2a. Repository Variables with no source consumer (six names, see registry) remain until a separate Owner decision.
 3. Optionally add the Owner as required reviewer on `Production` (currently branch-restricted to `main` only, no reviewer).
