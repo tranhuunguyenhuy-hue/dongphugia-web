@@ -22,7 +22,7 @@ const STATIC_PATHS=new Set(['/lien-he','/ve-chung-toi','/chinh-sach-bao-mat','/d
 const SLUG=/^[a-z0-9]+(?:-[a-z0-9]+)*$/
 const PARAM_VALUE=/^[A-Za-z0-9_,.-]{1,64}$/
 const ALLOWED_PARAMS:Record<PageCacheClass,readonly string[]>={
-  home:[],category:['brands'],listing:['page','brand','is_featured'],product:[],blog:['page'],static:[],
+  home:[],category:['brands'],listing:['page','brand','dong','is_featured'],product:[],blog:['page'],static:[],
 }
 const FORBIDDEN_HEADERS=['authorization','cookie','range','rsc','next-router-prefetch','next-router-segment-prefetch','next-router-state-tree','x-nextjs-data','x-vinext-rsc']
 

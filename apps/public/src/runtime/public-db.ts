@@ -5,10 +5,10 @@ export type PublicHyperdrive = { connectionString: string }
 export type PublicQueryValue = string | number | boolean | readonly string[]
 export type PublicQueryLabel = 'listing-page' | 'listing-route-metadata' | 'listing-leaves'
   | 'category-listing-counts' | 'category-brand-facets' | 'category-root-featured'
-  | 'listing-brand-facets' | 'public-search' | 'other'
+  | 'listing-brand-facets' | 'listing-series-facets' | 'variant-siblings' | 'public-search' | 'other'
 const SAFE_QUERY_LABELS = new Set<PublicQueryLabel>([
   'listing-page', 'listing-route-metadata', 'listing-leaves', 'category-listing-counts',
-  'category-brand-facets', 'category-root-featured', 'listing-brand-facets', 'public-search', 'other',
+  'category-brand-facets', 'category-root-featured', 'listing-brand-facets', 'listing-series-facets', 'variant-siblings', 'public-search', 'other',
 ])
 export function publicPostgresEnabled() {
   return process.env.PUBLIC_CATALOGUE_SOURCE === 'postgresql'
