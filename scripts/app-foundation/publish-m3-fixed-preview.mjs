@@ -262,7 +262,7 @@ async function main() {
   evidence.adminSmoke = await adminSmoke(token, sourceSha)
   // Public regression against TEST data is recorded as evidence; full Public/Admin UAT is a separate hosted gate.
   evidence.publicNavigation = await run(process.execPath, ['scripts/app-foundation/public-navigation-acceptance.mjs', FIXED_PREVIEW_ORIGIN, sourceSha],
-    { ...process.env, M2_ACCESS_TOKEN_FILE: tokenFile, M1_NAVIGATION_DIAGNOSTICS: join(output, 'navigation.json'), M2_EVIDENCE_DIR: output }).then(() => 'PASS', () => 'FAIL_REVIEW_REQUIRED')
+    { ...process.env, M2_PUBLIC_SNAPSHOT_CHECKPOINT: sourceSha, M2_ACCESS_TOKEN_FILE: tokenFile, M1_NAVIGATION_DIAGNOSTICS: join(output, 'navigation.json'), M2_EVIDENCE_DIR: output }).then(() => 'PASS', () => 'FAIL_REVIEW_REQUIRED')
   await ensureProductionUnchanged()
   evidence.status = 'PASS'; evidence.gateC = 'AWAITING_HOSTED_UAT_AND_OWNER_ACCEPTANCE'
 }

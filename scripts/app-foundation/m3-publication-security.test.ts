@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { navigationTarget } from './m2-navigation-context.mjs'
 
 const publisher = readFileSync('scripts/app-foundation/publish-m3-fixed-preview.mjs', 'utf8')
 const workflow = readFileSync('.github/workflows/v1-fixed-preview.yml', 'utf8')
@@ -49,5 +50,13 @@ describe('M3 fixed Preview publisher gates', () => {
   it('does not widen the M2 jobs or use the Production release workflow', () => {
     expect(workflow).toContain("!endsWith(inputs.operation, '-m3')")
     expect(m3Jobs).not.toContain('v1-worker-release')
+  })
+  it('runs Public navigation in pinned-SHA Preview mode, never as a Production origin check (#432)', () => {
+    const sha = 'a'.repeat(40)
+    expect(publisher).toContain('M2_PUBLIC_SNAPSHOT_CHECKPOINT: sourceSha')
+    const preview = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
+    expect(navigationTarget(preview, { M2_PUBLIC_SNAPSHOT_CHECKPOINT: sha }).hosted).toBe(true)
+    expect(() => navigationTarget(preview, {})).toThrow('M1_ORIGIN_REQUIRED')
+    expect(() => navigationTarget('https://www.dongphugia.vn', { M2_PUBLIC_SNAPSHOT_CHECKPOINT: sha })).toThrow('M2_PREVIEW_ORIGIN_REQUIRED')
   })
 })
