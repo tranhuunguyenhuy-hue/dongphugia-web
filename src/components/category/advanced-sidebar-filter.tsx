@@ -4,7 +4,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { BrandLogo } from '@/components/media/brand-logo'
-import { retainSeriesForBrands, type SeriesFacet } from './series-facet'
+import { retainSeriesForBrands } from './series-facet'
+import { parseSeriesParam, SERIES_QUERY_PARAM, type SeriesFacet } from '@/lib/series-facet-contract'
 import type { SpecFilterDef } from './subcategory-spec-filter'
 import type { ListingRuntimeConfig } from '@/lib/public-api-products'
 
@@ -326,7 +327,7 @@ export function AdvancedSidebarFilter({
     const subcategorySlugs = getArr('sub')
     const brandSlugs       = getArr('brand')
     const seriesFacet = availableFilters.seriesFacet
-    const seriesSlugs = seriesFacet ? getArr(seriesFacet.queryKey).filter(Boolean) : []
+    const seriesSlugs = seriesFacet ? parseSeriesParam(searchParams.getAll(SERIES_QUERY_PARAM)).slugs : []
     const seriesOptions = seriesFacet?.options.filter(
         option => option.count > 0 && brandSlugs.includes(option.brandSlug)
     ) ?? []
@@ -372,7 +373,7 @@ export function AdvancedSidebarFilter({
         if (next.length) params.set(key, next.join(','))
         else params.delete(key)
         if (seriesFacet && key === 'brand') retainSeriesForBrands(params, seriesFacet, next)
-        if (seriesFacet && key === 'sub') params.delete(seriesFacet.queryKey)
+        if (seriesFacet && key === 'sub') params.delete(SERIES_QUERY_PARAM)
         params.set('page', '1')
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }
@@ -499,7 +500,7 @@ export function AdvancedSidebarFilter({
         setLocalPrice([PRICE_MIN, PRICE_MAX])
         const params = new URLSearchParams(searchParams.toString())
         ;['brand', 'features', 'material', 'origin', 'color', 'price', 'is_promotion', 'is_featured', 'priceRange'].forEach(k => params.delete(k))
-        if (seriesFacet) params.delete(seriesFacet.queryKey)
+        if (seriesFacet) params.delete(SERIES_QUERY_PARAM)
         if (effectiveEnableSpecFilters) {
             specFilters.forEach(f => params.delete(SF_PREFIX + f.key))
         }
@@ -550,7 +551,7 @@ export function AdvancedSidebarFilter({
 
                 {relationSections}
 
-                {seriesFacet && seriesOptions.length > 0 && (
+                {seriesFacet?.applicable && seriesOptions.length > 0 && (
                     <fieldset className="space-y-2">
                         <legend className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
                             Dòng sản phẩm
@@ -561,7 +562,7 @@ export function AdvancedSidebarFilter({
                                     key={option.slug}
                                     label={`${option.name} (${option.count})`}
                                     active={seriesSlugs.includes(option.slug)}
-                                    onClick={() => toggle(seriesFacet.queryKey, seriesSlugs, option.slug)}
+                                    onClick={() => toggle(SERIES_QUERY_PARAM, seriesSlugs, option.slug)}
                                 />
                             ))}
                         </div>

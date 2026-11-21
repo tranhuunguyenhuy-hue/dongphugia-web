@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { VerifiedVariantSelector, type VerifiedVariantOption } from '../verified-variant-selector'
+import { readVerifiedVariantAttributes, VerifiedVariantSelector, type VerifiedVariantOption } from '../verified-variant-selector'
 
 vi.unmock('next/link')
 
@@ -15,6 +15,14 @@ const options: VerifiedVariantOption[] = Array.from({ length: 20 }, (_, index) =
 }))
 
 describe('VerifiedVariantSelector', () => {
+    it('reads API labels and values without replacing missing labels with a name or SKU guess', () => {
+        expect(readVerifiedVariantAttributes([
+            { axis: 'config', label: 'Cấu hình', value: 'Nắp đóng êm T3' },
+            { axis: 'color', label: 'Màu', value: 'MOCK-0' },
+            { axis: 'size', value: '100 mm' },
+            null,
+        ], 'MOCK-0')).toEqual([{ label: 'Cấu hình', value: 'Nắp đóng êm T3' }])
+    })
     it('shows every supplied option and uses the exact SKU URL and attribute labels', () => {
         render(<VerifiedVariantSelector currentSku={options[0].sku} options={options} />)
         expect(screen.getAllByRole('link')).toHaveLength(20)

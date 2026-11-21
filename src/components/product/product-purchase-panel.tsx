@@ -22,7 +22,7 @@ interface ProductPurchasePanelProps {
         brands: {name:string}|null;
     }
     historicalReferencePrice?: {amountVnd:number;recordedUpdateDate:string;provenance:string}|null
-    variantSiblings: VariantSibling[]
+    variantSiblings?: VariantSibling[]
     verifiedVariantOptions?: readonly VerifiedVariantOption[]
     variantAxes?: unknown
     currentVariantOptions?: unknown
@@ -36,7 +36,7 @@ const toClientMoney = (value: unknown) =>
 export function ProductPurchasePanel({
     product,
     historicalReferencePrice,
-    variantSiblings,
+    variantSiblings = [],
     verifiedVariantOptions,
     variantAxes,
     currentVariantOptions,

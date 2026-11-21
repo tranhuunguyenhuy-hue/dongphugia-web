@@ -7,6 +7,16 @@ export type VerifiedVariantOption = {
     attributes: readonly { label: string; value: string }[]
 }
 
+export function readVerifiedVariantAttributes(value: unknown, sku: string): VerifiedVariantOption['attributes'] {
+    if (!Array.isArray(value)) return []
+    return value.flatMap((attribute: unknown) => {
+        if (!attribute || typeof attribute !== 'object' || !('label' in attribute) || !('value' in attribute)) return []
+        const label = typeof attribute.label === 'string' ? attribute.label.trim() : ''
+        const text = typeof attribute.value === 'string' ? attribute.value.trim() : ''
+        return label && text && text.toUpperCase() !== sku.toUpperCase() ? [{ label, value: text }] : []
+    })
+}
+
 export function VerifiedVariantSelector({ currentSku, options }: {
     currentSku: string
     options: readonly VerifiedVariantOption[]

@@ -1,11 +1,13 @@
 import { Metadata } from "next"
 import { notFound, permanentRedirect } from "next/navigation"
 import Link from "next/link"
-import { getPdpDescriptionBlocks, getPdpHistoricalReferencePrice, getPdpDocuments, getPdpPackageItems, getPdpSpecifications, getPublicProductBySlug, getPublicProducts, getProductComponents, getVariantSelectionData, getVariantSiblings } from "@/lib/public-api-products"
+import { getPdpDescriptionBlocks, getPdpHistoricalReferencePrice, getPdpDocuments, getPdpPackageItems, getPdpSpecifications, getPublicProductBySlug, getPublicProducts, getProductComponents, getVariantSelectionData } from "@/lib/public-api-products"
 import { ProductImageGallery } from "@/components/product/product-image-gallery"
 import { ProductDetailTabs } from "@/components/product/product-detail-tabs"
 import { ProductComponentsSection } from "@/components/product/product-components-section"
 import { ProductBoxIncludes } from "@/components/product/product-box-includes"
+import { QUARANTINED_VARIANT_GROUPS } from "@/lib/series-facet-contract"
+import { readVerifiedVariantAttributes, type VerifiedVariantOption } from "@/components/product/verified-variant-selector"
 import { ProductPurchasePanel } from "@/components/product/product-purchase-panel"
 import { ProductVariantMetaPills } from "@/components/product/product-variant-meta-pills"
 import { ProductCard } from "@/components/ui/product-card"
@@ -66,16 +68,28 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
         permanentRedirect(canonicalProductUrl)
     }
 
-    // Fetch product components + variant siblings in parallel
-    const [productComponents, variantSiblings, variantSelectionData] = await Promise.all([
+    const [productComponents, variantSelectionData] = await Promise.all([
         getProductComponents(product.id),
-        product.variant_group ? getVariantSiblings(product.variant_group, product.id) : Promise.resolve([]),
-        product.variant_group ? getVariantSelectionData(product.variant_group, product.id) : Promise.resolve({ axes: [], currentVariantOptions: [], siblings: [] }),
+        product.variant_group && !QUARANTINED_VARIANT_GROUPS.includes(product.variant_group)
+            ? getVariantSelectionData(product.variant_group, product.id)
+            : Promise.resolve({ currentVariantOptions: [], siblings: [] }),
     ])
-    const clientVariantSelectionData = JSON.parse(JSON.stringify(variantSelectionData)) as typeof variantSelectionData
-    const clientVariantSiblings = JSON.parse(
-        JSON.stringify(clientVariantSelectionData.siblings.length > 0 ? clientVariantSelectionData.siblings : variantSiblings)
-    ) as typeof variantSiblings
+    const currentVariantOptions = readVerifiedVariantAttributes(variantSelectionData.currentVariantOptions, product.sku)
+    const variantOptions: VerifiedVariantOption[] = [{
+        sku: product.sku,
+        href: canonicalProductUrl,
+        attributes: currentVariantOptions,
+    }]
+    const seenSkus = new Set([product.sku])
+    for (const sibling of variantSelectionData.siblings) {
+        const { sku, is_active, variant_options } = sibling
+        const href = 'url' in sibling && typeof sibling.url === 'string' ? sibling.url : null
+        if (!is_active || !href || seenSkus.has(sku)
+            || !href.startsWith(`${canonicalSubcategoryUrl}/`)
+            || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(href.slice(canonicalSubcategoryUrl.length + 1))) continue
+        seenSkus.add(sku)
+        variantOptions.push({ sku, href, attributes: readVerifiedVariantAttributes(variant_options, sku) })
+    }
     const hasComponents = productComponents.some(c => c.child !== null)
 
     const boxIncludes = getPdpPackageItems(product)
@@ -217,7 +231,7 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
                             <ProductVariantMetaPills
                                 initialSku={product.sku}
                                 initialColor={product.colors}
-                                initialVariantOptions={clientVariantSelectionData.currentVariantOptions}
+                                initialVariantOptions={variantSelectionData.currentVariantOptions}
                             />
                         </div>
                     </div>
@@ -225,9 +239,7 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
                     <ProductPurchasePanel
                         product={purchaseProduct}
                         historicalReferencePrice={getPdpHistoricalReferencePrice(product)}
-                        variantSiblings={clientVariantSiblings}
-                        variantAxes={clientVariantSelectionData.axes}
-                        currentVariantOptions={clientVariantSelectionData.currentVariantOptions}
+                        verifiedVariantOptions={variantOptions}
                         categorySlug={canonicalCategorySlug}
                         subcategorySlug={canonicalSubcategorySlug}
                     />

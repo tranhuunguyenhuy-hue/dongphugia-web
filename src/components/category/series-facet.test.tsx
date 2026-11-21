@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ActiveFilters } from './active-filters'
 import { AdvancedSidebarFilter } from './advanced-sidebar-filter'
 import { CategoryMobileFilter } from './category-mobile-filter'
-import type { SeriesFacet } from './series-facet'
+import type { SeriesFacet } from '@/lib/series-facet-contract'
 
 const navigation = vi.hoisted(() => ({ push: vi.fn(), query: '', pathname: '' }))
 vi.mock('next/navigation', () => ({
@@ -14,12 +14,14 @@ vi.mock('next/navigation', () => ({
 
 // Synthetic view models for UI tests until #432 supplies the runtime contract.
 const seriesFacet: SeriesFacet = {
-    queryKey: 'dong',
+    applicable: true,
+    selected: [],
+    dropped: [],
     options: [
-        { slug: 'toto-a', brandSlug: 'toto', name: 'Mẫu A', count: 3 },
-        { slug: 'toto-b', brandSlug: 'toto', name: 'Mẫu B', count: 2 },
-        { slug: 'toto-zero', brandSlug: 'toto', name: 'Mẫu hết kết quả', count: 0 },
-        { slug: 'inax-a', brandSlug: 'inax', name: 'Mẫu C', count: 1 },
+        { slug: 'toto-a', brandSlug: 'toto', name: 'Mẫu A', count: 3, selected: false },
+        { slug: 'toto-b', brandSlug: 'toto', name: 'Mẫu B', count: 2, selected: false },
+        { slug: 'toto-zero', brandSlug: 'toto', name: 'Mẫu hết kết quả', count: 0, selected: false },
+        { slug: 'inax-a', brandSlug: 'inax', name: 'Mẫu C', count: 1, selected: false },
     ],
 }
 const availableFilters = {
