@@ -1,8 +1,8 @@
 import { Metadata } from "next"
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import { Suspense } from "react"
 import { preload } from "react-dom"
-import { getPublicProducts, getAvailableFiltersBySubcategory, getProductTypeFiltersBySubcategory, getSubcategorySpecFilters, getListingRuntimeConfig, getPublicListingLeaf, getPublicListingLeaves } from "@/lib/public-api-products"
+import { getPublicProducts, getSeriesFacet, getAvailableFiltersBySubcategory, getProductTypeFiltersBySubcategory, getSubcategorySpecFilters, getListingRuntimeConfig, getPublicListingLeaf, getPublicListingLeaves } from "@/lib/public-api-products"
 import { ProductCard } from "@/components/ui/product-card"
 import { ListingPagination } from "@/components/category/listing-pagination"
 import { DesktopAdvancedSidebarFilter } from "@/components/category/desktop-advanced-sidebar-filter"
@@ -19,6 +19,7 @@ import {
     shouldPrioritizeListingCard,
 } from "@/lib/listing-image-priority"
 import { createResponsiveSrcSet } from "@/lib/media/media-profiles"
+import { parseSeriesParam, SERIES_QUERY_PARAM } from "@/lib/series-facet-contract"
 import { hasActiveListingFilterParams } from "@/lib/listing-client-boundaries"
 import { isListingPageInRange, parseListingPage } from "@/lib/listing-pagination"
 import { ChevronRight, Home } from "lucide-react"
@@ -35,7 +36,7 @@ const PAGE_SIZE = 12
 
 interface PageProps {
     params: Promise<{ sub: string }>
-    searchParams: Promise<{ [key: string]: string | undefined }>
+    searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -56,7 +57,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ThietBiVeSinhSubPage({ params, searchParams }: PageProps) {
     const { sub } = await params
-    const sp = await searchParams
+    const { [SERIES_QUERY_PARAM]: rawSeries, ...otherParams } = await searchParams
+    const sp = Object.fromEntries(Object.entries(otherParams)
+        .map(([key, value]) => [key, Array.isArray(value) ? value[0] : value]))
 
     // Validate subcategory exists
     const subcategory = await getPublicListingLeaf(CATEGORY_SLUG, sub)
@@ -73,7 +76,22 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
     const activeProductSubType = sp.subtype
     const isNew = sp.is_new === 'true'
     const isFeatured = sp.is_featured === 'true'
-    const hasActiveFilterParams = hasActiveListingFilterParams(sp)
+    const brandSlugs = [...new Set(activeBrandSlugs?.split(',').filter(Boolean) ?? [])]
+    const { slugs, invalid } = parseSeriesParam(rawSeries)
+    const seriesFacet = brandSlugs.length || rawSeries !== undefined
+        ? await getSeriesFacet(CATEGORY_SLUG, sub, brandSlugs, slugs, { featured: isFeatured })
+        : undefined
+    if (seriesFacet && (seriesFacet.dropped.length || invalid.length)) {
+        const query = new URLSearchParams()
+        for (const [key, value] of Object.entries(otherParams)) {
+            if (key !== 'page' && value !== undefined) {
+                for (const part of Array.isArray(value) ? value : [value]) query.append(key, part)
+            }
+        }
+        if (seriesFacet.selected.length) query.set(SERIES_QUERY_PARAM, seriesFacet.selected.join(','))
+        redirect(`${BASE_PATH}/${sub}${query.size ? `?${query}` : ''}`)
+    }
+    const hasActiveFilterParams = Boolean(seriesFacet?.selected.length) || hasActiveListingFilterParams(sp)
     const listingRuntimeConfig = getListingRuntimeConfig(CATEGORY_SLUG, sub)
 
     let price_min: number | undefined
@@ -98,7 +116,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
         if (k.startsWith(SF_PREFIX) && v) spec_filters[k.slice(SF_PREFIX.length)] = v
     })
 
-    const [availableFilters, specFilterDefs, productTypeFilters, allSubcategories, { products, totalPages, total }] = await Promise.all([
+    const [baseFilters, specFilterDefs, productTypeFilters, allSubcategories, { products, totalPages, total }] = await Promise.all([
         getAvailableFiltersBySubcategory(sub, activeProductType, CATEGORY_SLUG),
         subcategory.id !== null ? getSubcategorySpecFilters(subcategory.id, CATEGORY_SLUG, sub) : Promise.resolve([]),
         listingRuntimeConfig.enableProductTypeTabs && subcategory.id !== null ? getProductTypeFiltersBySubcategory(subcategory.id) : Promise.resolve([]),
@@ -109,6 +127,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
             product_type: activeProductType,
             product_sub_type: activeProductSubType,
             brand_slug: activeBrandSlugs,
+            series_slugs: seriesFacet?.selected,
             feature_slugs: activeFeatureSlugs,
             material_slug: activeMaterialSlugs,
             origin_slug: activeOriginSlugs,
@@ -127,6 +146,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
 
     if (!isListingPageInRange(currentPage, totalPages) || (total === 0 && !hasActiveFilterParams)) notFound()
 
+    const availableFilters = { ...baseFilters, seriesFacet }
     const filterDict: ActiveFilterDict = {}
     availableFilters.brands.forEach(f => filterDict[f.slug] = f.name)
     availableFilters.features.forEach(f => filterDict[f.slug] = f.name)
@@ -217,7 +237,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
 
                         {hasActiveFilterParams ? (
                             <Suspense>
-                                <ActiveFilters filterDict={filterDict} excludeKeys={["sub"]} />
+                                <ActiveFilters filterDict={filterDict} excludeKeys={["sub"]} seriesFacet={seriesFacet} />
                             </Suspense>
                         ) : null}
                     </div>}

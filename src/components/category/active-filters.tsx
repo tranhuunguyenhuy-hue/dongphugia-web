@@ -3,33 +3,44 @@
 import React from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { X } from 'lucide-react'
+import { retainSeriesForBrands } from './series-facet'
+import { parseSeriesParam, SERIES_QUERY_PARAM, type SeriesFacet } from '@/lib/series-facet-contract'
 
 // Define the name mapping locally or pass it from parent.
 // Passing a flat list or dictionary of current names is safer because searchParams only holds slugs.
 export type ActiveFilterDict = Record<string, string> // e.g. { 'toto': 'TOTO', 'bon-cau': 'Bồn cầu' }
 
-export function ActiveFilters({ filterDict, excludeKeys = [] }: { filterDict: ActiveFilterDict, excludeKeys?: string[] }) {
+export function ActiveFilters({ filterDict, excludeKeys = [], seriesFacet }: {
+    filterDict: ActiveFilterDict
+    excludeKeys?: string[]
+    seriesFacet?: SeriesFacet
+}) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
 
     // Collect all active filters from specific keys
-    const FILTER_KEYS = ['sub', 'brand', 'features', 'material', 'origin'].filter(
+    const filterKeys = ['sub', 'brand', 'features', 'material', 'origin']
+    if (seriesFacet) filterKeys.push(SERIES_QUERY_PARAM)
+    const FILTER_KEYS = filterKeys.filter(
         key => !excludeKeys.includes(key)
     )
     const SPECIAL_KEYS = ['priceRange', 'is_promotion', 'is_featured']
 
-    let activeBadges: { key: string, slug: string, label: string }[] = []
+    const activeBadges: { key: string, slug: string, label: string }[] = []
 
     FILTER_KEYS.forEach(key => {
-        const val = searchParams.get(key)
-        if (val) {
-            const slugs = val.split(',')
+        const slugs = key === SERIES_QUERY_PARAM
+            ? parseSeriesParam(searchParams.getAll(key)).slugs
+            : searchParams.get(key)?.split(',').filter(Boolean) ?? []
+        if (slugs.length) {
             slugs.forEach(slug => {
                 activeBadges.push({
                     key,
                     slug,
-                    label: filterDict[slug] || slug // fallback to slug if name not found in dict
+                    label: (key === SERIES_QUERY_PARAM
+                        ? seriesFacet?.options.find(option => option.slug === slug)?.name
+                        : filterDict[slug]) || slug
                 })
             })
         }
@@ -61,7 +72,11 @@ export function ActiveFilters({ filterDict, excludeKeys = [] }: { filterDict: Ac
     const removeFilter = (key: string, slug: string) => {
         const params = new URLSearchParams(searchParams.toString())
         
-        if (SPECIAL_KEYS.includes(key)) {
+        if (key === SERIES_QUERY_PARAM) {
+            const remaining = parseSeriesParam(params.getAll(key)).slugs.filter(value => value !== slug)
+            if (remaining.length) params.set(key, remaining.join(','))
+            else params.delete(key)
+        } else if (SPECIAL_KEYS.includes(key)) {
             if (key === 'priceRange') {
                  const current = params.get(key)
                  if (current) {
@@ -81,6 +96,10 @@ export function ActiveFilters({ filterDict, excludeKeys = [] }: { filterDict: Ac
             }
         }
 
+        if (seriesFacet && key === 'brand') {
+            retainSeriesForBrands(params, seriesFacet, params.get('brand')?.split(',') ?? [])
+        }
+        if (seriesFacet && key === 'sub') params.delete(SERIES_QUERY_PARAM)
         params.set('page', '1')
         router.push(`${pathname}?${params.toString()}`)
     }

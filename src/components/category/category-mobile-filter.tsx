@@ -14,6 +14,7 @@ import {
 import type { AvailableFiltersData } from './advanced-sidebar-filter'
 import type { SpecFilterDef } from './subcategory-spec-filter'
 import { useSearchParams } from 'next/navigation'
+import { parseSeriesParam, SERIES_QUERY_PARAM } from '@/lib/series-facet-contract'
 import { cn } from '@/lib/utils'
 import type { ListingRuntimeConfig } from '@/lib/public-api-products'
 
@@ -24,7 +25,10 @@ const LazyAdvancedSidebarFilter = lazy(() =>
 )
 
 // ── Filter count badge (needs Suspense boundary) ────────────────────────────────
-function FilterCount({ runtimeConfig }: { runtimeConfig?: ListingRuntimeConfig }) {
+function FilterCount({ runtimeConfig, hasSeriesFacet }: {
+    runtimeConfig?: ListingRuntimeConfig
+    hasSeriesFacet: boolean
+}) {
     const sp = useSearchParams()
     const keys = ['brand', 'features', 'material', 'origin', 'price', 'is_promotion', 'is_featured']
     if (!(runtimeConfig?.hideColorFilter ?? false)) {
@@ -35,6 +39,7 @@ function FilterCount({ runtimeConfig }: { runtimeConfig?: ListingRuntimeConfig }
     if (runtimeConfig?.enableSpecFilters ?? true) {
         sp.forEach((_v, k) => { if (k.startsWith('sf_')) count++ })
     }
+    if (hasSeriesFacet) count += parseSeriesParam(sp.getAll(SERIES_QUERY_PARAM)).slugs.length
     if (count === 0) return null
     return (
         <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-[#2E7A96] text-white text-[9px] font-bold tabular-nums">
@@ -76,7 +81,7 @@ export function CategoryMobileFilter({
                     <SlidersHorizontal className="size-3 opacity-50" />
                     <span>Bộ lọc</span>
                     <Suspense fallback={null}>
-                        <FilterCount runtimeConfig={runtimeConfig} />
+                        <FilterCount runtimeConfig={runtimeConfig} hasSeriesFacet={Boolean(availableFilters.seriesFacet)} />
                     </Suspense>
                 </button>
             </SheetTrigger>
