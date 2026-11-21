@@ -7,6 +7,8 @@ import { ProductPrice } from '@/components/product/product-price'
 import { HistoricalReferencePriceNotice } from '@/components/product/historical-reference-price'
 import { VariantPreview, VariantSelector } from '@/components/product/variant-selector'; import { resolveProductCommerce } from '@/lib/product-commerce'
 
+import { VerifiedVariantSelector, type VerifiedVariantOption } from './verified-variant-selector'
+
 interface ProductPurchasePanelProps {
     product: {
         id: number; sku: string; slug: string; name: string; price: number | null;
@@ -21,6 +23,7 @@ interface ProductPurchasePanelProps {
     }
     historicalReferencePrice?: {amountVnd:number;recordedUpdateDate:string;provenance:string}|null
     variantSiblings: VariantSibling[]
+    verifiedVariantOptions?: readonly VerifiedVariantOption[]
     variantAxes?: unknown
     currentVariantOptions?: unknown
     categorySlug: string
@@ -34,6 +37,7 @@ export function ProductPurchasePanel({
     product,
     historicalReferencePrice,
     variantSiblings,
+    verifiedVariantOptions,
     variantAxes,
     currentVariantOptions,
     categorySlug,
@@ -44,7 +48,7 @@ export function ProductPurchasePanel({
         productKey: string
         variant: VariantPreview
     } | null>(null)
-    const selectedVariant = selection?.productKey === productKey ? selection.variant : null
+    const selectedVariant = !verifiedVariantOptions && selection?.productKey === productKey ? selection.variant : null
 
     const displayProduct = useMemo(() => {
         if (!selectedVariant) return product
@@ -81,7 +85,9 @@ export function ProductPurchasePanel({
 
     return (
         <>
-            {product.variant_group && variantSiblings.length > 0 && (
+            {verifiedVariantOptions ? (
+                <VerifiedVariantSelector currentSku={product.sku} options={verifiedVariantOptions} />
+            ) : product.variant_group && variantSiblings.length > 0 && (
                 <VariantSelector
                     currentSku={product.sku}
                     currentSlug={product.slug}

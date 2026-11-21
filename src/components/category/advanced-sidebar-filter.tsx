@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { BrandLogo } from '@/components/media/brand-logo'
+import { retainSeriesForBrands, type SeriesFacet } from './series-facet'
 import type { SpecFilterDef } from './subcategory-spec-filter'
 import type { ListingRuntimeConfig } from '@/lib/public-api-products'
 
@@ -16,6 +17,7 @@ export type AvailableFiltersData = {
     materials: FilterOption[]
     origins: FilterOption[]
     features: FilterOption[]
+    seriesFacet?: SeriesFacet
     colors?: { name: string; slug: string; hex_code: string | null }[]
 }
 
@@ -192,6 +194,7 @@ function TagChip({ label, active, onClick }: {
         <button
             type="button"
             onClick={onClick}
+            aria-pressed={active}
             className={`
                 relative h-8 px-3 rounded-lg border flex items-center justify-center
                 transition-all duration-200 cursor-pointer select-none group/tag
@@ -322,6 +325,11 @@ export function AdvancedSidebarFilter({
 
     const subcategorySlugs = getArr('sub')
     const brandSlugs       = getArr('brand')
+    const seriesFacet = availableFilters.seriesFacet
+    const seriesSlugs = seriesFacet ? getArr(seriesFacet.queryKey).filter(Boolean) : []
+    const seriesOptions = seriesFacet?.options.filter(
+        option => option.count > 0 && brandSlugs.includes(option.brandSlug)
+    ) ?? []
     const featureSlugs     = getArr('features')
     const materialSlugs    = getArr('material')
     const originSlugs      = getArr('origin')
@@ -363,6 +371,8 @@ export function AdvancedSidebarFilter({
         const params = new URLSearchParams(searchParams.toString())
         if (next.length) params.set(key, next.join(','))
         else params.delete(key)
+        if (seriesFacet && key === 'brand') retainSeriesForBrands(params, seriesFacet, next)
+        if (seriesFacet && key === 'sub') params.delete(seriesFacet.queryKey)
         params.set('page', '1')
         router.push(`${pathname}?${params.toString()}`, { scroll: false })
     }
@@ -391,11 +401,11 @@ export function AdvancedSidebarFilter({
     const hasFilters =
         brandSlugs.length > 0 || featureSlugs.length > 0 ||
         materialSlugs.length > 0 || originSlugs.length > 0 || colorSlugs.length > 0 ||
-        isPriceActive || isPromotion || isFeatured || specActiveCount > 0
+        isPriceActive || isPromotion || isFeatured || specActiveCount > 0 || seriesSlugs.length > 0
 
     const totalActiveCount =
         brandSlugs.length + featureSlugs.length + materialSlugs.length +
-        originSlugs.length + colorSlugs.length + (isPriceActive ? 1 : 0) + (isPromotion ? 1 : 0) + (isFeatured ? 1 : 0) + specActiveCount
+        originSlugs.length + colorSlugs.length + (isPriceActive ? 1 : 0) + (isPromotion ? 1 : 0) + (isFeatured ? 1 : 0) + specActiveCount + seriesSlugs.length
 
     const relationSections = relationPriority
         .map((relationKey) => {
@@ -489,6 +499,7 @@ export function AdvancedSidebarFilter({
         setLocalPrice([PRICE_MIN, PRICE_MAX])
         const params = new URLSearchParams(searchParams.toString())
         ;['brand', 'features', 'material', 'origin', 'color', 'price', 'is_promotion', 'is_featured', 'priceRange'].forEach(k => params.delete(k))
+        if (seriesFacet) params.delete(seriesFacet.queryKey)
         if (effectiveEnableSpecFilters) {
             specFilters.forEach(f => params.delete(SF_PREFIX + f.key))
         }
@@ -538,6 +549,24 @@ export function AdvancedSidebarFilter({
                 )}
 
                 {relationSections}
+
+                {seriesFacet && seriesOptions.length > 0 && (
+                    <fieldset className="space-y-2">
+                        <legend className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                            Dòng sản phẩm
+                        </legend>
+                        <div className="flex flex-wrap gap-1.5">
+                            {seriesOptions.map(option => (
+                                <TagChip
+                                    key={option.slug}
+                                    label={`${option.name} (${option.count})`}
+                                    active={seriesSlugs.includes(option.slug)}
+                                    onClick={() => toggle(seriesFacet.queryKey, seriesSlugs, option.slug)}
+                                />
+                            ))}
+                        </div>
+                    </fieldset>
+                )}
 
                 {/* ── Price — dual range slider ── */}
                 {!runtimeConfig?.snapshotMode && !runtimeConfig?.hideUnverifiedCommercialFilters && <div className="space-y-2">
