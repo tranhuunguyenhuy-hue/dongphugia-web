@@ -74,4 +74,11 @@ describe('M3 fixed Preview publisher gates', () => {
     expect(nav).toContain("requestedSku === undefined ? ['/gach-op-lat'] : []")
     expect(nav).toContain("getByRole('button', { name: 'Đóng khuyến mãi' })")
   })
+  it('installs both Playwright engines before publication credentials so the WebKit mobile pass can run (#432)', () => {
+    const publishM3 = workflow.slice(workflow.indexOf('  publish-m3:'))
+    const install = publishM3.indexOf('npx playwright install --with-deps chromium webkit')
+    expect(install).toBeGreaterThan(-1)
+    expect(install).toBeLessThan(publishM3.indexOf('actions/download-artifact'))
+    expect(publishM3).not.toMatch(/playwright install --with-deps chromium\n/)
+  })
 })
