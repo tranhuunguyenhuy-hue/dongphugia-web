@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { VerifiedVariantSelector, type VerifiedVariantOption } from '../verified-variant-selector'
+
+vi.unmock('next/link')
 
 // These options represent the already-eligible set that the API must supply.
 const options: VerifiedVariantOption[] = Array.from({ length: 20 }, (_, index) => ({
@@ -17,8 +19,10 @@ describe('VerifiedVariantSelector', () => {
         render(<VerifiedVariantSelector currentSku={options[0].sku} options={options} />)
         expect(screen.getAllByRole('link')).toHaveLength(20)
         expect(screen.getByRole('link', { current: 'page' })).toHaveAttribute('href', options[0].href)
-        expect(screen.getByRole('link', { name: /Màu: Màu thử 19 Kích thước: 100 mm MOCK-19/ }))
-            .toHaveAttribute('href', options[19].href)
+        const lastOption = screen.getByRole('link', { name: /MOCK-19/ })
+        expect(lastOption).toHaveAttribute('href', options[19].href)
+        expect(within(lastOption).getByText('Màu: Màu thử 19')).toBeVisible()
+        expect(within(lastOption).getByText('Kích thước: 100 mm')).toBeVisible()
     })
 
     it('hides the group when no alternate SKU is supplied', () => {
