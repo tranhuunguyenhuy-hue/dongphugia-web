@@ -23,11 +23,17 @@ export function VerifiedVariantSelector({ currentSku, options }: {
 }) {
     if (!options.some(option => option.sku !== currentSku)) return null
 
+    // The PDP supplies the current SKU first. Use SKU identity for the group order.
+    const orderedOptions = [...options].sort((a, b) => {
+        if (a.sku === b.sku) return 0
+        return a.sku < b.sku ? -1 : 1
+    })
+
     return (
         <section aria-label="Biến thể sản phẩm" className="space-y-2">
             <h2 className="text-sm font-semibold text-neutral-800">Biến thể sản phẩm</h2>
             <ul className="flex flex-wrap gap-2">
-                {options.map(option => {
+                {orderedOptions.map(option => {
                     const current = option.sku === currentSku
                     return (
                         <li key={option.sku}>
