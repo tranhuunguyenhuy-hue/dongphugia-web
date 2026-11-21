@@ -7,6 +7,11 @@ import { validatePublicNavigationResponse } from './public-navigation-response.m
 const [base, sha] = process.argv.slice(2)
 assert.match(sha ?? '', /^[a-f0-9]{40}$/)
 const { origin, snapshotMode, hosted } = navigationTarget(base)
+// Production/M2 snapshots search a real Production SKU. The TEST Preview (M3) has synthetic fixtures only, so the
+// publisher passes an exact fixture SKU; it is accepted only for the pinned hosted Preview and must be a plain SKU.
+const requestedSku = process.env.M3_NAVIGATION_FIXTURE_SKU
+if (requestedSku !== undefined) assert.ok(snapshotMode && hosted && /^[A-Za-z0-9][A-Za-z0-9-]{2,40}$/.test(requestedSku), 'M3_NAVIGATION_FIXTURE_SKU_FORBIDDEN')
+const fixtureSku = requestedSku ?? 'A-LFV-402S-1'
 const accessHeaders = readM2AccessHeaders(origin, process.env.M2_ACCESS_TOKEN_FILE)
 if (hosted) assert.ok(Object.keys(accessHeaders).length, 'M2_AUTHORIZED_ACCESS_REQUIRED')
 const proxyUrl = origin.startsWith('https:') && process.env.https_proxy ? new URL(process.env.https_proxy) : null
@@ -19,6 +24,15 @@ const started = Date.now()
 let probes = 0
 const evidence = []
 const record = value => { if (evidence.length < 2500) evidence.push({ utc: new Date().toISOString(), ...value }) }
+// The TOTO promotion is a modal <dialog> that opens on every Home load and blocks pointer events (#409). A visitor
+// closes it first, so do the same; bounded wait, and a Home without the promotion (e.g. Production) is unaffected.
+const dismissPromotion = async page => {
+  const close = page.getByRole('button', { name: 'Đóng khuyến mãi' })
+  if (await close.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false)) {
+    await close.click()
+    await page.getByRole('dialog', { name: 'Khuyến mãi TOTO cuối năm' }).waitFor({ state: 'hidden' })
+  }
+}
 const routeClass = raw => {
   const p = new URL(raw).pathname
   return p === '/' ? 'home' : p === '/gach-op-lat' ? 'tile-category'
@@ -66,9 +80,10 @@ try {
         .catch(e => { errors.push(e.message); record({ event: 'response-validation-failed', width, route: routeClass(r.url()) }) }))
     })
     await page.goto(origin, { waitUntil: 'networkidle' })
-    const api = await requestGet(origin + '/api/search?q=A-LFV-402S-1&limit=8')
+    await dismissPromotion(page)
+    const api = await requestGet(`${origin}/api/search?q=${encodeURIComponent(fixtureSku)}&limit=8`)
     assert.equal(api.status(), 200)
-    const pdp = (await api.json()).results.find(p => p.sku === 'A-LFV-402S-1')?.url
+    const pdp = (await api.json()).results.find(p => p.sku === fixtureSku)?.url
     assert.match(pdp ?? '', /^\/thiet-bi-ve-sinh\/[^/]+\/[^/]+$/)
     // Actual link clicks exercise client navigation and hydration, including back.
     for (let round = 0; round < 2; round++) {
@@ -95,11 +110,11 @@ try {
       assert.ok(!(await page.locator('#main-content').innerText()).includes('Chưa tải được danh sách sản phẩm'))
       assert.equal(listingShardRequests.length, shardRequestCount, 'PostgreSQL PLP must server-render the selected page without fetching every listing shard')
       // Choose the real DB-only product via its search result link.
-      await page.goto(origin + '/tim-kiem?q=A-LFV-402S-1', { waitUntil: 'networkidle' })
+      await page.goto(`${origin}/tim-kiem?q=${encodeURIComponent(fixtureSku)}`, { waitUntil: 'networkidle' })
       await page.locator(`#main-content a[href="${pdp}"]`).first().click()
       await page.waitForURL('**' + pdp)
       await page.locator('#main-content h1').waitFor()
-      assert.ok((await page.locator('#main-content').innerText()).includes('A-LFV-402S-1'))
+      assert.ok((await page.locator('#main-content').innerText()).includes(fixtureSku))
       await page.goBack({ waitUntil: 'networkidle' })
       // Returning to Home must issue a fresh HTML document request, not a
       // fragile client-side RSC Flight transition under sustained navigation.
@@ -110,6 +125,7 @@ try {
       await page.getByRole('link', { name: /Đông Phú Gia - Trang chủ/i }).first().click()
       await homeDocumentRequest
       await page.waitForURL(origin + '/')
+      await dismissPromotion(page)
       const homeChrome = await page.evaluate(() => ({
         headerCount: document.querySelectorAll('header').length,
         desktopNavigationCount: document.querySelectorAll('nav[aria-label="Menu chính"]').length,
@@ -134,9 +150,9 @@ try {
       await page.waitForURL('**/blog')
       await page.locator('#main-content h1').waitFor()
       await page.getByRole('button', { name: 'Mở tìm kiếm' }).first().click()
-      await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().fill('A-LFV-402S-1')
+      await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().fill(fixtureSku)
       await page.getByRole('textbox', { name: 'Tìm sản phẩm' }).first().press('Enter')
-      await page.waitForURL('**/tim-kiem?q=A-LFV-402S-1')
+      await page.waitForURL(`**/tim-kiem?q=${encodeURIComponent(fixtureSku)}`)
       await page.locator('#main-content h1').waitFor()
       // Probe the warmed homepage separately; preserve the full route coverage.
       const homeFlight = await requestGet(origin + '/', { headers: {
@@ -152,7 +168,9 @@ try {
       // Unbounded five-way bursts caused local Wrangler/workerd to lose its
       // proxy connection after several rounds (run #28, broken pipe / HTTP 500).
       // Keep every response, Flight body and source-SHA assertion intact.
-      const burstPaths = ['/gach-op-lat', '/thiet-bi-ve-sinh', '/thiet-bi-ve-sinh/bon-cau', pdp, '/blog']
+      // The TEST database seeds only the sanitary category (verified: 112 SKUs, no gach-op-lat), so the tile root is
+      // a legitimate 404 there; Production/snapshot runs (no fixture SKU) still probe it.
+      const burstPaths = [...(requestedSku === undefined ? ['/gach-op-lat'] : []), '/thiet-bi-ve-sinh', '/thiet-bi-ve-sinh/bon-cau', pdp, '/blog']
       const burstConcurrency = 2
       for (const batch of [0, 1]) {
         for (let offset = 0; offset < burstPaths.length; offset += burstConcurrency) {
@@ -176,6 +194,7 @@ try {
       assert.equal(dot.status(), 404)
       assert.equal(dot.headers()['x-dpg-source-sha'], sha)
       await page.goto(origin, { waitUntil: 'networkidle' })
+      await dismissPromotion(page)
     }
     await Promise.all(responseChecks)
     assert.deepEqual(errors, [])

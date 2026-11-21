@@ -66,4 +66,12 @@ describe('M3 fixed Preview publisher gates', () => {
     expect(publisher).toContain("decision: 'non_identity'")
     expect(publisher).toContain("'M3_OWNER_POLICY_IMMUTABLE'")
   })
+  it('runs Public navigation on the TEST fixture SKU, accepted only for the pinned hosted Preview (#432)', () => {
+    const nav = readFileSync('scripts/app-foundation/public-navigation-acceptance.mjs', 'utf8')
+    expect(publisher).toContain("M3_NAVIGATION_FIXTURE_SKU: 'TLG11201B'")
+    expect(nav).toContain("snapshotMode && hosted && /^[A-Za-z0-9][A-Za-z0-9-]{2,40}$/.test(requestedSku), 'M3_NAVIGATION_FIXTURE_SKU_FORBIDDEN'")
+    expect(nav).toContain("const fixtureSku = requestedSku ?? 'A-LFV-402S-1'")
+    expect(nav).toContain("requestedSku === undefined ? ['/gach-op-lat'] : []")
+    expect(nav).toContain("getByRole('button', { name: 'Đóng khuyến mãi' })")
+  })
 })
