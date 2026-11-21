@@ -205,7 +205,10 @@ async function main() {
   console.log(`::add-mask::${service.client_id}`); console.log(`::add-mask::${service.client_secret}`)
   tokenFile = resolve(process.env.RUNNER_TEMP, 'm3-ci-access.json')
   await writeFile(tokenFile, JSON.stringify({ client_id: service.client_id, client_secret: service.client_secret }), { mode: 0o600, flag: 'wx' })
-  const policy = await cf(`/access/apps/${APP}/policies`, 'POST', { name: `M3 CI ${process.env.GITHUB_RUN_ID}`, decision: 'non_identity', precedence: 2, session_duration: '1h',
+  // Take the next free precedence: a standing service-token policy may already own 2 (Cloudflare 400/12130).
+  const existingPolicies = await cf(`/access/apps/${APP}/policies`)
+  const ciPrecedence = Math.max(1, ...existingPolicies.map(p => Number(p.precedence) || 0)) + 1
+  const policy = await cf(`/access/apps/${APP}/policies`, 'POST', { name: `M3 CI ${process.env.GITHUB_RUN_ID}`, decision: 'non_identity', precedence: ciPrecedence, session_duration: '1h',
     include: [{ service_token: { token_id: tokenId } }], exclude: [], require: [] })
   assert.notEqual(policy.id, '516d7773-ba00-4f6e-b6ef-c5d4f545d544', 'M3_OWNER_POLICY_IMMUTABLE')
   assert.equal(policy.decision, 'non_identity')
