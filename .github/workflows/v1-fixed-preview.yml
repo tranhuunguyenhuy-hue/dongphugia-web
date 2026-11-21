@@ -289,7 +289,7 @@ jobs:
           npm ci
           npm ci --prefix apps/public
           npm ci --prefix tools/m2-preview
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - uses: actions/download-artifact@v4
         with:
           name: m3-fixed-preview-${{ github.sha }}
