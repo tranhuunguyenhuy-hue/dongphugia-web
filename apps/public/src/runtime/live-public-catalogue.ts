@@ -2,6 +2,7 @@
 // historical unverified values; original database rows remain intact.
 import { cache } from 'react'
 import { sanitizeRichHtml } from '@/lib/html-sanitizer'
+import { QUARANTINED_VARIANT_GROUPS, VARIANT_SIBLING_CAP, normalizeSeriesSelection, type SeriesFacet } from '@/lib/series-facet-contract'
 import { readPublicRows } from './public-db'
 import type { SnapshotCategory, SnapshotProduct, SnapshotSearchProduct } from './public-snapshot-catalogue'
 
@@ -65,18 +66,25 @@ export function mapLiveProduct(row:PublicProductRow):SnapshotProduct{
   ...(row.variant_label?{variant_label:row.variant_label}:{}),
  }
 }
-export type LiveListingFilters={brandSlugs?:readonly string[];featured?:boolean}
+export type LiveListingFilters={brandSlugs?:readonly string[];featured?:boolean;seriesSlugs?:readonly string[]}
+// #432: a product matches a series tag only through an approved option of spec "Bộ sưu tập" (never legacy text) AND the option's brand namespace equals the product's brand.
+const SERIES_MATCH=" EXISTS (SELECT 1 FROM dpg_app.product_spec_values sv JOIN dpg_app.spec_definitions sd ON sd.id=sv.spec_definition_id AND sd.key='Bộ sưu tập'"+
+ " JOIN dpg_app.spec_options so ON so.id=sv.option_id AND so.is_active=true WHERE sv.product_id=p.id AND so.slug=ANY($7::text[]) AND left(so.slug,length(b.slug)+1)=b.slug||'-')"
 export const getLiveListing=cache(async(category:string,listing:string,page=1,pageSize=48,filters:LiveListingFilters={})=>{
  const brandSlugs=[...(filters.brandSlugs??[])]
  if(![category,listing].every(s=>SLUG.test(s))||!Number.isSafeInteger(page)||page<1||page>512||!Number.isSafeInteger(pageSize)||pageSize<1||pageSize>48)
   return {products:[] as SnapshotProduct[],totalCount:0,page}
  if(brandSlugs.length>32||brandSlugs.some(slug=>!SLUG.test(slug)))return {products:[] as SnapshotProduct[],totalCount:0,page}
+ // A series tag without a selected brand (or of another brand) is ignored; it never produces an odd/empty result.
+ const seriesSlugs=normalizeSeriesSelection(brandSlugs,[...(filters.seriesSlugs??[])].filter(s=>SLUG.test(s))).accepted.slice(0,16)
+ // One product (SKU) = one row = one card. Series is a filter on SKUs, never a grouping.
  const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+',count(*) OVER() AS total_count'+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
    ' AND (NOT $6::boolean OR p.is_featured=true)'+
+   ' AND (cardinality($7::text[])=0 OR'+SERIES_MATCH+')'+
    ' ORDER BY p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3',
-   [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true], 'listing-page')
+   [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true,seriesSlugs], 'listing-page')
  return {products:rows.map(mapLiveProduct),totalCount:Number(rows[0]?.total_count??0),page}
 })
 // Category roots show eight cards and up to eight featured cards from the same
@@ -243,11 +251,50 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
  })
  return {results,total:Number(rows[0]?.total_count??0),page,limit,query}
 }
+// #432: siblings are the public SKUs of the SAME variant group, same brand and same sub-category as the current SKU.
+// Never the whole series. A group is excluded when it is in the reviewed-wrong list (#431 D5) or when its public members
+// carry two different approved series (mixed group). No prefix guessing; cap is a safety bound, not a 8-item truncation.
 export async function getLiveVariantSiblings(group:string,currentId:number){
- if(!group||group.length>100||!Number.isSafeInteger(currentId))return [] as SnapshotProduct[]
+ if(!group||group.length>100||!Number.isSafeInteger(currentId)||QUARANTINED_VARIANT_GROUPS.includes(group))return [] as SnapshotProduct[]
  const rows=await readPublicRows<PublicProductRow>('SELECT '+COLS+FROM+' WHERE '+PUBLIC+
-  ' AND p.variant_group=$1 AND p.id<>$2 ORDER BY p.id LIMIT 8',[group,currentId])
+  ' AND p.variant_group=$1 AND p.id<>$2'+
+  ' AND p.brand_id IS NOT NULL AND p.brand_id=(SELECT cur.brand_id FROM dpg_app.products cur WHERE cur.id=$2)'+
+  ' AND p.subcategory_id=(SELECT cur.subcategory_id FROM dpg_app.products cur WHERE cur.id=$2)'+
+  ' AND (SELECT count(DISTINCT sv.option_id) FROM dpg_app.product_spec_values sv'+
+  " JOIN dpg_app.spec_definitions sd ON sd.id=sv.spec_definition_id AND sd.key='Bộ sưu tập'"+
+  ' JOIN dpg_app.products m ON m.id=sv.product_id'+
+  " WHERE m.variant_group=$1 AND m.is_active=true AND m.publication_status='public' AND m.pdp_visibility='public' AND sv.option_id IS NOT NULL)<=1"+
+  ' ORDER BY p.sort_order,p.id LIMIT '+VARIANT_SIBLING_CAP,[group,currentId],'variant-siblings')
  return rows.map(mapLiveProduct)
+}
+/** Label of the CURRENT SKU on the variant axis (DB column only, never inferred from the name). */
+export async function getLiveVariantLabel(currentId:number):Promise<string|null>{
+ if(!Number.isSafeInteger(currentId))return null
+ const rows=await readPublicRows<{variant_label:string|null}>('SELECT p.variant_label FROM dpg_app.products p WHERE p.id=$1 AND '+PUBLIC_PRODUCT,[currentId],'variant-siblings')
+ return rows[0]?.variant_label??null
+}
+/**
+ * "Dòng sản phẩm" facet. Applicable only with ≥1 selected brand. Options = approved series of the selected brands that have
+ * ≥1 PUBLIC listing-visible SKU in (category ∩ listing ∩ brands ∩ featured). Counts are SKU counts. The facet's own selection
+ * is not applied to its counts (standard facet semantics), so users can add more tags (OR).
+ */
+export async function getLiveSeriesFacet(category:string,listing:string,brandSlugs:readonly string[],selectedSeries:readonly string[]=[],opts:{featured?:boolean}={}):Promise<SeriesFacet>{
+ const none:SeriesFacet={applicable:false,options:[],selected:[],dropped:[...selectedSeries]}
+ if(![category,listing].every(s=>SLUG.test(s))||brandSlugs.length===0||brandSlugs.length>32||brandSlugs.some(s=>!SLUG.test(s)))return none
+ const rows=await readPublicRows<{slug:string;name:string;brand_slug:string;sku_count:number|string}>(
+  'SELECT so.slug,so.value AS name,b.slug AS brand_slug,count(DISTINCT p.id) AS sku_count'+FROM+
+  ' JOIN dpg_app.product_spec_values sv ON sv.product_id=p.id'+
+  " JOIN dpg_app.spec_definitions sd ON sd.id=sv.spec_definition_id AND sd.key='Bộ sưu tập'"+
+  ' JOIN dpg_app.spec_options so ON so.id=sv.option_id AND so.is_active=true'+
+  ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2 AND b.slug=ANY($3::text[])'+
+  ' AND (NOT $4::boolean OR p.is_featured=true)'+
+  " AND left(so.slug,length(b.slug)+1)=b.slug||'-'"+
+  ' GROUP BY so.slug,so.value,b.slug,so.sort_order ORDER BY b.slug,so.sort_order,so.value LIMIT 100',
+  [category,listing,[...brandSlugs],opts.featured===true],'listing-series-facets')
+ const options=rows.flatMap(r=>SLUG.test(r.slug)&&SLUG.test(r.brand_slug)&&Number(r.sku_count)>0
+  ?[{slug:r.slug,name:r.name,brandSlug:r.brand_slug,count:Number(r.sku_count),selected:selectedSeries.includes(r.slug)}]:[])
+ const valid=new Set(options.map(o=>o.slug))
+ return {applicable:options.length>0,options,selected:selectedSeries.filter(s=>valid.has(s)),dropped:selectedSeries.filter(s=>!valid.has(s))}
 }
 
 // Sitemap data (#360): bounded shards, same public/visibility predicates as every Public page,

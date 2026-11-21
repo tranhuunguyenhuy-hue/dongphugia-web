@@ -56,6 +56,8 @@ export type ProductFilters = {
     product_sub_type?: string | string[] // e.g. '1-duong', 'bat-sen'
     brand_id?: number // Legacy
     brand_slug?: string | string[]
+    /** #432: approved series slugs (`?dong=`), OR within the facet, ignored unless a matching brand is selected. */
+    series_slugs?: string | string[]
     color_id?: number // Legacy
     color_slug?: string | string[]
     material_id?: number // Legacy
@@ -1684,4 +1686,17 @@ export function getPdpDescriptionBlocks(_product: unknown): Array<{kind:'heading
 
 export function getPdpHistoricalReferencePrice(_product: unknown): {amountVnd:number;recordedUpdateDate:string;provenance:string}|null {
     return null
+}
+
+// ─── #432: series ("Dòng sản phẩm") facet. The Public Worker adapter implements it on PostgreSQL;
+// the legacy Prisma path has no verified series data, so it reports "not applicable".
+export type { SeriesFacet, SeriesFacetOption } from '@/lib/series-facet-contract'
+export async function getSeriesFacet(
+    _category: string,
+    _listing: string,
+    _brandSlugs: readonly string[],
+    selectedSeries: readonly string[] = [],
+    _opts: { featured?: boolean } = {},
+): Promise<import('@/lib/series-facet-contract').SeriesFacet> {
+    return { applicable: false, options: [], selected: [], dropped: [...selectedSeries] }
 }

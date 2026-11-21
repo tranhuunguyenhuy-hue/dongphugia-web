@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ readPublicRows: vi.fn() }))
 vi.mock('./public-db', () => ({ readPublicRows: mocks.readPublicRows }))
 
-import { getLiveCategories, getLiveCategory, getLiveListing, getLiveListingPreview, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
+import { getLiveCategories, getLiveCategory, getLiveListing, getLiveListingPreview, getLiveListingLeaves, getLiveListingRouteMetadata, getLiveProduct, getLiveBrandsForListing, getLiveProductByCategory, getLiveSeriesFacet, getLiveVariantSiblings, mapLiveProduct, searchLiveProducts } from './live-public-catalogue'
 
 const product = {
   id: 42,
@@ -39,7 +39,7 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain("c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'")
     expect(statement).toContain("s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'")
     expect(statement).toContain("p.listing_visibility IN ('default','low_priority')")
-    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48, [], false])
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 0, 48, [], false, []])
     expect(listing.totalCount).toBe(1)
     expect(listing.products[0]).toMatchObject({
       id: 42,
@@ -56,7 +56,7 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain('cardinality($5::text[])=0 OR b.slug=ANY($5::text[])')
     expect(statement).toContain('NOT $6::boolean OR p.is_featured=true')
     expect(statement).toContain('LIMIT $4 OFFSET $3')
-    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 12, 12, ['acme', 'other-brand'], true])
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 12, 12, ['acme', 'other-brand'], true, []])
   })
 
   it('loads the same ordered category-root preview rows without an unneeded window count', async () => {
@@ -243,5 +243,75 @@ describe('Live public catalogue projection', () => {
     expect(statement).not.toContain('listing_visibility')
     expect(values).toEqual(['%DPG-42%', 'DPG-42', 24, 0])
     expect(result.results[0]).toMatchObject({ sku: 'DPG-42', price: null, price_display: 'Liên hệ báo giá' })
+  })
+})
+
+describe('#432 series facet and variant siblings', () => {
+  beforeEach(() => mocks.readPublicRows.mockReset())
+
+  it('filters SKUs by approved series options bound to the selected brand and keeps one row per SKU', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([{ ...product, total_count: '1' }])
+    await getLiveListing('thiet-bi-ve-sinh', 'voi-chau', 1, 24, { brandSlugs: ['toto'], seriesSlugs: ['toto-gf-series', 'toto-ge-series'] })
+    const [statement, values] = mocks.readPublicRows.mock.calls[0]
+    expect(statement).toContain('cardinality($7::text[])=0 OR EXISTS')
+    expect(statement).toContain("sd.key='Bộ sưu tập'")
+    expect(statement).toContain('sv.option_id')
+    expect(statement).toContain("left(so.slug,length(b.slug)+1)=b.slug||'-'")
+    expect(statement).not.toMatch(/GROUP BY/)
+    expect(values[6]).toEqual(['toto-gf-series', 'toto-ge-series'])
+  })
+
+  it('ignores series tags without a brand or of another brand (never an empty/odd listing)', async () => {
+    mocks.readPublicRows.mockResolvedValue([{ ...product, total_count: '1' }])
+    await getLiveListing('thiet-bi-ve-sinh', 'voi-chau', 1, 24, { seriesSlugs: ['toto-gf-series'] })
+    expect(mocks.readPublicRows.mock.calls[0][1][6]).toEqual([])
+    await getLiveListing('thiet-bi-ve-sinh', 'voi-chau', 1, 24, { brandSlugs: ['inax'], seriesSlugs: ['toto-gf-series', 'inax-s600-line'] })
+    expect(mocks.readPublicRows.mock.calls[1][1][6]).toEqual(['inax-s600-line'])
+  })
+
+  it('facet needs a brand, counts real public SKUs, and reports stale selections as dropped', async () => {
+    expect(await getLiveSeriesFacet('thiet-bi-ve-sinh', 'voi-chau', [], ['toto-gf-series'])).toEqual({ applicable: false, options: [], selected: [], dropped: ['toto-gf-series'] })
+    expect(mocks.readPublicRows).not.toHaveBeenCalled()
+    mocks.readPublicRows.mockResolvedValueOnce([
+      { slug: 'toto-ge-series', name: 'GE Series', brand_slug: 'toto', sku_count: '2' },
+      { slug: 'toto-gf-series', name: 'GF Series', brand_slug: 'toto', sku_count: '10' },
+      { slug: 'bad slug', name: 'x', brand_slug: 'toto', sku_count: '3' },
+      { slug: 'toto-zz-series', name: 'ZZ', brand_slug: 'toto', sku_count: '0' },
+    ])
+    const facet = await getLiveSeriesFacet('thiet-bi-ve-sinh', 'voi-chau', ['toto'], ['toto-gf-series', 'toto-gone-series'])
+    const [statement] = mocks.readPublicRows.mock.calls[0]
+    expect(statement).toContain("p.listing_visibility IN ('default','low_priority')")
+    expect(statement).toContain("p.pdp_visibility='public'")
+    expect(statement).toContain('count(DISTINCT p.id)')
+    expect(facet.applicable).toBe(true)
+    expect(facet.options).toEqual([
+      { slug: 'toto-ge-series', name: 'GE Series', brandSlug: 'toto', count: 2, selected: false },
+      { slug: 'toto-gf-series', name: 'GF Series', brandSlug: 'toto', count: 10, selected: true },
+    ])
+    expect(facet.selected).toEqual(['toto-gf-series'])
+    expect(facet.dropped).toEqual(['toto-gone-series'])
+  })
+
+  it('facet is hidden when no approved series has a public SKU in the context', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([])
+    expect(await getLiveSeriesFacet('thiet-bi-ve-sinh', 'bon-cau', ['toto'])).toEqual({ applicable: false, options: [], selected: [], dropped: [] })
+  })
+
+  it('siblings: same group + same brand + same sub-category, public only, no 8-item truncation, mixed/quarantined groups excluded', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([{ ...product, id: 7, variant_group: 'TLG11201B', variant_label: 'Chrome' }])
+    const siblings = await getLiveVariantSiblings('TLG11201B', 5)
+    const [statement, values] = mocks.readPublicRows.mock.calls[0]
+    expect(statement).toContain("p.publication_status='public'")
+    expect(statement).toContain('p.brand_id=(SELECT cur.brand_id')
+    expect(statement).toContain('p.subcategory_id=(SELECT cur.subcategory_id')
+    expect(statement).toContain('count(DISTINCT sv.option_id)')
+    expect(statement).toContain('<=1')
+    expect(statement).toMatch(/LIMIT 60$/)
+    expect(statement).not.toContain('LIMIT 8')
+    expect(values).toEqual(['TLG11201B', 5])
+    expect(siblings).toHaveLength(1)
+    mocks.readPublicRows.mockClear()
+    for (const group of ['TBW0', 'TBW01001B', 'TBG02302', 'TBG08302']) expect(await getLiveVariantSiblings(group, 5)).toEqual([])
+    expect(mocks.readPublicRows).not.toHaveBeenCalled()
   })
 })

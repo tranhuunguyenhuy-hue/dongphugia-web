@@ -60,7 +60,7 @@ describe('canonical Preview public snapshot seam',()=>{
   ])
   expect(result).toMatchObject({products:products.slice(12,24),total:60,totalPages:5,page:2,pageSize:12})
   expect(dbMocks.getListingLeaves).toHaveBeenCalledWith('thiet-bi-bep')
-  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:[],featured:false})
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:[],featured:false,seriesSlugs:[]})
   dbMocks.enabled=false
  })
 
@@ -70,7 +70,7 @@ describe('canonical Preview public snapshot seam',()=>{
   dbMocks.getListing.mockResolvedValueOnce({products:pageProducts,totalCount:18,page:2})
   const result=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',pageSize:12,page:2,brand_slug:'a,b',is_featured:true})
   expect(result).toMatchObject({products:pageProducts,total:18,totalPages:2,page:2,pageSize:12})
-  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:['a','b'],featured:true})
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,12,{brandSlugs:['a','b'],featured:true,seriesSlugs:[]})
   dbMocks.enabled=false
  })
 
@@ -89,7 +89,7 @@ describe('canonical Preview public snapshot seam',()=>{
   dbMocks.getListing.mockResolvedValueOnce({products:products.slice(24,48),totalCount:60,page:2})
   const result=await getPublicProducts({category_slug:'thiet-bi-bep',subcategory_slugs:'voi-rua-chen',page:2})
   expect(result).toMatchObject({products:products.slice(24,48),total:60,totalPages:3,page:2,pageSize:24})
-  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,24,{brandSlugs:[],featured:false})
+  expect(dbMocks.getListing).toHaveBeenCalledWith('thiet-bi-bep','voi-rua-chen',2,24,{brandSlugs:[],featured:false,seriesSlugs:[]})
   expect(snapshotMocks.getCategories).not.toHaveBeenCalled()
   expect(snapshotMocks.getProducts).not.toHaveBeenCalled()
   dbMocks.enabled=false

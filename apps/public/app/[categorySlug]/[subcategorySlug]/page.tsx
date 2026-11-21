@@ -41,7 +41,7 @@ export default async function CanonicalRoute({params,searchParams}: {params:Prom
  const p=await params
  // Reject unsupported filters rather than silently returning misleading results, but ignore
  // marketing/transport parameters (utm_*, fbclid, gclid, _rsc): they must never turn a valid PLP into a 404.
- const resolvedQuery=resolveListingQuery(await searchParams,['page','brand','is_featured'])
+ const resolvedQuery=resolveListingQuery(await searchParams,['page','brand','dong','is_featured'])
  if(!resolvedQuery.ok)notFound()
  const query=resolvedQuery.query
  const props={params:Promise.resolve({sub:p.subcategorySlug,slug:p.productSlug!}),searchParams:Promise.resolve(query)}
