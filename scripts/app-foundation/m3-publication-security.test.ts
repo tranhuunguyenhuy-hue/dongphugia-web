@@ -59,4 +59,11 @@ describe('M3 fixed Preview publisher gates', () => {
     expect(() => navigationTarget(preview, {})).toThrow('M1_ORIGIN_REQUIRED')
     expect(() => navigationTarget('https://www.dongphugia.vn', { M2_PUBLIC_SNAPSHOT_CHECKPOINT: sha })).toThrow('M2_PREVIEW_ORIGIN_REQUIRED')
   })
+  it('creates the CI Access policy at the next free precedence, never a fixed one (#432, CF 12130)', () => {
+    expect(publisher).toContain('Math.max(1, ...existingPolicies.map(p => Number(p.precedence) || 0)) + 1')
+    expect(publisher).toContain('precedence: ciPrecedence')
+    expect(publisher).not.toMatch(/M3 CI[^\n]*precedence: 2/)
+    expect(publisher).toContain("decision: 'non_identity'")
+    expect(publisher).toContain("'M3_OWNER_POLICY_IMMUTABLE'")
+  })
 })
