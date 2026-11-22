@@ -1,0 +1,1605 @@
+{
+  "summary": {
+    "started_at_utc": "2026-11-22T19:10:55.876Z",
+    "completed_at_utc": "2026-11-22T19:12:10.077Z",
+    "requested": 20,
+    "by_status": {
+      "EXACT": 15,
+      "AMBIGUOUS": 1,
+      "NOT_FOUND": 1,
+      "CONTACT": 1,
+      "DISCONTINUED": 2,
+      "BLOCKED": 0,
+      "UNKNOWN": 0
+    },
+    "with_three_prices": 9,
+    "with_regular_and_promotional": 15,
+    "without_price_candidate": 5,
+    "selling_changed_vs_legacy": 6,
+    "halt_reason": null
+  },
+  "requests": [
+    {
+      "url": "https://hita.com.vn/robots.txt",
+      "status": 200,
+      "duration_ms": 181
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=119198",
+      "status": 200,
+      "duration_ms": 691
+    },
+    {
+      "url": "https://hita.com.vn/combo-sen-voi-cao-cap-va-phu-kien-smc-essence-grohe-119198-15019.html",
+      "status": 200,
+      "duration_ms": 1077
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=LT700CTR%23W",
+      "status": 200,
+      "duration_ms": 566
+    },
+    {
+      "url": "https://hita.com.vn/chau-rua-dat-ban-toto-lt700ctr-w-479.html",
+      "status": 200,
+      "duration_ms": 1190
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=CF-1032VS%2FBW1",
+      "status": 200,
+      "duration_ms": 580
+    },
+    {
+      "url": "https://hita.com.vn/nap-dong-em-inax-cf-1032vsbw1-18849.html",
+      "status": 200,
+      "duration_ms": 1078
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=LT533R%23XW",
+      "status": 200,
+      "duration_ms": 564
+    },
+    {
+      "url": "https://hita.com.vn/chau-rua-lavabo-ban-am-ban-toto-lt533r-495.html",
+      "status": 200,
+      "duration_ms": 1143
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=2557-VN",
+      "status": 200,
+      "duration_ms": 676
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=BFV-639T",
+      "status": 200,
+      "duration_ms": 615
+    },
+    {
+      "url": "https://hita.com.vn/sen-tam-cay-nhiet-do-inax-bfv-639t-22699.html",
+      "status": 200,
+      "duration_ms": 1154
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=AC-952%2BCW-H18VN%2FBW1",
+      "status": 200,
+      "duration_ms": 649
+    },
+    {
+      "url": "https://hita.com.vn/bon-cau-treo-tuong-nap-dien-tu-inax-ac-952-cw-h18vn-7973.html",
+      "status": 200,
+      "duration_ms": 1200
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=LT328C%23XW",
+      "status": 200,
+      "duration_ms": 633
+    },
+    {
+      "url": "https://hita.com.vn/chau-rua-mat-lavabo-treo-tuong-toto-lt328c-11980.html",
+      "status": 200,
+      "duration_ms": 1089
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=LHT328C%23XW",
+      "status": 200,
+      "duration_ms": 600
+    },
+    {
+      "url": "https://hita.com.vn/chau-rua-mat-lavabo-treo-tuong-chan-lung-toto-lht328c-11981.html",
+      "status": 200,
+      "duration_ms": 1036
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=AL-296VEC%2FBW1",
+      "status": 200,
+      "duration_ms": 605
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=AC-2700VN%2FBW1",
+      "status": 200,
+      "duration_ms": 675
+    },
+    {
+      "url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-2700vn-540.html",
+      "status": 200,
+      "duration_ms": 1329
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=AC-4005VN%2FBW1",
+      "status": 200,
+      "duration_ms": 670
+    },
+    {
+      "url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-4005vn-537.html",
+      "status": 200,
+      "duration_ms": 1309
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=CS320DRT3%23W",
+      "status": 200,
+      "duration_ms": 574
+    },
+    {
+      "url": "https://hita.com.vn/bon-cau-2-khoi-toto-cs320drt3-900.html",
+      "status": 200,
+      "duration_ms": 1176
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=BFV-3415T",
+      "status": 200,
+      "duration_ms": 626
+    },
+    {
+      "url": "https://hita.com.vn/sen-tam-inax-bfv-3415t-3128.html",
+      "status": 200,
+      "duration_ms": 1192
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=BFV-655T",
+      "status": 200,
+      "duration_ms": 616
+    },
+    {
+      "url": "https://hita.com.vn/sen-tam-cay-nhiet-do-inax-bfv-655t-4706.html",
+      "status": 200,
+      "duration_ms": 1124
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=TLG04304V",
+      "status": 200,
+      "duration_ms": 830
+    },
+    {
+      "url": "https://hita.com.vn/voi-chau-toto-tlg04304v-1905.html",
+      "status": 200,
+      "duration_ms": 1495
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=TVLC101NSR",
+      "status": 200,
+      "duration_ms": 1100
+    },
+    {
+      "url": "https://hita.com.vn/voi-chau-toto-tvlc101nsr-767.html",
+      "status": 200,
+      "duration_ms": 1236
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=TVLM105CR",
+      "status": 200,
+      "duration_ms": 580
+    },
+    {
+      "url": "https://hita.com.vn/voi-chau-toto-tvlm105cr-1884.html",
+      "status": 200,
+      "duration_ms": 1423
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=DN8060",
+      "status": 200,
+      "duration_ms": 656
+    },
+    {
+      "url": "https://hita.com.vn/ghe-phong-tam-moen-dn8060-10122.html",
+      "status": 200,
+      "duration_ms": 1131
+    },
+    {
+      "url": "https://hita.com.vn/product/searchProduct?key=AC-959VAN%2FBW1",
+      "status": 200,
+      "duration_ms": 855
+    },
+    {
+      "url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-959van-2130.html",
+      "status": 200,
+      "duration_ms": 1245
+    }
+  ],
+  "rows": [
+    {
+      "dpg_id": 1289,
+      "dpg_sku": "119198",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/combo-sen-voi-cao-cap-va-phu-kien-smc-essence-grohe-119198-15019.html",
+      "retrieved_at_utc": "2026-11-22T19:11:00.043Z",
+      "regular_price_vnd": 85700000,
+      "promotional_price_vnd": 58276000,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "119198",
+      "evidence": {
+        "sku": "119198",
+        "regular": "85.700.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "58.276.000đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "58276000.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "85700000.00",
+          "priceNew": "58276000.00",
+          "lblPriceNew": "58.276.000đ",
+          "lblPriceOld": "85.700.000đ",
+          "cashback": 0,
+          "discount": 32,
+          "lblDiscount": "-32%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 20040,
+          "promotion_id": null,
+          "sku": "119198"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "119198"
+      ],
+      "legacy": {
+        "price": "58276000.00",
+        "original_price": "85700000.00",
+        "list_price": "57925500.00",
+        "sale_price": "57925500.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 205,
+      "dpg_sku": "LT700CTR#W",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/chau-rua-dat-ban-toto-lt700ctr-w-479.html",
+      "retrieved_at_utc": "2026-11-22T19:11:03.917Z",
+      "regular_price_vnd": null,
+      "promotional_price_vnd": null,
+      "online_voucher_amount_vnd": null,
+      "status": "CONTACT",
+      "exception": "SOURCE_CONTACT",
+      "hita_exact_sku": "LT700CTR#W",
+      "evidence": {
+        "sku": "LT700CTR#W",
+        "regular": "",
+        "regular_label": "Giá gốc:",
+        "selling": "Giá liên hệ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": null,
+        "autocomplete": {
+          "priceOld": "0.00",
+          "priceNew": "0.00",
+          "lblPriceNew": "Giá liên hệ",
+          "lblPriceOld": "0đ",
+          "cashback": 0,
+          "discount": 0,
+          "lblDiscount": "-0%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 21284,
+          "promotion_id": null,
+          "sku": "LT700CTR#W"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "LT700CTR#W"
+      ],
+      "legacy": {
+        "price": "3053000.00",
+        "original_price": "3053000.00",
+        "list_price": "3053000.00",
+        "sale_price": "3053000.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 1311,
+      "dpg_sku": "CF-1032VS/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/nap-dong-em-inax-cf-1032vsbw1-18849.html",
+      "retrieved_at_utc": "2026-11-22T19:11:07.645Z",
+      "regular_price_vnd": 1700000,
+      "promotional_price_vnd": 1632000,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "CF-1032VS/BW1",
+      "evidence": {
+        "sku": "CF-1032VS/BW1",
+        "regular": "1.700.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "1.632.000đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "1632000.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "1700000.00",
+          "priceNew": "1632000.00",
+          "lblPriceNew": "1.632.000đ",
+          "lblPriceOld": "1.700.000đ",
+          "cashback": 0,
+          "discount": 4,
+          "lblDiscount": "-4%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 26206,
+          "promotion_id": null,
+          "sku": "CF-1032VS/BW1"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "CF-1032VS/BW1"
+      ],
+      "legacy": {
+        "price": "1632000.00",
+        "original_price": "1700000.00",
+        "list_price": null,
+        "sale_price": null,
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 207,
+      "dpg_sku": "LT533R#XW",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/chau-rua-lavabo-ban-am-ban-toto-lt533r-495.html",
+      "retrieved_at_utc": "2026-11-22T19:11:11.392Z",
+      "regular_price_vnd": 2572000,
+      "promotional_price_vnd": 2109040,
+      "online_voucher_amount_vnd": 154320,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "LT533R#XW",
+      "evidence": {
+        "sku": "LT533R#XW",
+        "regular": "2.572.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "2.109.040đ",
+        "voucher": "154.320đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "",
+        "promotion_id": "78373",
+        "offer": {
+          "price": "2109040.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "2572000.00",
+          "lblPriceOld": "2.572.000đ",
+          "priceNew": "2109040.00",
+          "lblPriceNew": "2.109.040đ",
+          "discount": 18,
+          "qty": null,
+          "lblDiscount": "-18%",
+          "promotionNewsId": [
+            {
+              "id": 351,
+              "campaign_id": null,
+              "promotion_news_name": "MEGA Sale cuối năm cùng TOTO, giảm thêm siêu hấp dẫn khi đặt hàng tại HITA!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "TOTO - Hoàn tiền online",
+              "pivot": {
+                "promotion_line_id": 78373,
+                "promotion_news_id": 351
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "2109040.00",
+          "lblPriceRegular": "2.109.040đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 8508,
+          "promotion_id": 78373,
+          "id": 8508,
+          "sku": "LT533R#XW",
+          "timeShow": [],
+          "cashback": 154320,
+          "lblCashback": "154.320đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "LT533R#XW"
+      ],
+      "legacy": {
+        "price": null,
+        "original_price": null,
+        "list_price": null,
+        "sale_price": null,
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 9222,
+      "dpg_sku": "2557-VN",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/product/searchProduct?key=2557-VN",
+      "retrieved_at_utc": "2026-11-22T19:11:13.069Z",
+      "status": "AMBIGUOUS",
+      "exception": "NO_EXACT_SEARCH_HIT",
+      "regular_price_vnd": null,
+      "promotional_price_vnd": null,
+      "online_voucher_amount_vnd": null,
+      "hita_exact_sku": null,
+      "evidence": null,
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "B-2557-VN@401(LFV-1402)",
+        "B-2557-VN@401(BFV-1403)"
+      ],
+      "legacy": {
+        "price": "1200000.00",
+        "original_price": null,
+        "list_price": null,
+        "sale_price": null,
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 567,
+      "dpg_sku": "BFV-639T",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/sen-tam-cay-nhiet-do-inax-bfv-639t-22699.html",
+      "retrieved_at_utc": "2026-11-22T19:11:16.881Z",
+      "regular_price_vnd": 16000000,
+      "promotional_price_vnd": 9440000,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "BFV-639T",
+      "evidence": {
+        "sku": "BFV-639T",
+        "regular": "16.000.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "9.440.000đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "9440000.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "16000000.00",
+          "priceNew": "9440000.00",
+          "lblPriceNew": "9.440.000đ",
+          "lblPriceOld": "16.000.000đ",
+          "cashback": 0,
+          "discount": 41,
+          "lblDiscount": "-41%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 32977,
+          "promotion_id": null,
+          "sku": "BFV-639T"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "BFV-639T"
+      ],
+      "legacy": {
+        "price": "9440000.00",
+        "original_price": "16000000.00",
+        "list_price": "16000000.00",
+        "sale_price": "10080000.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 1822,
+      "dpg_sku": "AC-952+CW-H18VN/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/bon-cau-treo-tuong-nap-dien-tu-inax-ac-952-cw-h18vn-7973.html",
+      "retrieved_at_utc": "2026-11-22T19:11:20.786Z",
+      "regular_price_vnd": 24150000,
+      "promotional_price_vnd": 21976500,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "AC-952+CW-H18VN/BW1",
+      "evidence": {
+        "sku": "AC-952+CW-H18VN/BW1",
+        "regular": "24.150.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "21.976.500đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "21976500.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "24150000.00",
+          "priceNew": "21976500.00",
+          "lblPriceNew": "21.976.500đ",
+          "lblPriceOld": "24.150.000đ",
+          "cashback": 0,
+          "discount": 9,
+          "lblDiscount": "-9%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 7171,
+          "promotion_id": null,
+          "sku": "AC-952+CW-H18VN/BW1"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "AC-952+CW-H18VN/BW1"
+      ],
+      "legacy": {
+        "price": "22218000.00",
+        "original_price": "24150000.00",
+        "list_price": "24150000.00",
+        "sale_price": "17388000.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": -241500,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 232,
+      "dpg_sku": "LT328C#XW",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/chau-rua-mat-lavabo-treo-tuong-toto-lt328c-11980.html",
+      "retrieved_at_utc": "2026-11-22T19:11:24.554Z",
+      "regular_price_vnd": 2160000,
+      "promotional_price_vnd": 1771200,
+      "online_voucher_amount_vnd": 172800,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "LT328C#XW",
+      "evidence": {
+        "sku": "LT328C#XW",
+        "regular": "2.160.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "1.771.200đ",
+        "voucher": "172.800đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "",
+        "promotion_id": "77283",
+        "offer": {
+          "price": "1771200.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "2160000.00",
+          "lblPriceOld": "2.160.000đ",
+          "priceNew": "1771200.00",
+          "lblPriceNew": "1.771.200đ",
+          "discount": 18,
+          "qty": null,
+          "lblDiscount": "-18%",
+          "promotionNewsId": [
+            {
+              "id": 351,
+              "campaign_id": null,
+              "promotion_news_name": "MEGA Sale cuối năm cùng TOTO, giảm thêm siêu hấp dẫn khi đặt hàng tại HITA!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "TOTO - Hoàn tiền online",
+              "pivot": {
+                "promotion_line_id": 77283,
+                "promotion_news_id": 351
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "1771200.00",
+          "lblPriceRegular": "1.771.200đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 13573,
+          "promotion_id": 77283,
+          "id": 13573,
+          "sku": "LT328C#XW",
+          "timeShow": [],
+          "cashback": 172800,
+          "lblCashback": "172.800đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "LT328C#XW",
+        "LHT328C#XW",
+        "LT328CTR#XW",
+        "LT328CHR#XW"
+      ],
+      "legacy": {
+        "price": "1771200.00",
+        "original_price": "2160000.00",
+        "list_price": "2160000.00",
+        "sale_price": "1771200.00",
+        "online_discount_amount": "172800.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": 0,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 233,
+      "dpg_sku": "LHT328C#XW",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/chau-rua-mat-lavabo-treo-tuong-chan-lung-toto-lht328c-11981.html",
+      "retrieved_at_utc": "2026-11-22T19:11:28.236Z",
+      "regular_price_vnd": 3240000,
+      "promotional_price_vnd": 2656800,
+      "online_voucher_amount_vnd": 259200,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "LHT328C#XW",
+      "evidence": {
+        "sku": "LHT328C#XW",
+        "regular": "3.240.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "2.656.800đ",
+        "voucher": "259.200đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "",
+        "promotion_id": "77280",
+        "offer": {
+          "price": "2656800.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "3240000.00",
+          "lblPriceOld": "3.240.000đ",
+          "priceNew": "2656800.00",
+          "lblPriceNew": "2.656.800đ",
+          "discount": 18,
+          "qty": null,
+          "lblDiscount": "-18%",
+          "promotionNewsId": [
+            {
+              "id": 351,
+              "campaign_id": null,
+              "promotion_news_name": "MEGA Sale cuối năm cùng TOTO, giảm thêm siêu hấp dẫn khi đặt hàng tại HITA!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "TOTO - Hoàn tiền online",
+              "pivot": {
+                "promotion_line_id": 77280,
+                "promotion_news_id": 351
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "2656800.00",
+          "lblPriceRegular": "2.656.800đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 13574,
+          "promotion_id": 77280,
+          "id": 13574,
+          "sku": "LHT328C#XW",
+          "timeShow": [],
+          "cashback": 259200,
+          "lblCashback": "259.200đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "LHT328C#XW",
+        "LHT328CHR#XW"
+      ],
+      "legacy": {
+        "price": "2656800.00",
+        "original_price": "3240000.00",
+        "list_price": "3240000.00",
+        "sale_price": "2656800.00",
+        "online_discount_amount": "259200.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": 0,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 7463,
+      "dpg_sku": "AL-296VEC/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/product/searchProduct?key=AL-296VEC%2FBW1",
+      "retrieved_at_utc": "2026-11-22T19:11:29.843Z",
+      "status": "NOT_FOUND",
+      "exception": "NO_EXACT_SEARCH_HIT",
+      "regular_price_vnd": null,
+      "promotional_price_vnd": null,
+      "online_voucher_amount_vnd": null,
+      "hita_exact_sku": null,
+      "evidence": null,
+      "online_voucher_condition": null,
+      "search_candidates": [],
+      "legacy": {
+        "price": "0.00",
+        "original_price": "0.00",
+        "list_price": "0.00",
+        "sale_price": "0.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 249,
+      "dpg_sku": "AC-2700VN/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-2700vn-540.html",
+      "retrieved_at_utc": "2026-11-22T19:11:33.890Z",
+      "regular_price_vnd": 25100000,
+      "promotional_price_vnd": 12801000,
+      "online_voucher_amount_vnd": 753000,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "AC-2700VN/BW1",
+      "evidence": {
+        "sku": "AC-2700VN/BW1",
+        "regular": "25.100.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "12.801.000đ",
+        "voucher": "753.000đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "Áp dụng ngay",
+        "promotion_id": "78086",
+        "offer": {
+          "price": "12801000.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "25100000.00",
+          "lblPriceOld": "25.100.000đ",
+          "priceNew": "12801000.00",
+          "lblPriceNew": "12.801.000đ",
+          "discount": 49,
+          "qty": null,
+          "lblDiscount": "-49%",
+          "promotionNewsId": [
+            {
+              "id": 355,
+              "campaign_id": null,
+              "promotion_news_name": "INAX khuyến mãi siêu tốt! Bấm \"Áp dụng ngay\" và đặt đơn với giá tốt nhất!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "INAX - Giá hoàn tiền bình thường",
+              "pivot": {
+                "promotion_line_id": 78086,
+                "promotion_news_id": 355
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "12801000.00",
+          "lblPriceRegular": "12.801.000đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 2385,
+          "promotion_id": 78086,
+          "id": 2385,
+          "sku": "AC-2700VN/BW1",
+          "timeShow": [],
+          "cashback": 753000,
+          "lblCashback": "753.000đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "AC-2700VN/BW1",
+        "AC-2700+CW-H17VN/BW1",
+        "AC-2700+CW-H18VN/BW1",
+        "AC-2700+CW-H20VN/BW1"
+      ],
+      "legacy": {
+        "price": "13052000.00",
+        "original_price": "25100000.00",
+        "list_price": "25100000.00",
+        "sale_price": "13052000.00",
+        "online_discount_amount": "1255000.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": -251000,
+      "voucher_delta_vs_legacy_online_vnd": -502000,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 248,
+      "dpg_sku": "AC-4005VN/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-4005vn-537.html",
+      "retrieved_at_utc": "2026-11-22T19:11:37.955Z",
+      "regular_price_vnd": 26660000,
+      "promotional_price_vnd": 13863200,
+      "online_voucher_amount_vnd": 267000,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "AC-4005VN/BW1",
+      "evidence": {
+        "sku": "AC-4005VN/BW1",
+        "regular": "26.660.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "13.863.200đ",
+        "voucher": "267.000đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "Áp dụng ngay",
+        "promotion_id": "82636",
+        "offer": {
+          "price": "13863200.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "26660000.00",
+          "lblPriceOld": "26.660.000đ",
+          "priceNew": "13863200.00",
+          "lblPriceNew": "13.863.200đ",
+          "discount": 48,
+          "qty": null,
+          "lblDiscount": "-48%",
+          "promotionNewsId": [
+            {
+              "id": 355,
+              "campaign_id": null,
+              "promotion_news_name": "INAX khuyến mãi siêu tốt! Bấm \"Áp dụng ngay\" và đặt đơn với giá tốt nhất!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "INAX - Giá hoàn tiền bình thường",
+              "pivot": {
+                "promotion_line_id": 82636,
+                "promotion_news_id": 355
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "13863200.00",
+          "lblPriceRegular": "13.863.200đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 2384,
+          "promotion_id": 82636,
+          "id": 2384,
+          "sku": "AC-4005VN/BW1",
+          "timeShow": [],
+          "cashback": 267000,
+          "lblCashback": "267.000đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "AC-4005VN/BW1",
+        "AC-4005+CW-H17VN/BW1",
+        "AC-4005+CW-H18VN/BW1",
+        "AC-4005+CW-H20VN/BW1"
+      ],
+      "legacy": {
+        "price": "13330000.00",
+        "original_price": "26660000.00",
+        "list_price": "26660000.00",
+        "sale_price": "13330000.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 533200,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 677,
+      "dpg_sku": "CS320DRT3#W",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/bon-cau-2-khoi-toto-cs320drt3-900.html",
+      "retrieved_at_utc": "2026-11-22T19:11:41.749Z",
+      "regular_price_vnd": null,
+      "promotional_price_vnd": null,
+      "online_voucher_amount_vnd": null,
+      "status": "DISCONTINUED",
+      "exception": "SOURCE_DISCONTINUED",
+      "hita_exact_sku": "CS320DRT3#W",
+      "evidence": {
+        "sku": "CS320DRT3#W",
+        "regular": "",
+        "regular_label": "",
+        "selling": "",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": null,
+        "autocomplete": {
+          "priceOld": "0.00",
+          "priceNew": "0.00",
+          "lblPriceNew": "Ngừng kinh doanh",
+          "lblPriceOld": "0đ",
+          "cashback": 0,
+          "discount": 0,
+          "lblDiscount": "-0%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 2454,
+          "promotion_id": null,
+          "sku": "CS320DRT3#W"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "CS320DRT3#W",
+        "CS320PDRT3#W"
+      ],
+      "legacy": {
+        "price": null,
+        "original_price": null,
+        "list_price": null,
+        "sale_price": null,
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 555,
+      "dpg_sku": "BFV-3415T",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/sen-tam-inax-bfv-3415t-3128.html",
+      "retrieved_at_utc": "2026-11-22T19:11:45.599Z",
+      "regular_price_vnd": 15160000,
+      "promotional_price_vnd": 8186400,
+      "online_voucher_amount_vnd": 478000,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "BFV-3415T",
+      "evidence": {
+        "sku": "BFV-3415T",
+        "regular": "15.160.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "8.186.400đ",
+        "voucher": "478.000đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "Áp dụng ngay",
+        "promotion_id": "78248",
+        "offer": {
+          "price": "8186400.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "15160000.00",
+          "lblPriceOld": "15.160.000đ",
+          "priceNew": "8186400.00",
+          "lblPriceNew": "8.186.400đ",
+          "discount": 46,
+          "qty": 0,
+          "lblDiscount": "-46%",
+          "promotionNewsId": [
+            {
+              "id": 355,
+              "campaign_id": null,
+              "promotion_news_name": "INAX khuyến mãi siêu tốt! Bấm \"Áp dụng ngay\" và đặt đơn với giá tốt nhất!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "INAX - Giá hoàn tiền bình thường",
+              "pivot": {
+                "promotion_line_id": 78248,
+                "promotion_news_id": 355
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "8186400.00",
+          "lblPriceRegular": "8.186.400đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 3316,
+          "promotion_id": 78248,
+          "id": 3316,
+          "sku": "BFV-3415T",
+          "timeShow": [],
+          "cashback": 478000,
+          "lblCashback": "478.000đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "BFV-3415T",
+        "BFV-3415T-7C",
+        "BFV-3415T-8C",
+        "BFV-3415T-9C"
+      ],
+      "legacy": {
+        "price": "8338000.00",
+        "original_price": "15160000.00",
+        "list_price": "15160000.00",
+        "sale_price": "8338000.00",
+        "online_discount_amount": "758000.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": -151600,
+      "voucher_delta_vs_legacy_online_vnd": -280000,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 564,
+      "dpg_sku": "BFV-655T",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/sen-tam-cay-nhiet-do-inax-bfv-655t-4706.html",
+      "retrieved_at_utc": "2026-11-22T19:11:49.363Z",
+      "regular_price_vnd": 37980000,
+      "promotional_price_vnd": 20889000,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "BFV-655T",
+      "evidence": {
+        "sku": "BFV-655T",
+        "regular": "37.980.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "20.889.000đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "20889000.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "37980000.00",
+          "priceNew": "20889000.00",
+          "lblPriceNew": "20.889.000đ",
+          "lblPriceOld": "37.980.000đ",
+          "cashback": 0,
+          "discount": 45,
+          "lblDiscount": "-45%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 5365,
+          "promotion_id": null,
+          "sku": "BFV-655T"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "BFV-655T",
+        "BFV-655T-SPA"
+      ],
+      "legacy": {
+        "price": "20509200.00",
+        "original_price": "37980000.00",
+        "list_price": "37980000.00",
+        "sale_price": "20509200.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 379800,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 598,
+      "dpg_sku": "TLG04304V",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/voi-chau-toto-tlg04304v-1905.html",
+      "retrieved_at_utc": "2026-11-22T19:11:53.720Z",
+      "regular_price_vnd": 4605000,
+      "promotional_price_vnd": 3684000,
+      "online_voucher_amount_vnd": 598650,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "TLG04304V",
+      "evidence": {
+        "sku": "TLG04304V",
+        "regular": "4.605.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "3.684.000đ",
+        "voucher": "598.650đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "",
+        "promotion_id": "77293",
+        "offer": {
+          "price": 3684000,
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "4605000.00",
+          "lblPriceOld": "4.605.000đ",
+          "priceNew": "3684000.00",
+          "lblPriceNew": "3.684.000đ",
+          "discount": 20,
+          "qty": null,
+          "lblDiscount": "-20%",
+          "promotionNewsId": [
+            {
+              "id": 351,
+              "campaign_id": null,
+              "promotion_news_name": "MEGA Sale cuối năm cùng TOTO, giảm thêm siêu hấp dẫn khi đặt hàng tại HITA!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "TOTO - Hoàn tiền online",
+              "pivot": {
+                "promotion_line_id": 77293,
+                "promotion_news_id": 351
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "3684000.00",
+          "lblPriceRegular": "3.684.000đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 13115,
+          "promotion_id": 77293,
+          "id": 13115,
+          "sku": "TLG04304V",
+          "timeShow": [],
+          "cashback": 598650,
+          "lblCashback": "598.650đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "TLG04304V",
+        "TLG04304V1"
+      ],
+      "legacy": {
+        "price": "3684000.00",
+        "original_price": "4605000.00",
+        "list_price": "4605000.00",
+        "sale_price": "3684000.00",
+        "online_discount_amount": "594966.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": 3684,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 590,
+      "dpg_sku": "TVLC101NSR",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/voi-chau-toto-tvlc101nsr-767.html",
+      "retrieved_at_utc": "2026-11-22T19:11:58.095Z",
+      "regular_price_vnd": 1630000,
+      "promotional_price_vnd": 1336600,
+      "online_voucher_amount_vnd": 228200,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "TVLC101NSR",
+      "evidence": {
+        "sku": "TVLC101NSR",
+        "regular": "1.630.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "1.336.600đ",
+        "voucher": "228.200đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "",
+        "promotion_id": "77315",
+        "offer": {
+          "price": "1336600.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "1630000.00",
+          "lblPriceOld": "1.630.000đ",
+          "priceNew": "1336600.00",
+          "lblPriceNew": "1.336.600đ",
+          "discount": 18,
+          "qty": null,
+          "lblDiscount": "-18%",
+          "promotionNewsId": [
+            {
+              "id": 351,
+              "campaign_id": null,
+              "promotion_news_name": "MEGA Sale cuối năm cùng TOTO, giảm thêm siêu hấp dẫn khi đặt hàng tại HITA!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "TOTO - Hoàn tiền online",
+              "pivot": {
+                "promotion_line_id": 77315,
+                "promotion_news_id": 351
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "1336600.00",
+          "lblPriceRegular": "1.336.600đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 2440,
+          "promotion_id": 77315,
+          "id": 2440,
+          "sku": "TVLC101NSR",
+          "timeShow": [],
+          "cashback": 228200,
+          "lblCashback": "228.200đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "TVLC101NSR"
+      ],
+      "legacy": {
+        "price": "1336600.00",
+        "original_price": "1630000.00",
+        "list_price": "1630000.00",
+        "sale_price": "1336600.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 592,
+      "dpg_sku": "TVLM105CR",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/voi-chau-toto-tvlm105cr-1884.html",
+      "retrieved_at_utc": "2026-11-22T19:12:02.124Z",
+      "regular_price_vnd": null,
+      "promotional_price_vnd": null,
+      "online_voucher_amount_vnd": null,
+      "status": "DISCONTINUED",
+      "exception": "SOURCE_DISCONTINUED",
+      "hita_exact_sku": "TVLM105CR",
+      "evidence": {
+        "sku": "TVLM105CR",
+        "regular": "",
+        "regular_label": "",
+        "selling": "",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": null,
+        "autocomplete": {
+          "priceOld": "0.00",
+          "priceNew": "0.00",
+          "lblPriceNew": "Ngừng kinh doanh",
+          "lblPriceOld": "0đ",
+          "cashback": 0,
+          "discount": 0,
+          "lblDiscount": "-0%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 2733,
+          "promotion_id": null,
+          "sku": "TVLM105CR"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "TVLM105CR"
+      ],
+      "legacy": {
+        "price": null,
+        "original_price": null,
+        "list_price": null,
+        "sale_price": null,
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": null,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 2972,
+      "dpg_sku": "DN8060",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/ghe-phong-tam-moen-dn8060-10122.html",
+      "retrieved_at_utc": "2026-11-22T19:12:05.942Z",
+      "regular_price_vnd": 3920400,
+      "promotional_price_vnd": 2744280,
+      "online_voucher_amount_vnd": null,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "DN8060",
+      "evidence": {
+        "sku": "DN8060",
+        "regular": "3.920.400đ",
+        "regular_label": "Giá gốc:",
+        "selling": "2.744.280đ",
+        "voucher": "",
+        "voucher_label": "",
+        "voucher_condition": "",
+        "voucher_action": "",
+        "promotion_id": null,
+        "offer": {
+          "price": "2744280.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "3920400.00",
+          "priceNew": "2744280.00",
+          "lblPriceNew": "2.744.280đ",
+          "lblPriceOld": "3.920.400đ",
+          "cashback": 0,
+          "discount": 30,
+          "lblDiscount": "-30%",
+          "promotionNewsId": null,
+          "type": "regular",
+          "id": 10206,
+          "promotion_id": null,
+          "sku": "DN8060"
+        }
+      },
+      "online_voucher_condition": null,
+      "search_candidates": [
+        "DN8060",
+        "AFC DÂY LED DÁN COB 480 D - DC 24V 3000K",
+        "Eridani DL190B LED11 D150 14W WH SNI 6500K",
+        "Eridani RD Surface LED12 D150 17W 4000K"
+      ],
+      "legacy": {
+        "price": "4815000.00",
+        "original_price": "3920400.00",
+        "list_price": "3920400.00",
+        "sale_price": "4815000.00",
+        "online_discount_amount": null
+      },
+      "selling_delta_vs_legacy_price_vnd": -2070720,
+      "voucher_delta_vs_legacy_online_vnd": null,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    },
+    {
+      "dpg_id": 262,
+      "dpg_sku": "AC-959VAN/BW1",
+      "category": "thiet-bi-ve-sinh",
+      "source_url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-959van-2130.html",
+      "retrieved_at_utc": "2026-11-22T19:12:10.077Z",
+      "regular_price_vnd": 8690000,
+      "promotional_price_vnd": 6169900,
+      "online_voucher_amount_vnd": 357000,
+      "status": "EXACT",
+      "exception": null,
+      "hita_exact_sku": "AC-959VAN/BW1",
+      "evidence": {
+        "sku": "AC-959VAN/BW1",
+        "regular": "8.690.000đ",
+        "regular_label": "Giá gốc:",
+        "selling": "6.169.900đ",
+        "voucher": "357.000đ",
+        "voucher_label": "Giảm thêm:",
+        "voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+        "voucher_action": "Áp dụng ngay",
+        "promotion_id": "78346",
+        "offer": {
+          "price": "6169900.00",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock",
+          "priceValidUntil": "2026-11-30"
+        },
+        "autocomplete": {
+          "priceOld": "8690000.00",
+          "lblPriceOld": "8.690.000đ",
+          "priceNew": "6169900.00",
+          "lblPriceNew": "6.169.900đ",
+          "discount": 29,
+          "qty": null,
+          "lblDiscount": "-29%",
+          "promotionNewsId": [
+            {
+              "id": 355,
+              "campaign_id": null,
+              "promotion_news_name": "INAX khuyến mãi siêu tốt! Bấm \"Áp dụng ngay\" và đặt đơn với giá tốt nhất!",
+              "news_id": null,
+              "custom_url": null,
+              "promotion_id": 1,
+              "icon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+              "note": "INAX - Giá hoàn tiền bình thường",
+              "pivot": {
+                "promotion_line_id": 78346,
+                "promotion_news_id": 355
+              }
+            }
+          ],
+          "promotionGift": [],
+          "type": "cashback",
+          "logo": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-10-frame-120-x-50-px.gif",
+          "priceRegular": "6169900.00",
+          "lblPriceRegular": "6.169.900đ",
+          "labelColorPromotion": "linear-gradient(90deg,#eb2b09,#ba1f00 90%)",
+          "labelTxtPromotion": "Giảm thêm",
+          "product_id": 2821,
+          "promotion_id": 78346,
+          "id": 2821,
+          "sku": "AC-959VAN/BW1",
+          "timeShow": [],
+          "cashback": 357000,
+          "lblCashback": "357.000đ",
+          "thumbSoft": null,
+          "thumbSoftSquare": null,
+          "miniIcon": "https://cdn.hita.com.vn/storage/banner/widget/icon-cashback-50x50px.png",
+          "promotion_name": "Giảm thêm Online"
+        }
+      },
+      "online_voucher_condition": "* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",
+      "search_candidates": [
+        "AC-959VAN/BW1",
+        "AC-959VAN-2/BW1"
+      ],
+      "legacy": {
+        "price": "6169900.00",
+        "original_price": "8690000.00",
+        "list_price": "8690000.00",
+        "sale_price": "6169900.00",
+        "online_discount_amount": "435000.00"
+      },
+      "selling_delta_vs_legacy_price_vnd": 0,
+      "voucher_delta_vs_legacy_online_vnd": -78000,
+      "proposed_only": true,
+      "source_policy": "HITA_RESEARCH_ONLY"
+    }
+  ]
+}
