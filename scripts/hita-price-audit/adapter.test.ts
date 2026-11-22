@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest'
+import { findProduct, parsePdp, pdpUrl, searchUrl } from './adapter.mts'
+
+const sku = 'TEST+CAP/BW1#W'
+const sibling = 'TEST+CAP-2/BW1#W'
+
+function fixture({
+  displayed = sku, regular = '1.000.000đ', selling = '900.000đ', offer = 900_000,
+  voucher = '50.000đ', condition = 'Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA',
+  label = 'Giảm thêm:', note = '',
+} = {}) {
+  return `<div class="product-detail"><div class="product-column-right">
+    <span class="product-code-location">${displayed}</span>${note}
+    <div id="main-price-product">
+      <span class="label-price-old">Giá gốc:</span><span class="product-old-price-land">${regular}</span>
+      <span class="product-new-price-land" data-promotion-id="1">${selling}</span>
+      <div class="cashback-box"><div class="info"><div class="title-gift"><span>${label}</span>
+        <div class="gift-cashback">${voucher}</div></div><div class="note">${condition}</div></div></div>
+    </div></div></div>
+    <div class="gift-cashback">100.000đ</div>
+    <script type="application/ld+json">${JSON.stringify({ '@graph': [
+      { '@type': 'ProductGroup' },
+      { '@type': 'Product', sku: sibling, offers: { price: 800_000, priceCurrency: 'VND' } },
+      { '@type': 'Product', sku, offers: { price: offer, priceCurrency: 'VND' } },
+    ] })}</script>`
+}
+
+describe('Hita public pricing', () => {
+  it('preserves all SKU separators and suffixes in lookup and exact match', () => {
+    expect(searchUrl(sku).search).toBe('?key=TEST%2BCAP%2FBW1%23W')
+    const results = findProduct({ status: true, products: [
+      { product_code: sibling }, { product_code: '<em>TEST+CAP/BW1#W</em>' }, { product_code: 'TEST+CAP/BW1#XW' },
+    ] }, sku)
+    expect(results.hits).toHaveLength(1)
+    expect(results.candidates).toHaveLength(3)
+  })
+
+  it('accepts a product URL on Hita only', () => {
+    expect(pdpUrl('bon-cau-2130.html').href).toBe('https://hita.com.vn/bon-cau-2130.html')
+    for (const url of ['//other.example/a-1.html', 'https://user@hita.com.vn/a-1.html', '/a-1.html?sku=sibling', '/robots.txt']) {
+      expect(() => pdpUrl(url)).toThrow('INVALID_PDP_URL')
+    }
+  })
+
+  it('extracts three VND prices from the main exact SKU and retains the online condition', () => {
+    const result = parsePdp(fixture(), sku)
+    expect(result).toMatchObject({
+      status: 'EXACT', regular_price_vnd: 1_000_000, promotional_price_vnd: 900_000,
+      online_voucher_amount_vnd: 50_000, evidence: { voucher_condition: expect.stringContaining('đặt Online') },
+    })
+  })
+
+  it('requires online and SKU-specific evidence and a positive amount after voucher', () => {
+    for (const page of [fixture({ condition: 'Cashback chung' }), fixture({ voucher: '' }),
+      fixture({ voucher: '900.000đ' }), fixture({ label: 'Tặng điểm' })]) {
+      expect(parsePdp(page, sku)).toMatchObject({ status: 'EXACT', online_voucher_amount_vnd: null })
+    }
+    expect(parsePdp(fixture(), sku, { product_code: sku, product_price: { sku, priceOld: '1000000.00',
+      priceNew: '900000.00', cashback: 40_000 } })).toMatchObject({
+      status: 'EXACT', online_voucher_amount_vnd: null, exception: 'ONLINE_VOUCHER_UNVERIFIED',
+    })
+  })
+
+  it('returns the single confirmed selling price when no regular comparison is shown', () => {
+    expect(parsePdp(fixture({ regular: '', voucher: '' }), sku)).toMatchObject({
+      status: 'EXACT', regular_price_vnd: 900_000, promotional_price_vnd: null, online_voucher_amount_vnd: null,
+    })
+  })
+
+  it('classifies contact and discontinued without borrowing an offer', () => {
+    expect(parsePdp(fixture({ selling: 'Giá liên hệ' }), sku)).toMatchObject({ status: 'CONTACT', regular_price_vnd: null })
+    expect(parsePdp(fixture({ note: 'Ngừng kinh doanh' }), sku, { product_code: sku, product_status: 0 }))
+      .toMatchObject({ status: 'DISCONTINUED', regular_price_vnd: null })
+  })
+
+  it('rejects SKU drift and conflicting prices', () => {
+    expect(parsePdp(fixture({ displayed: sibling }), sku)).toMatchObject({ status: 'AMBIGUOUS', regular_price_vnd: null })
+    for (const page of [fixture({ offer: 800_000 }), fixture({ regular: '800.000đ' }), fixture({ selling: '900.000,50đ' })]) {
+      expect(parsePdp(page, sku)).toMatchObject({ status: 'UNKNOWN', regular_price_vnd: null })
+    }
+  })
+})

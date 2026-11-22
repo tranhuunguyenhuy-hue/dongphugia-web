@@ -132,6 +132,7 @@
     "@types/sanitize-html": "^2.16.1",
     "@vitejs/plugin-react": "^5.1.4",
     "babel-plugin-react-compiler": "1.0.0",
+    "cheerio": "1.1.2",
     "dotenv": "^17.2.4",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",

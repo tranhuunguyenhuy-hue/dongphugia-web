@@ -1,0 +1,203 @@
+[
+  {
+    "id": 1289,
+    "sku": "119198",
+    "category": "thiet-bi-ve-sinh",
+    "price": "58276000.00",
+    "original_price": "85700000.00",
+    "list_price": "57925500.00",
+    "sale_price": "57925500.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 205,
+    "sku": "LT700CTR#W",
+    "category": "thiet-bi-ve-sinh",
+    "price": "3053000.00",
+    "original_price": "3053000.00",
+    "list_price": "3053000.00",
+    "sale_price": "3053000.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 1311,
+    "sku": "CF-1032VS/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "1632000.00",
+    "original_price": "1700000.00",
+    "list_price": null,
+    "sale_price": null,
+    "online_discount_amount": null
+  },
+  {
+    "id": 207,
+    "sku": "LT533R#XW",
+    "category": "thiet-bi-ve-sinh",
+    "price": null,
+    "original_price": null,
+    "list_price": null,
+    "sale_price": null,
+    "online_discount_amount": null
+  },
+  {
+    "id": 9222,
+    "sku": "2557-VN",
+    "category": "thiet-bi-ve-sinh",
+    "price": "1200000.00",
+    "original_price": null,
+    "list_price": null,
+    "sale_price": null,
+    "online_discount_amount": null
+  },
+  {
+    "id": 567,
+    "sku": "BFV-639T",
+    "category": "thiet-bi-ve-sinh",
+    "price": "9440000.00",
+    "original_price": "16000000.00",
+    "list_price": "16000000.00",
+    "sale_price": "10080000.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 1822,
+    "sku": "AC-952+CW-H18VN/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "22218000.00",
+    "original_price": "24150000.00",
+    "list_price": "24150000.00",
+    "sale_price": "17388000.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 232,
+    "sku": "LT328C#XW",
+    "category": "thiet-bi-ve-sinh",
+    "price": "1771200.00",
+    "original_price": "2160000.00",
+    "list_price": "2160000.00",
+    "sale_price": "1771200.00",
+    "online_discount_amount": "172800.00"
+  },
+  {
+    "id": 233,
+    "sku": "LHT328C#XW",
+    "category": "thiet-bi-ve-sinh",
+    "price": "2656800.00",
+    "original_price": "3240000.00",
+    "list_price": "3240000.00",
+    "sale_price": "2656800.00",
+    "online_discount_amount": "259200.00"
+  },
+  {
+    "id": 7463,
+    "sku": "AL-296VEC/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "0.00",
+    "original_price": "0.00",
+    "list_price": "0.00",
+    "sale_price": "0.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 249,
+    "sku": "AC-2700VN/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "13052000.00",
+    "original_price": "25100000.00",
+    "list_price": "25100000.00",
+    "sale_price": "13052000.00",
+    "online_discount_amount": "1255000.00"
+  },
+  {
+    "id": 248,
+    "sku": "AC-4005VN/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "13330000.00",
+    "original_price": "26660000.00",
+    "list_price": "26660000.00",
+    "sale_price": "13330000.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 677,
+    "sku": "CS320DRT3#W",
+    "category": "thiet-bi-ve-sinh",
+    "price": null,
+    "original_price": null,
+    "list_price": null,
+    "sale_price": null,
+    "online_discount_amount": null
+  },
+  {
+    "id": 555,
+    "sku": "BFV-3415T",
+    "category": "thiet-bi-ve-sinh",
+    "price": "8338000.00",
+    "original_price": "15160000.00",
+    "list_price": "15160000.00",
+    "sale_price": "8338000.00",
+    "online_discount_amount": "758000.00"
+  },
+  {
+    "id": 564,
+    "sku": "BFV-655T",
+    "category": "thiet-bi-ve-sinh",
+    "price": "20509200.00",
+    "original_price": "37980000.00",
+    "list_price": "37980000.00",
+    "sale_price": "20509200.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 598,
+    "sku": "TLG04304V",
+    "category": "thiet-bi-ve-sinh",
+    "price": "3684000.00",
+    "original_price": "4605000.00",
+    "list_price": "4605000.00",
+    "sale_price": "3684000.00",
+    "online_discount_amount": "594966.00"
+  },
+  {
+    "id": 590,
+    "sku": "TVLC101NSR",
+    "category": "thiet-bi-ve-sinh",
+    "price": "1336600.00",
+    "original_price": "1630000.00",
+    "list_price": "1630000.00",
+    "sale_price": "1336600.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 592,
+    "sku": "TVLM105CR",
+    "category": "thiet-bi-ve-sinh",
+    "price": null,
+    "original_price": null,
+    "list_price": null,
+    "sale_price": null,
+    "online_discount_amount": null
+  },
+  {
+    "id": 2972,
+    "sku": "DN8060",
+    "category": "thiet-bi-ve-sinh",
+    "price": "4815000.00",
+    "original_price": "3920400.00",
+    "list_price": "3920400.00",
+    "sale_price": "4815000.00",
+    "online_discount_amount": null
+  },
+  {
+    "id": 262,
+    "sku": "AC-959VAN/BW1",
+    "category": "thiet-bi-ve-sinh",
+    "price": "6169900.00",
+    "original_price": "8690000.00",
+    "list_price": "8690000.00",
+    "sale_price": "6169900.00",
+    "online_discount_amount": "435000.00",
+    "pdp_url": "https://hita.com.vn/bon-cau-1-khoi-inax-ac-959van-2130.html"
+  }
+]
