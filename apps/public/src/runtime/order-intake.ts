@@ -3,6 +3,7 @@
 // Prices, vouchers and totals are re-derived inside the database function from the three canonical columns; nothing a
 // client sends about prices is read here, and the voucher is deducted exactly once (per unit x quantity, order level).
 export type OrderIntakeBinding = { connectionString: string }
+export type IntakeClient = { query: (text: string, values: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>; end: () => Promise<unknown> }
 
 export const ORDER_BODY_LIMIT_BYTES = 16_384
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,200}$/
@@ -74,7 +75,7 @@ async function getBinding(): Promise<OrderIntakeBinding | undefined> {
 
 export async function createGuestOrder(
   request: Request,
-  deps: { binding?: OrderIntakeBinding; env?: NodeJS.ProcessEnv; connect?: (connectionString: string) => Promise<{ query: (text: string, values: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>; end: () => Promise<unknown> }> } = {},
+  deps: { binding?: OrderIntakeBinding; env?: NodeJS.ProcessEnv; connect?: (connectionString: string) => Promise<IntakeClient> } = {},
 ): Promise<OrderIntakeResult> {
   if (!orderIntakeEnabled(deps.env)) return fail('ORDER_INTAKE_DISABLED', 404, 'Not found.')
   // Browsers always send Origin on cross-site POSTs: refuse any that is not this deployment (CSRF-style submissions).
@@ -92,14 +93,14 @@ export async function createGuestOrder(
   const binding = deps.binding ?? await getBinding()
   if (!binding) return fail('ORDER_INTAKE_UNAVAILABLE', 503, 'Chức năng đặt hàng tạm thời chưa khả dụng.')
 
-  let client: Awaited<NonNullable<typeof deps.connect>> | undefined
+  let client: IntakeClient | undefined
   try {
     if (deps.connect) client = await deps.connect(binding.connectionString)
     else {
       const { Client } = pgModule ?? (pgModule = await import('pg'))
       const pg = new Client({ connectionString: binding.connectionString, connectionTimeoutMillis: 3000, query_timeout: 8000 })
       await pg.connect()
-      client = pg as unknown as typeof client
+      client = pg as unknown as IntakeClient
     }
     const response = await client!.query(
       'SELECT public.guest_order_request_create($1::jsonb, $2::text, $3::uuid) AS result',

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createGuestOrder, orderIntakeEnabled, parseOrderRequest } from './order-intake'
 
-const env = { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true' } as NodeJS.ProcessEnv
+const env = { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true' } as unknown as NodeJS.ProcessEnv
 const body = { customer_name: 'A', customer_phone: '0912345678', items: [{ productId: 207, sku: 'LT533R#XW', quantity: 2, price: 1, unit_price: 1, discount: 999 }] }
 const request = (payload: unknown, headers: Record<string, string> = { 'idempotency-key': 'key-12345678' }) =>
   new Request('https://x.test/api/orders', { method: 'POST', headers, body: typeof payload === 'string' ? payload : JSON.stringify(payload) })
@@ -13,9 +13,9 @@ const binding = { connectionString: 'postgres://test' }
 
 describe('guest order intake (#446)', () => {
   it('is closed outside the isolated TEST Preview (Production never takes orders here)', async () => {
-    expect(orderIntakeEnabled({ APP_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(false)
-    expect(orderIntakeEnabled({ APP_ENV: 'staging' } as NodeJS.ProcessEnv)).toBe(false)
-    const result = await createGuestOrder(request(body), { env: { APP_ENV: 'production' } as NodeJS.ProcessEnv, binding })
+    expect(orderIntakeEnabled({ APP_ENV: 'production' } as unknown as NodeJS.ProcessEnv)).toBe(false)
+    expect(orderIntakeEnabled({ APP_ENV: 'staging' } as unknown as NodeJS.ProcessEnv)).toBe(false)
+    const result = await createGuestOrder(request(body), { env: { APP_ENV: 'production' } as unknown as NodeJS.ProcessEnv, binding })
     expect(result).toMatchObject({ ok: false, status: 404 })
   })
   it('drops every client-sent price field and forwards only ids, sku, quantity, install option', async () => {
