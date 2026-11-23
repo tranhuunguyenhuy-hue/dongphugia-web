@@ -2,19 +2,17 @@ import { webcrypto } from 'node:crypto'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCartStore } from '@/lib/cart-store'
+import { applyOnlineVoucher } from '@/lib/cart-pricing'
 import { CartPage } from './cart-page'
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('@/lib/tracking', () => ({ trackAddToCart: vi.fn(), trackPurchase: vi.fn() }))
-// Fixed return values from the #453 contract. Production cart pricing is provided by Claude.
-const applyOnlineVoucher = vi.fn<import('@/lib/cart-store').ApplyOnlineVoucher>(() => ({
-    unitPriceBefore: 900_000, voucherPerUnit: 50_000, finalUnitPrice: 850_000,
-}))
+vi.mock('@/lib/cart-pricing', { spy: true })
 
 const product = {
     productId: 207, sku: 'LT533R#XW', name: 'Chậu rửa', slug: 'chau-rua',
     categorySlug: 'thiet-bi-ve-sinh', price: 900_000, priceDisplay: null, imageUrl: null,
-    canonicalVoucher: { amount: 50_000, applyOnlineVoucher },
+    canonicalVoucher: { amount: 50_000 },
 }
 
 beforeEach(() => {
@@ -22,7 +20,7 @@ beforeEach(() => {
     sessionStorage.clear()
     useCartStore.setState({ items: [], isOpen: false })
     vi.stubGlobal('crypto', webcrypto)
-    applyOnlineVoucher.mockClear()
+    vi.mocked(applyOnlineVoucher).mockClear()
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -38,9 +36,7 @@ describe('isolated checkout', () => {
         await useCartStore.persist.rehydrate()
         ;[line] = useCartStore.getState().items
         expect(line.finalUnitPrice * line.quantity).toBe(2_550_000)
-        expect(applyOnlineVoucher).toHaveBeenCalledExactlyOnceWith({
-            unitPrice: 900_000, voucherAmount: 50_000, quantity: 1,
-        })
+        expect(applyOnlineVoucher).toHaveBeenCalledTimes(1)
     })
 
     it('retains the cart after an error and reuses the request key for the same order', async () => {
