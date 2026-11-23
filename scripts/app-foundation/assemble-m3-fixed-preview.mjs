@@ -64,15 +64,17 @@ async function assemble({ artifactRoot, sourceSha }) {
   }
   const publicHyperdriveId = required('M3_TEST_PUBLIC_HYPERDRIVE_ID')
   const adminHyperdriveId = required('M3_TEST_ADMIN_HYPERDRIVE_ID')
+  const orderIntakeHyperdriveId = process.env.M3_TEST_ORDER_INTAKE_HYPERDRIVE_ID?.trim() || undefined
   const config = createM3FixedPreviewConfig({
     sourceSha,
     publicHyperdriveId,
     adminHyperdriveId,
+    orderIntakeHyperdriveId,
     productionHyperdriveIds,
     productionHyperdriveInventoryVerified,
     mediaTarget,
   })
-  validateM3FixedPreviewConfig(config, { sourceSha, publicHyperdriveId, adminHyperdriveId })
+  validateM3FixedPreviewConfig(config, { sourceSha, publicHyperdriveId, adminHyperdriveId, orderIntakeHyperdriveId })
 
   const configText = `${JSON.stringify(config, null, 2)}\n`
   const configSha256 = createHash('sha256').update(configText).digest('hex')
@@ -87,6 +89,7 @@ async function assemble({ artifactRoot, sourceSha }) {
     hyperdrive: {
       public: { id: publicHyperdriveId, access: 'read-only-test', cache: 'none' },
       admin: { id: adminHyperdriveId, role: 'dpg_admin_m3_test', cache: 'disabled' },
+      ...(orderIntakeHyperdriveId ? { orderIntake: { id: orderIntakeHyperdriveId, role: 'dpg_order_intake_login', cache: 'disabled' } } : {}),
       productionIdsExcluded: true,
       productionInventoryVerified: productionHyperdriveInventoryVerified,
     },

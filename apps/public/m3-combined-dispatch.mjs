@@ -131,6 +131,8 @@ function publicEnvironment(environment) {
     PUBLIC_CATALOGUE_SOURCE: environment.PUBLIC_CATALOGUE_SOURCE,
     PUBLIC_CATALOGUE_CHECKPOINT: environment.PUBLIC_CATALOGUE_CHECKPOINT,
     PUBLIC_DB: environment.PUBLIC_DB,
+    // #446: separate, TEST-only order-intake binding (role dpg_order_intake_login). Never the Admin binding, never the read role.
+    ORDER_INTAKE_DB: environment.ORDER_INTAKE_DB,
     PREVIEW_TEST_DATABASE_ISOLATED: environment.PREVIEW_TEST_DATABASE_ISOLATED,
     PREVIEW_MEDIA_TARGET_ISOLATED: environment.PREVIEW_MEDIA_TARGET_ISOLATED,
     PREVIEW_MEDIA_CDN_HOSTNAME: environment.BUNNY_CDN_HOSTNAME,

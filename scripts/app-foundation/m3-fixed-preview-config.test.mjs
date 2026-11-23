@@ -8,6 +8,7 @@ const sourceSha = 'a'.repeat(40)
 const publicId = '1'.repeat(32)
 const adminId = '2'.repeat(32)
 const productionId = '3'.repeat(32)
+const intakeId = '4'.repeat(32)
 const mediaTarget = {
   zoneId: 1900001,
   productionZoneId: 1454608,
@@ -45,6 +46,25 @@ describe('M3 fixed Preview configuration', () => {
     expect(config.previews.vars).not.toHaveProperty('PUBLIC_CATALOGUE_CHECKPOINT')
     expect(config).not.toHaveProperty('vars')
     expect(config).not.toHaveProperty('hyperdrive')
+  })
+
+  it('adds the dedicated TEST order-intake Hyperdrive only when supplied (#446)', () => {
+    const without = create()
+    expect(without.previews.hyperdrive.map((h) => h.binding)).toEqual(['PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE'])
+    const withIntake = create({ orderIntakeHyperdriveId: intakeId })
+    expect(withIntake.previews.hyperdrive.at(-1)).toEqual({ binding: 'ORDER_INTAKE_DB', id: intakeId })
+    expect(validateM3FixedPreviewConfig(withIntake, { sourceSha, publicHyperdriveId: publicId, adminHyperdriveId: adminId, orderIntakeHyperdriveId: intakeId })).toBe(true)
+    expect(() => validateM3FixedPreviewConfig(withIntake, { sourceSha, publicHyperdriveId: publicId, adminHyperdriveId: adminId })).toThrow()
+    expect(withIntake).not.toHaveProperty('hyperdrive')
+  })
+
+  it.each([
+    ['order-intake equal to Public', { orderIntakeHyperdriveId: publicId }, 'M3_HYPERDRIVE_BINDINGS_MUST_BE_DISTINCT'],
+    ['order-intake equal to Admin', { orderIntakeHyperdriveId: adminId }, 'M3_HYPERDRIVE_BINDINGS_MUST_BE_DISTINCT'],
+    ['Production order-intake Hyperdrive', { orderIntakeHyperdriveId: productionId }, 'M3_ORDER_INTAKE_HYPERDRIVE_MUST_BE_TEST_ONLY'],
+    ['malformed order-intake id', { orderIntakeHyperdriveId: 'xyz' }, 'M3_ORDER_INTAKE_TEST_HYPERDRIVE_REQUIRED'],
+  ])('rejects %s', (_label, overrides, message) => {
+    expect(() => create(overrides)).toThrow(message)
   })
 
   it.each([

@@ -35,6 +35,7 @@ export function createM3FixedPreviewConfig({
   sourceSha,
   publicHyperdriveId,
   adminHyperdriveId,
+  orderIntakeHyperdriveId,
   productionHyperdriveIds = [],
   productionHyperdriveInventoryVerified = false,
   mediaTarget,
@@ -43,6 +44,12 @@ export function createM3FixedPreviewConfig({
   assert.match(publicHyperdriveId || '', HYPERDRIVE_ID, 'M3_PUBLIC_TEST_HYPERDRIVE_REQUIRED')
   assert.match(adminHyperdriveId || '', HYPERDRIVE_ID, 'M3_ADMIN_TEST_HYPERDRIVE_REQUIRED')
   assert.notEqual(publicHyperdriveId.toLowerCase(), adminHyperdriveId.toLowerCase(), 'M3_HYPERDRIVE_BINDINGS_MUST_BE_DISTINCT')
+  // #446: optional dedicated TEST order-intake Hyperdrive (role dpg_order_intake_login, cache disabled, EXECUTE on the guest order RPC only).
+  if (orderIntakeHyperdriveId !== undefined) {
+    assert.match(orderIntakeHyperdriveId || '', HYPERDRIVE_ID, 'M3_ORDER_INTAKE_TEST_HYPERDRIVE_REQUIRED')
+    const intake = orderIntakeHyperdriveId.toLowerCase()
+    assert.ok(intake !== publicHyperdriveId.toLowerCase() && intake !== adminHyperdriveId.toLowerCase(), 'M3_HYPERDRIVE_BINDINGS_MUST_BE_DISTINCT')
+  }
   assert.ok(Array.isArray(productionHyperdriveIds), 'M3_PRODUCTION_HYPERDRIVE_INVENTORY_REQUIRED')
   assert.equal(productionHyperdriveInventoryVerified, true, 'M3_PRODUCTION_HYPERDRIVE_INVENTORY_REQUIRED')
   for (const id of productionHyperdriveIds) {
@@ -51,6 +58,7 @@ export function createM3FixedPreviewConfig({
   const productionIds = new Set(productionHyperdriveIds.map((id) => id.toLowerCase()))
   assert.ok(!productionIds.has(publicHyperdriveId.toLowerCase()), 'M3_PUBLIC_HYPERDRIVE_MUST_BE_TEST_ONLY')
   assert.ok(!productionIds.has(adminHyperdriveId.toLowerCase()), 'M3_ADMIN_HYPERDRIVE_MUST_BE_TEST_ONLY')
+  if (orderIntakeHyperdriveId !== undefined) assert.ok(!productionIds.has(orderIntakeHyperdriveId.toLowerCase()), 'M3_ORDER_INTAKE_HYPERDRIVE_MUST_BE_TEST_ONLY')
 
   assert.ok(mediaTarget && typeof mediaTarget === 'object', 'M3_PREVIEW_MEDIA_TARGET_REQUIRED')
   assert.match(String(mediaTarget.zoneId ?? ''), /^[1-9][0-9]*$/, 'M3_PREVIEW_MEDIA_ZONE_ID_REQUIRED')
@@ -102,6 +110,7 @@ export function createM3FixedPreviewConfig({
       hyperdrive: [
         { binding: 'PUBLIC_DB', id: publicHyperdriveId },
         { binding: 'HYPERDRIVE_ADMIN_NO_CACHE', id: adminHyperdriveId },
+        ...(orderIntakeHyperdriveId !== undefined ? [{ binding: 'ORDER_INTAKE_DB', id: orderIntakeHyperdriveId }] : []),
       ],
       images: { binding: 'IMAGES' },
       services: [],
@@ -123,6 +132,7 @@ export function validateM3FixedPreviewConfig(config, expected) {
   assert.deepEqual(config.previews.hyperdrive, [
     { binding: 'PUBLIC_DB', id: expected.publicHyperdriveId },
     { binding: 'HYPERDRIVE_ADMIN_NO_CACHE', id: expected.adminHyperdriveId },
+    ...(expected.orderIntakeHyperdriveId !== undefined ? [{ binding: 'ORDER_INTAKE_DB', id: expected.orderIntakeHyperdriveId }] : []),
   ])
   assert.equal(config.previews.vars.APP_ORIGIN, FIXED_PREVIEW_ORIGIN)
   assert.equal(config.previews.vars.BUILD_SOURCE_SHA, expected.sourceSha)
