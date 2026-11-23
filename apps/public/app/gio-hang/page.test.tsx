@@ -14,7 +14,7 @@ describe('Public Worker cart', () => {
         vi.stubEnv('APP_ENV', 'staging')
         vi.stubEnv('PREVIEW_TEST_DATABASE_ISOLATED', 'true')
         render(<PublicCartRoute />)
-        expect(screen.getByText('Giỏ TEST')).toBeInTheDocument()
+        expect(screen.getByText('Giỏ TEST')).toBeTruthy()
     })
 
     it.each(['production', 'staging'])('closes the route outside isolated checkout (%s)', environment => {

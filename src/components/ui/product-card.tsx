@@ -79,7 +79,8 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
         stockStatus: product.stock_status,
     });
     const onlineDiscount = Number(product.online_discount_amount);
-    const voucherOnly = canonicalPricing || product.final_online_price === null;
+    const voucherOnly = canonicalPricing
+        || (resolvedCategorySlug === 'thiet-bi-ve-sinh' && product.final_online_price === null);
     const finalOnlinePrice = !voucherOnly && commerce.priceMode === 'PUBLIC_PRICE'
         ? resolveFinalOnlinePrice(commerce.displayPrice, onlineDiscount) : null;
     const showVoucher = voucherOnly

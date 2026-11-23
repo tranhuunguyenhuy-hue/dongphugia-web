@@ -16,6 +16,14 @@ const VIETNAM_MOBILE_PATTERN = /^(?:\+84|0)(?:3|5|7|8|9)\d{8}$/
 
 const ORDER_ERROR = 'Đã có lỗi xảy ra. Vui lòng thử lại.'
 
+type OrderResponse = {
+    success?: unknown
+    order_number?: unknown
+    error?: unknown
+    code?: unknown
+    total?: unknown
+}
+
 // Keep the request key across network failures and reloads without storing contact details.
 async function orderAttempt(body: string) {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
@@ -94,7 +102,7 @@ export function CartPage({ isolatedCheckout = false }: { isolatedCheckout?: bool
                 headers['Idempotency-Key'] = attempt.current.key
             }
             const res = await fetch('/api/orders', { method: 'POST', headers, body })
-            const data = await res.json().catch(() => null)
+            const data = await res.json().catch(() => null) as OrderResponse | null
 
             if (!res.ok || data?.success !== true || typeof data.order_number !== 'string' || !data.order_number) {
                 const unavailable = res.status === 404 || data?.code === 'ORDER_INTAKE_UNAVAILABLE'
@@ -108,10 +116,9 @@ export function CartPage({ isolatedCheckout = false }: { isolatedCheckout?: bool
                 try { sessionStorage.removeItem(attempt.current.storageKey) } catch { /* Storage may be disabled. */ }
                 attempt.current = null
             }
-            const authoritativeTotal = Number(data.total)
             trackPurchase(
                 data.order_number,
-                !isolatedCheckout && Number.isFinite(authoritativeTotal) ? authoritativeTotal : total,
+                !isolatedCheckout && typeof data.total === 'number' && Number.isFinite(data.total) ? data.total : total,
                 items.map(item => ({
                     item_id: item.sku || item.productId.toString(),
                     item_name: item.name,

@@ -1,7 +1,7 @@
 import { webcrypto } from 'node:crypto'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useCartStore } from '@/lib/cart-store'
+import { getCartUnitPrice, useCartStore } from '@/lib/cart-store'
 import { applyOnlineVoucher } from '@/lib/cart-pricing'
 import { CartPage } from './cart-page'
 
@@ -35,7 +35,7 @@ describe('isolated checkout', () => {
         cart.updateQuantity(line.cartItemId, 3)
         await useCartStore.persist.rehydrate()
         ;[line] = useCartStore.getState().items
-        expect(line.finalUnitPrice * line.quantity).toBe(2_550_000)
+        expect((getCartUnitPrice(line) ?? 0) * line.quantity).toBe(2_550_000)
         expect(applyOnlineVoucher).toHaveBeenCalledTimes(1)
     })
 
