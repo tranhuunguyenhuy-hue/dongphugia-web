@@ -224,7 +224,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
                                     runtimeConfig={listingRuntimeConfig}
                                     hideColorFilter={listingRuntimeConfig.hideColorFilter}
                                 />
-                                <CategorySort />
+                                <CategorySort serverSort={process.env.APP_ENV === 'staging' && process.env.PREVIEW_TEST_DATABASE_ISOLATED === 'true'} />
                             </div>
                         </div>
 
