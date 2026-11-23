@@ -5,7 +5,9 @@ Chỉ đọc: không crawl, không ghi database (TEST/Production), không deploy
 ## 0. Quy tắc đã chốt (Owner) và phần còn chờ duyệt
 **Đã chốt (nghiệp vụ):** giá hiện tại của DPG V1 là lỗi thời; Hita EXACT SKU đã xác minh là nguồn giá chuẩn mới cho ngành thiết bị vệ sinh; không dùng giá cũ để điền thiếu hay làm dự phòng; EXACT → 3 giá canonical; CONTACT → 3 giá NULL và hiển thị "Liên hệ báo giá"; NOT_FOUND → danh sách ứng viên xóa tương lai (không tự xóa); AMBIGUOUS giữ chưa xác minh; DISCONTINUED ghi nhận để Owner quyết; NOT_CRAWLED/BLOCKED/UNKNOWN chưa có kết luận.
 
-**Chưa chốt (cần Owner/Tech Lead):** xem mục B.7. Điều quan trọng nhất: khi chuyển hệ thống sang giá mới, SKU chưa được crawl/chưa xác minh sẽ hiển thị gì.
+**Đã chốt thêm (Owner, 24/11, khóa 5/5 tại [#466](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/466#issuecomment-7111910234)):** chính sách SKU chưa xác minh, NOT_FOUND, DISCONTINUED, sao lưu giá cũ ngoại tuyến và audit dung lượng chỉ đọc. Xem mục **B.7** (bảng quyết định + bước kỹ thuật). Việc Owner duyệt chính sách **không phải GO** merge PR này, nạp CSV, tạo 3 cột Production, xóa/NULL giá cũ, ẩn/xóa sản phẩm hay deploy.
+
+**Còn chờ duyệt:** phạm vi phát hành chính xác và ngưỡng sẵn sàng của kế hoạch release (B.7, mục "Việc còn mở").
 
 ## Chạy lại bằng một lệnh
 ```
@@ -73,7 +75,7 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 | V6 | Quyền mức bảng: `dpg_migration` có UPDATE; `dpg_admin_api`, `dpg_public_catalogue` không có SELECT/UPDATE mức bảng (quyền mức cột/view chưa kiểm). |
 
 ### B.2 Điều kiện chuyển hệ thống sang giá mới (thứ tự đề xuất, mỗi bước cần Owner GO)
-1. **Dữ liệu đủ:** Owner duyệt CSV và quyết định chính sách cho SKU chưa xác minh (B.7). Không cutover khi phần lớn SKU còn UNRESOLVED nếu chính sách là "không fallback": các SKU đó sẽ hiển thị "Liên hệ báo giá".
+1. **Dữ liệu đủ (đã chốt):** **không chuyển toàn bộ ngành sang giá mới trước khi hoàn thành lượt crawl các SKU active thuộc phạm vi phát hành** được xác định trong kế hoạch release; 731 SKU đã kiểm hiện tại chưa đủ. Owner phải duyệt tập CSV. Sau cutover, SKU chưa có dữ liệu chuẩn ẩn giá và hiển thị trạng thái cần liên hệ (B.7).
 2. **DDL:** 3 cột nullable + CHECK (số nguyên dương, KM < gốc, voucher < giá bán) + quyền cho vai trò Admin (mẫu `006`/`007` ở TEST, tên vai trò Production khác).
 3. **Nạp dữ liệu (chưa hiển thị):** vì Public Production bỏ qua 3 cột, bước này không đổi gì với khách.
 4. **Mã:** Public/PDP/listing/sắp xếp (NULL cuối)/Admin/giỏ chỉ đọc canonical cho ngành vệ sinh (đổi cổng từ "staging" sang "ngành vệ sinh"); ngành khác giữ nguyên. Tách khỏi #432/#433/#440.
@@ -82,7 +84,7 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 
 ### B.3 Kế hoạch loại bỏ giá/cột cũ (đề xuất)
 - **Giai đoạn 1 (không mất dữ liệu):** ngừng đọc giá cũ cho ngành vệ sinh trong mọi bề mặt (V3) và hàm DB (V2); giữ cột và dữ liệu.
-- **Giai đoạn 2 (sau quan sát, cần GO):** đặt giá cũ của **các SKU vệ sinh** về NULL. Không dùng làm kho dự phòng kinh doanh; chỉ giữ **một bản sao lưu ngoại tuyến** để khôi phục kỹ thuật khi rollback (Owner quyết định thời hạn giữ).
+- **Giai đoạn 2 (sau quan sát, cần GO):** đặt giá cũ của **các SKU vệ sinh** về NULL. Không dùng làm kho dự phòng kinh doanh; chỉ giữ **một bản sao ngoại tuyến phục vụ rollback kỹ thuật, không dùng làm nguồn giá kinh doanh**, tối đa **7 ngày kể từ khi cutover được xác nhận ổn định** (đã chốt, B.7-4).
 - **Giai đoạn 3:** `DROP COLUMN` các cột giá cũ **chỉ khi** không còn chức năng nào cần, kể cả ba ngành khác (1.305 SKU vẫn dùng). **Không DROP cột chung** cho đến quyết định riêng cho ngành khác.
 
 ### B.4 Về mục tiêu giảm dung lượng (đo, không giả định)
@@ -99,12 +101,18 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 ### B.6 Kế hoạch nạp an toàn đề xuất (chỉ đề xuất, chưa triển khai)
 Owner duyệt tập CSV đã qua cổng → preflight `SELECT` (nối id+sku 100%, 3 cột canonical đang NULL, đúng ngành, đo dung lượng) → diff trước/sau xuất file → DDL riêng → nạp lô nhỏ (khoảng 500 hàng), mỗi lô một transaction, idempotent (điều kiện giá trước = NULL), `GET DIAGNOSTICS` = số hàng của lô, sổ cái trước/sau, kiểm dung lượng, **dừng khi lệch** → CONTACT ghi 3 giá NULL kèm trạng thái "báo giá" → NOT_FOUND/DISCONTINUED/AMBIGUOUS/UNRESOLVED **không** UPDATE/DELETE/ẩn → rollback dữ liệu độc lập rollback Worker (đặt 3 cột về giá trước theo sổ cái) → kiểm tối thiểu (PDP mẫu 3/2/1 mức và CONTACT, sắp xếp NULL cuối, Admin sửa giá, ngành khác không đổi bằng đếm trước/sau, giỏ nếu bật: voucher trừ một lần) → release Worker sau khi dữ liệu đã có.
 
-### B.7 Quyết định cần Owner/Tech Lead (chưa tự đặt chính sách)
-1. Khi cutover, SKU **chưa crawl/BLOCKED/UNKNOWN/AMBIGUOUS** hiển thị gì: "Liên hệ báo giá", hay chờ crawl đủ rồi mới cutover? (Tôi không tự chọn.)
-2. SKU **NOT_FOUND** trong lúc chờ quyết định xóa: hiển thị "Liên hệ báo giá" hay giữ như hiện tại?
-3. **DISCONTINUED:** hiển thị gì và vòng đời tiếp theo.
-4. Thời hạn giữ bản sao lưu ngoại tuyến của giá cũ (kỹ thuật, không phải dự phòng kinh doanh).
-5. Audit dung lượng các bảng lớn (B.4) có làm riêng không.
+### B.7 Quyết định đã chốt và bước kỹ thuật tương ứng (chưa triển khai bước nào)
+| # | Quyết định Owner (đã chốt) | Bước kỹ thuật cần có | Cần GO |
+|---|---|---|---|
+| 1 | Chỉ cutover sau khi crawl xong SKU active thuộc phạm vi phát hành. Sau cutover **không fallback giá cũ**; SKU chưa xác minh (NOT_CRAWLED/BLOCKED/UNKNOWN/AMBIGUOUS) **ẩn giá + hiển thị trạng thái cần liên hệ**, **không** biến thành CONTACT_VERIFIED. | (a) Chốt **phạm vi phát hành** và **ngưỡng sẵn sàng** trong kế hoạch release; cổng kiểm đã đo được độ phủ theo từng nhóm trên bất kỳ tập SKU nào. (b) Cần phân biệt được dữ liệu "Hita ghi liên hệ" với "chưa xác minh" dù cả 3 giá đều NULL → cần một trường trạng thái giá. Đề xuất xem xét dùng lại cột `price_state` sẵn có (giá trị hiện tại: priced/unknown/contact/discontinued/updating) **nhưng** các giá trị hiện tại đến từ nguồn cũ nên phải ghi lại cho SKU vệ sinh khi cutover; chưa chọn, cần review. (c) Public/PDP/listing/giỏ/báo giá: trạng thái "cần liên hệ" ẩn giá, không cho đặt hàng theo giá. | Owner GO riêng cho kế hoạch release/#449 |
+| 2 | NOT_FOUND: giữ bản ghi, đưa vào danh sách rà soát xóa tương lai kèm chứng cứ; không tự xóa/ẩn/đổi trạng thái; sau cutover không hiển thị giá cũ. SKU id 2695 (dấu `/` cuối) cần kiểm tra lại danh tính. | Xuất `not_found_candidates.csv` (đã có, có thời điểm kiểm và URL tìm kiếm). Thêm bước **kiểm tra lại danh tính** trước khi một ứng viên vào danh sách xóa (so SKU DPG với nguồn hãng; riêng id 2695 phải xử lý trước). Không có lệnh DELETE nào trong phạm vi. | Owner GO riêng cho mọi thay đổi/xóa |
+| 3 | DISCONTINUED: giữ bản ghi, phân loại rõ, không bán bằng giá cũ, không tự xóa. | `discontinued_review.csv` (đã có). Sau cutover: ẩn giá, trạng thái ngừng kinh doanh; cần Owner quyết định hiển thị chi tiết và vòng đời. | Owner GO riêng |
+| 4 | Sao lưu giá cũ: **một bản sao ngoại tuyến** phục vụ rollback, không phải nguồn giá kinh doanh; giữ **7 ngày sau khi cutover được xác nhận ổn định**, rồi xóa theo quy trình có kiểm soát. Chưa tạo/xóa gì trong #466. | Định nghĩa nội dung bản sao: 6 cột giá cũ của SKU vệ sinh theo `id`+`sku` (dữ liệu giá cũ của ngành vệ sinh đo được khoảng 358 KiB) + checksum, lưu ngoài database, truy cập hạn chế; mốc "cutover ổn định" phải được ghi nhận bằng xác nhận cụ thể (ai, khi nào); quy trình xóa có kiểm soát sau 7 ngày. **Xung đột cần báo:** repo có sao lưu Production định kỳ (`m4-production-backup.yml`); các bản sao lưu hệ thống sẽ vẫn chứa giá cũ tới khi hết hạn lưu giữ theo chính sách đó. Chưa kiểm hạn lưu giữ; tôi không xóa hay can thiệp, chỉ báo để Tech Lead/Owner quyết định có coi là xung đột. | Owner GO khi tạo và khi xóa |
+| 5 | Audit dung lượng Production **chỉ đọc**, để tìm cơ hội giảm dung lượng thực tế; phân biệt đo với ước tính; không suy đoán trùng lặp; không UPDATE/DELETE/DROP/VACUUM FULL hay đổi hạ tầng. | **Chưa chạy** audit riêng (báo cáo riêng, không thuộc PR này). Kế hoạch: với `products`, `product_spec_values`, `product_descriptions`, `product_images`, `m5_cdn_ledger`, `product_source_mappings`, `product_documents`: đo heap/index/toast, số hàng, dead tuple, kích thước theo cột bằng `pg_column_size` (đo), kiểm chứng trùng lặp bằng so khớp nội dung thật trước khi kết luận (không suy đoán), ghi rõ phần nào là đo và phần nào là ước tính. Số đo đã có ở B.4 là điểm khởi đầu. | Đã được Owner duyệt (chỉ đọc); chờ Tech Lead xếp lịch |
+
+**Việc còn mở (chưa đặt chính sách):**
+- **Phạm vi phát hành chính xác** (ví dụ chỉ TOTO active hay mọi thương hiệu active của ngành vệ sinh) và **ngưỡng sẵn sàng** (tỷ lệ SKU trong phạm vi có kết quả cuối) phải nêu rõ trong kế hoạch release. Số liệu để tham chiếu: 5.344 SKU active ngành vệ sinh, trong đó TOTO active 2.057; 731 SKU đã có kết quả ở snapshot `7f9ba89` (35,5% TOTO active, 13,7% so với 5.344 SKU active nếu tính cả ngành vệ sinh).
+- Cách hiển thị chi tiết của từng trạng thái "cần liên hệ"/"ngừng kinh doanh" (nội dung chữ, nút) là quyết định giao diện, chưa chốt.
 
 ### B.8 Giả định chưa kiểm chứng
 Quyền mức cột/view của `dpg_admin_api`/`dpg_public_catalogue`; biến môi trường Worker Production; giỏ/checkout Production đang đóng (dựa trên mã và audit #444–#445, tôi không gọi thử Production); ước tính tăng dung lượng khi nạp; việc `INVALID_PDP_URL` là giới hạn của parser; giá CSV khớp giá hiện tại trên Hita.
