@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { VariantSibling } from '@/lib/public-api-products'
+import { CanonicalProductCTA } from '@/components/product/canonical-product-cta'
 import { ProductCTA } from '@/components/product/product-cta'
 import { ProductPrice } from '@/components/product/product-price'
 import { HistoricalReferencePriceNotice } from '@/components/product/historical-reference-price'
@@ -50,7 +51,7 @@ export function ProductPurchasePanel({
         productKey: string
         variant: VariantPreview
     } | null>(null)
-    const selectedVariant = !verifiedVariantOptions && selection?.productKey === productKey ? selection.variant : null
+    const selectedVariant = !canonicalPricing && !verifiedVariantOptions && selection?.productKey === productKey ? selection.variant : null
 
     const displayProduct = useMemo(() => {
         if (!selectedVariant) return product
@@ -64,7 +65,7 @@ export function ProductPurchasePanel({
             original_price: selectedVariant.original_price,
             sale_price: selectedVariant.sale_price,
             list_price: selectedVariant.list_price,
-            online_discount_amount: selectedVariant.online_discount_amount ?? (canonicalPricing ? null : product.online_discount_amount),
+            online_discount_amount: selectedVariant.online_discount_amount ?? product.online_discount_amount,
             price_display: selectedVariant.price_display,
             image_main_url: selectedVariant.image_main_url,
             stock_status: selectedVariant.stock_status ?? product.stock_status,
@@ -72,7 +73,7 @@ export function ProductPurchasePanel({
             price_state: selectedVariant.price_state ?? product.price_state,
             is_active: selectedVariant.is_active ?? product.is_active,
         }
-    }, [product, selectedVariant, canonicalPricing])
+    }, [product, selectedVariant])
 
     const currentCommerce = resolveProductCommerce({
         listPrice: product.list_price,
@@ -81,15 +82,26 @@ export function ProductPurchasePanel({
         compatibilityPrice: product.price,
         stockStatus: product.stock_status,
     })
-    const displayCompatibilityPrice = displayProduct.price
-    const displayOriginalPrice = displayProduct.list_price ?? displayProduct.original_price
-    const displaySalePrice = displayProduct.sale_price
+    const displayCompatibilityPrice = canonicalPricing ? null : displayProduct.price
+    const displayOriginalPrice = canonicalPricing ? null : displayProduct.list_price ?? displayProduct.original_price
+    const displaySalePrice = canonicalPricing && displayProduct.list_price == null ? null : displayProduct.sale_price
+    const displayVoucher = toClientMoney(displayProduct.online_discount_amount)
+    const displayCommerce = resolveProductCommerce({
+        listPrice: displayProduct.list_price,
+        salePrice: displaySalePrice,
+        stockStatus: displayProduct.stock_status,
+    })
+    const canOrder = displayProduct.is_active
+        && !['not_sellable', 'discontinued'].includes(displayProduct.sale_status ?? '')
+        && displayCommerce.availability !== 'Discontinued'
+        && displayCommerce.availability !== null
+        && displayCommerce.priceMode === 'PUBLIC_PRICE'
 
     return (
         <>
             {verifiedVariantOptions ? (
                 <VerifiedVariantSelector currentSku={product.sku} options={verifiedVariantOptions} />
-            ) : product.variant_group && variantSiblings.length > 0 && (
+            ) : !canonicalPricing && product.variant_group && variantSiblings.length > 0 && (
                 <VariantSelector
                     currentSku={product.sku}
                     currentSlug={product.slug}
@@ -118,29 +130,45 @@ export function ProductPurchasePanel({
                 originalPrice={toClientMoney(displayOriginalPrice)}
                 listPrice={toClientMoney(displayProduct.list_price)}
                 salePrice={toClientMoney(displaySalePrice)}
-                priceDisplay={displayProduct.price_display}
+                priceDisplay={canonicalPricing ? 'Liên hệ báo giá' : displayProduct.price_display}
                 displayVoucherOnly={canonicalPricing}
-                onlineDiscountAmount={displayProduct.online_discount_amount ? Number(displayProduct.online_discount_amount) : null}
+                onlineDiscountAmount={displayVoucher}
                 stockStatus={displayProduct.stock_status}
             >
-                <ProductCTA
-                    productId={displayProduct.id}
-                    productSku={displayProduct.sku}
-                    productName={displayProduct.name}
-                    price={toClientMoney(displayCompatibilityPrice)}
-                    originalPrice={toClientMoney(displayOriginalPrice)}
-                    listPrice={toClientMoney(displayProduct.list_price)}
-                    salePrice={toClientMoney(displaySalePrice)}
-                    priceDisplay={displayProduct.price_display}
-                    imageUrl={displayProduct.image_main_url || (product.product_images && product.product_images.length > 0 ? product.product_images[0].image_url : null)}
-                    categorySlug={categorySlug}
-                    subcategorySlug={subcategorySlug}
-                    brandName={product.brands?.name}
-                    slug={displayProduct.slug}
-                    stockStatus={displayProduct.stock_status}
-                />
+                {canonicalPricing ? (
+                    <CanonicalProductCTA
+                        id={displayProduct.id}
+                        sku={displayProduct.sku}
+                        name={displayProduct.name}
+                        slug={displayProduct.slug}
+                        categorySlug={categorySlug}
+                        subcategorySlug={subcategorySlug}
+                        price={displayCommerce.displayPrice}
+                        voucher={displayVoucher}
+                        imageUrl={displayProduct.image_main_url}
+                        brandName={displayProduct.brands?.name}
+                        canOrder={canOrder}
+                    />
+                ) : (
+                    <ProductCTA
+                        productId={displayProduct.id}
+                        productSku={displayProduct.sku}
+                        productName={displayProduct.name}
+                        price={toClientMoney(displayCompatibilityPrice)}
+                        originalPrice={toClientMoney(displayOriginalPrice)}
+                        listPrice={toClientMoney(displayProduct.list_price)}
+                        salePrice={toClientMoney(displaySalePrice)}
+                        priceDisplay={displayProduct.price_display}
+                        imageUrl={displayProduct.image_main_url || (product.product_images && product.product_images.length > 0 ? product.product_images[0].image_url : null)}
+                        categorySlug={categorySlug}
+                        subcategorySlug={subcategorySlug}
+                        brandName={product.brands?.name}
+                        slug={displayProduct.slug}
+                        stockStatus={displayProduct.stock_status}
+                    />
+                )}
             </ProductPrice>
-            <HistoricalReferencePriceNotice referencePrice={historicalReferencePrice} />
+            {!canonicalPricing && <HistoricalReferencePriceNotice referencePrice={historicalReferencePrice} />}
         </>
     )
 }

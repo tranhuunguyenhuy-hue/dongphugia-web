@@ -1,6 +1,6 @@
 'use client'
 
-import { useCartStore, useCartTotal, CartItem } from '@/lib/cart-store'
+import { useCartStore, useCartTotal, getCartUnitPrice, type CartItem } from '@/lib/cart-store'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Minus, Plus, Trash2, ShoppingCart, ArrowRight, Package2 } from 'lucide-react'
@@ -90,7 +90,7 @@ function CartItemRow({
     onRemove: () => void
     onQtyChange: (qty: number) => void
 }) {
-    const finalItemPrice = item.finalPrice ?? item.price;
+    const finalItemPrice = getCartUnitPrice(item)
     const lineTotal = finalItemPrice ? finalItemPrice * item.quantity : null;
 
     return (
@@ -129,12 +129,15 @@ function CartItemRow({
                     {item.installOption === 'replace' && (
                         <p className="text-[11px] text-sky-600 font-medium">+ Tháo dỡ & Lắp đặt: {formatPrice(item.installationFee || 0)}</p>
                     )}
-                    {(item.onlineDiscountAmount || 0) > 0 && (
+                    {(item.voucherPerUnit ?? 0) > 0 && (
+                        <p className="text-xs font-medium text-emerald-700">Voucher đã trừ −{formatPrice(item.voucherPerUnit! * item.quantity)}</p>
+                    )}
+                    {item.finalUnitPrice === undefined && (item.onlineDiscountAmount || 0) > 0 && (
                         <p className="text-[11px] text-emerald-600 font-medium">Ưu đãi online tham khảo: {formatPrice(item.onlineDiscountAmount || 0)}</p>
                     )}
                 </div>
 
-                <div className="flex items-center justify-between mt-2">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     {/* Qty control */}
                     <div className="flex items-center border border-neutral-200 rounded-lg overflow-hidden h-8">
                         <button

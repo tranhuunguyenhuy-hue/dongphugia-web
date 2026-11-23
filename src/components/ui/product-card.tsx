@@ -70,17 +70,22 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
     }
     const sku = product.sku || product.product_code || product.code || '';
     const isInactive = product.is_active === false;
+    const canonicalPricing = product.price_provenance === 'hita-exact-test';
     const commerce = resolveProductCommerce({
         listPrice: product.list_price,
-        originalPrice: product.original_price,
-        salePrice: product.sale_price,
-        compatibilityPrice: product.price,
+        originalPrice: canonicalPricing ? null : product.original_price,
+        salePrice: canonicalPricing && product.list_price == null ? null : product.sale_price,
+        compatibilityPrice: canonicalPricing ? null : product.price,
         stockStatus: product.stock_status,
     });
-    const canonicalPricing = product.price_provenance === 'hita-exact-test';
     const onlineDiscount = Number(product.online_discount_amount);
-    const finalOnlinePrice = commerce.priceMode === 'PUBLIC_PRICE'
+    const voucherOnly = canonicalPricing
+        || (resolvedCategorySlug === 'thiet-bi-ve-sinh' && product.final_online_price === null);
+    const finalOnlinePrice = !voucherOnly && commerce.priceMode === 'PUBLIC_PRICE'
         ? resolveFinalOnlinePrice(commerce.displayPrice, onlineDiscount) : null;
+    const showVoucher = voucherOnly
+        ? commerce.displayPrice !== null && Number.isSafeInteger(onlineDiscount) && onlineDiscount > 0 && onlineDiscount < commerce.displayPrice
+        : finalOnlinePrice !== null;
 
     let discountPercent = 0;
     if (commerce.salePrice !== null && commerce.originalPrice !== null) {
@@ -261,16 +266,16 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
                                     </span>
                                 )}
                             </div>
-                            {finalOnlinePrice !== null && (
-                                <span className="px-2 py-[5px] mt-0.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-[4px] leading-none whitespace-nowrap w-fit">
-                                    {canonicalPricing ? "Voucher đặt online: " : ""}Giảm thêm {formatPrice(onlineDiscount)}
+                            {showVoucher && (
+                                <span className="px-2 py-[5px] mt-0.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-[4px] leading-tight w-fit">
+                                    {voucherOnly ? "Voucher đặt online: " : ""}Giảm thêm {formatPrice(onlineDiscount)}
                                 </span>
                             )}
-                            {!canonicalPricing && finalOnlinePrice !== null && <span className="text-[12px] font-bold text-emerald-800">Giá cuối online: {formatPrice(finalOnlinePrice)}</span>}
+                            {finalOnlinePrice !== null && <span className="text-[12px] font-bold text-emerald-800">Giá cuối online: {formatPrice(finalOnlinePrice)}</span>}
                         </>
                     ) : (
                         <span className="font-semibold text-[14px] text-[#2E7A96] tracking-tight">
-                            {product.price_display || siteConfig.ui.status.contact}
+                            {canonicalPricing ? 'Liên hệ báo giá' : product.price_display || siteConfig.ui.status.contact}
                         </span>
                     )}
                 </div>

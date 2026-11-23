@@ -35,8 +35,11 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
     const numPrice = commerce.displayPrice ?? 0
     const numOriginal = commerce.originalPrice ?? 0
     const numOnlineDiscount = Number(onlineDiscountAmount)
-    const finalOnlinePrice = commerce.priceMode === 'PUBLIC_PRICE'
+    const finalOnlinePrice = !displayVoucherOnly && commerce.priceMode === 'PUBLIC_PRICE'
         ? resolveFinalOnlinePrice(numPrice, numOnlineDiscount) : null
+    const showVoucher = displayVoucherOnly
+        ? Number.isSafeInteger(numOnlineDiscount) && numOnlineDiscount > 0 && numOnlineDiscount < numPrice
+        : finalOnlinePrice !== null
     const hasDiscount = commerce.salePrice !== null
     const statusDisplay = priceDisplay || 'Liên hệ báo giá'
     const hasPublicPrice = commerce.priceMode === 'PUBLIC_PRICE'
@@ -46,7 +49,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
         : statusDisplay
 
     return (
-        <ProductOptionsContext.Provider value={{ installOption, setInstallOption, installationFee, onlineDiscountAmount: finalOnlinePrice === null ? 0 : numOnlineDiscount }}>
+        <ProductOptionsContext.Provider value={{ installOption, setInstallOption, installationFee, onlineDiscountAmount: showVoucher ? numOnlineDiscount : 0 }}>
         <div className={cn("relative rounded-[24px] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.06)] mb-6", className)}>
             <div className="flex flex-col p-5 lg:p-6 h-full">
                 
@@ -79,7 +82,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
                     )}
 
                     {/* Online Discount Sub-Card (Shopee-style Voucher) */}
-                    {hasPublicPrice && finalOnlinePrice !== null && (
+                    {hasPublicPrice && showVoucher && (
                         <div className="mt-4 flex relative rounded-xl bg-orange-50/60 border border-orange-200">
                             
                             {/* Left Stub */}
@@ -102,7 +105,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
                                     <span className="text-[16px] font-black text-[#d64a25] tracking-tight">
                                         {new Intl.NumberFormat('vi-VN').format(numOnlineDiscount)}đ
                                     </span>
-                                    <span className="text-[13px] font-medium text-stone-600">khi đặt Online</span>
+                                    <span className="text-[13px] font-medium text-stone-600">{displayVoucherOnly ? "/ sản phẩm khi thêm vào giỏ" : "khi đặt Online"}</span>
                                 </div>
                                 {!displayVoucherOnly && finalOnlinePrice !== null && <div className="text-[14px] font-bold text-emerald-800">Giá cuối online: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalOnlinePrice)}</div>}
                             </div>
