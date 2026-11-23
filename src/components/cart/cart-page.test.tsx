@@ -19,7 +19,7 @@ beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
     useCartStore.setState({ items: [], isOpen: false })
-    vi.stubGlobal('crypto', webcrypto)
+    vi.stubGlobal('crypto', { subtle: webcrypto.subtle, randomUUID: vi.fn(() => webcrypto.randomUUID()) })
     vi.mocked(applyOnlineVoucher).mockClear()
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -63,6 +63,7 @@ describe('isolated checkout', () => {
         expect(path).toBe('/api/orders')
         expect(first.headers['Idempotency-Key']).toMatch(/^[A-Za-z0-9._:-]{8,200}$/)
         expect(retry).toEqual(first)
+        expect(crypto.randomUUID).toHaveBeenCalledTimes(1)
         expect(JSON.parse(first.body)).toEqual({
             customer_name: 'Khách thử', customer_phone: '+84912345678',
             customer_email: '', customer_address: '', note: '',

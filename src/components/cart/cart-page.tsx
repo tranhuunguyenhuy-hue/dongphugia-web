@@ -25,10 +25,10 @@ type OrderResponse = {
 }
 
 // Keep the request key across network failures and reloads without storing contact details.
-async function orderAttempt(body: string) {
+async function orderAttemptStorageKey(body: string) {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body))
     const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-    return { storageKey: `dpg-order-attempt:${fingerprint}`, key: crypto.randomUUID() }
+    return `dpg-order-attempt:${fingerprint}`
 }
 
 function legacySanitaryLine(item: CartItem) {
@@ -91,13 +91,13 @@ export function CartPage({ isolatedCheckout = false }: { isolatedCheckout?: bool
             })
             const headers: Record<string, string> = { 'Content-Type': 'application/json' }
             if (isolatedCheckout) {
-                const nextAttempt = await orderAttempt(body)
-                if (attempt.current?.storageKey !== nextAttempt.storageKey) {
-                    try {
-                        nextAttempt.key = sessionStorage.getItem(nextAttempt.storageKey) ?? nextAttempt.key
-                        sessionStorage.setItem(nextAttempt.storageKey, nextAttempt.key)
-                    } catch { /* In-memory retry still works when storage is disabled. */ }
-                    attempt.current = nextAttempt
+                const storageKey = await orderAttemptStorageKey(body)
+                if (attempt.current?.storageKey !== storageKey) {
+                    let storedKey: string | null = null
+                    try { storedKey = sessionStorage.getItem(storageKey) } catch { /* Storage may be disabled. */ }
+                    const key = storedKey && /^[A-Za-z0-9._:-]{8,200}$/.test(storedKey) ? storedKey : crypto.randomUUID()
+                    attempt.current = { storageKey, key }
+                    try { sessionStorage.setItem(storageKey, key) } catch { /* In-memory retry still works. */ }
                 }
                 headers['Idempotency-Key'] = attempt.current.key
             }
