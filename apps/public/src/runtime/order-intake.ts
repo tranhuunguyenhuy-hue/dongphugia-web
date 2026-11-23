@@ -94,6 +94,7 @@ export async function createGuestOrder(
   if (!binding) return fail('ORDER_INTAKE_UNAVAILABLE', 503, 'Chức năng đặt hàng tạm thời chưa khả dụng.')
 
   let client: IntakeClient | undefined
+  let inTransaction = false
   try {
     if (deps.connect) client = await deps.connect(binding.connectionString)
     else {
@@ -102,15 +103,24 @@ export async function createGuestOrder(
       await pg.connect()
       client = pg as unknown as IntakeClient
     }
+    // The login role does not INHERIT the intake role (rolinherit=false, SET only): the RPC EXECUTE privilege belongs to
+    // `dpg_order_intake`, so the call runs in one transaction under SET LOCAL ROLE. Known business failures come back as
+    // {error} (COMMIT keeps the rate-limit counter); raised errors ROLLBACK.
+    await client!.query('BEGIN', [])
+    inTransaction = true
+    await client!.query('SET LOCAL ROLE dpg_order_intake', [])
     const response = await client!.query(
       'SELECT public.guest_order_request_create($1::jsonb, $2::text, $3::uuid) AS result',
       [JSON.stringify(checked.input), idempotencyKey, requestId && REQUEST_ID.test(requestId) ? requestId : null],
     )
+    await client!.query('COMMIT', [])
+    inTransaction = false
     const result = response.rows[0]?.result as Record<string, unknown> | undefined
     if (result && typeof result.error === 'string') return fail(Object.hasOwn(ERRORS, result.error) ? result.error : 'ORDER_REQUEST_FAILED')
     if (!result || typeof result.order_number !== 'string') return fail('ORDER_REQUEST_FAILED')
     return { ok: true, status: 200, body: { success: true, order_number: result.order_number, order_status: String(result.status), payment_status: String(result.payment_status) } }
   } catch (error) {
+    if (inTransaction) await client?.query('ROLLBACK', []).catch(() => undefined)
     const message = error instanceof Error ? error.message : ''
     return fail(Object.hasOwn(ERRORS, message) ? message : 'ORDER_REQUEST_FAILED')
   } finally {
