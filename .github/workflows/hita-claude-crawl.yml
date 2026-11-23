@@ -1,0 +1,82 @@
+name: Hita crawl (Claude, #464)
+
+# Manual, read-only crawl of PUBLIC Hita product pages by EXACT SKU (3 price fields) into a downloadable artifact.
+# No secrets, no database access, no deployment. The crawler stops by itself on 401/403/429/503 or a Cloudflare challenge
+# (no CAPTCHA solving, no proxy rotation, no identity spoofing). Independent of the Codex #448 work and files.
+on:
+  workflow_dispatch:
+    inputs:
+      inventory:
+        description: Inventory JSON in the repository
+        default: scripts/hita-price-audit/inventory/toto-active-prod-20261123.json
+        required: true
+        type: string
+      offset:
+        description: Slice offset into the crawl scope
+        default: '0'
+        required: true
+        type: string
+      limit:
+        description: Max SKUs in this run
+        default: '100'
+        required: true
+        type: string
+      reverse:
+        description: Walk the scope from the end
+        default: false
+        type: boolean
+      label:
+        description: Short artifact label
+        default: run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hita-claude-crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    if: github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && github.actor == 'tranhuunguyenhuy-hue'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies (no lifecycle scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Crawl (checkpointed, 1 request/second, stops on any block)
+        env:
+          INVENTORY: ${{ inputs.inventory }}
+          OFFSET: ${{ inputs.offset }}
+          LIMIT: ${{ inputs.limit }}
+          REVERSE: ${{ inputs.reverse }}
+        run: |
+          set +e
+          flags=""
+          if [ "$REVERSE" = "true" ]; then flags="--reverse"; fi
+          npx tsx scripts/hita-price-audit/batch.mts --inventory "$INVENTORY" --output out --offset "$OFFSET" --limit "$LIMIT" $flags
+          code=$?
+          echo "crawler exit code: $code"
+          if [ -f out/prices.json ]; then
+            node -e "const s=JSON.parse(require('fs').readFileSync('out/prices.json','utf8')).summary; console.log('### Hita crawl summary\n\n\`\`\`json\n'+JSON.stringify(s,null,2)+'\n\`\`\`')" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # Exit code 2 = stopped by a block (a valid, reported outcome); anything else non-zero is a tool failure.
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then exit "$code"; fi
+      - name: Upload crawl output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hita-claude-${{ inputs.label }}-${{ github.run_id }}
+          path: out
+          if-no-files-found: ignore
+          retention-days: 30
