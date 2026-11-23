@@ -5,6 +5,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { digestEnvironmentWorkerArtifact } from './environment-worker-artifact-digest.mjs'
+import { probeAdminShell } from './m3-admin-shell-probe.mjs'
 import { expectedHyperdriveBindings, validateM3FixedPreviewConfig } from './m3-fixed-preview-config.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
 import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
@@ -128,8 +129,13 @@ async function adminSmoke(token, sourceSha) {
   const out = {}
   // The Admin is the static SPA under /admin-next (same origin, noindex). The legacy Next Admin (/admin/*) is retired on staging
   // (Owner scope decision, #309): every legacy page path must redirect to the new Admin and never reach its runtime.
-  const shell = await accessFetch('/admin-next/', token)
-  out.shell = { status: shell.status, noindexMeta: /name="robots"[^>]*noindex/i.test(await shell.text()) }
+  // #447: same gate (200 + noindex) as before; a bounded retry covers a freshly published Preview and every attempt is recorded
+  // (sanitized) so a failure is explained by evidence and in the job log.
+  const shellProbe = await probeAdminShell(() => accessFetch('/admin-next/', token))
+  evidence.adminShellAttempts = shellProbe.attempts
+  console.log('M3 admin shell attempts: ' + JSON.stringify(shellProbe.attempts))
+  const shell = shellProbe.attempts.at(-1)
+  out.shell = { status: shell.status, noindexMeta: shell.noindexMeta, attempts: shellProbe.attempts.length }
   assert.equal(shell.status, 200, 'M3_ADMIN_SHELL_REQUIRED'); assert.ok(out.shell.noindexMeta, 'M3_ADMIN_NOINDEX_REQUIRED')
   for (const path of ['/admin/login', '/admin/products', '/admin/users', '/admin/orders', '/admin/brands']) {
     const response = await accessFetch(path, token)

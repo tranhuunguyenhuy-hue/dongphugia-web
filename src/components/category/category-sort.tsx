@@ -26,7 +26,9 @@ const SORT_OPTIONS = [
     },
 ] as const
 
-export function CategorySort() {
+// serverSort is used by the Preview replacement (apps/public/src/runtime/preview-sort.tsx); this component always navigates via the router.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function CategorySort(_props: { serverSort?: boolean } = {}) {
     const router = useRouter()
     const pathname = usePathname()
     const searchParams = useSearchParams()
