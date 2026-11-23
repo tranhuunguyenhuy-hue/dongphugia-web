@@ -238,6 +238,7 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
 
                     <ProductPurchasePanel
                         product={purchaseProduct}
+                        canonicalPricing={'price_provenance' in product && product.price_provenance === 'hita-exact-test'}
                         historicalReferencePrice={getPdpHistoricalReferencePrice(product)}
                         verifiedVariantOptions={variantOptions}
                         categorySlug={canonicalCategorySlug}

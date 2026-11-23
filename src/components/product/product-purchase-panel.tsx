@@ -21,6 +21,7 @@ interface ProductPurchasePanelProps {
         colors: {name:string;hex_code:string|null}|null;
         brands: {name:string}|null;
     }
+    canonicalPricing?: boolean
     historicalReferencePrice?: {amountVnd:number;recordedUpdateDate:string;provenance:string}|null
     variantSiblings?: VariantSibling[]
     verifiedVariantOptions?: readonly VerifiedVariantOption[]
@@ -35,6 +36,7 @@ const toClientMoney = (value: unknown) =>
 
 export function ProductPurchasePanel({
     product,
+    canonicalPricing = false,
     historicalReferencePrice,
     variantSiblings = [],
     verifiedVariantOptions,
@@ -62,7 +64,7 @@ export function ProductPurchasePanel({
             original_price: selectedVariant.original_price,
             sale_price: selectedVariant.sale_price,
             list_price: selectedVariant.list_price,
-            online_discount_amount: selectedVariant.online_discount_amount ?? product.online_discount_amount,
+            online_discount_amount: selectedVariant.online_discount_amount ?? (canonicalPricing ? null : product.online_discount_amount),
             price_display: selectedVariant.price_display,
             image_main_url: selectedVariant.image_main_url,
             stock_status: selectedVariant.stock_status ?? product.stock_status,
@@ -70,7 +72,7 @@ export function ProductPurchasePanel({
             price_state: selectedVariant.price_state ?? product.price_state,
             is_active: selectedVariant.is_active ?? product.is_active,
         }
-    }, [product, selectedVariant])
+    }, [product, selectedVariant, canonicalPricing])
 
     const currentCommerce = resolveProductCommerce({
         listPrice: product.list_price,
@@ -117,6 +119,7 @@ export function ProductPurchasePanel({
                 listPrice={toClientMoney(displayProduct.list_price)}
                 salePrice={toClientMoney(displaySalePrice)}
                 priceDisplay={displayProduct.price_display}
+                displayVoucherOnly={canonicalPricing}
                 onlineDiscountAmount={displayProduct.online_discount_amount ? Number(displayProduct.online_discount_amount) : null}
                 stockStatus={displayProduct.stock_status}
             >

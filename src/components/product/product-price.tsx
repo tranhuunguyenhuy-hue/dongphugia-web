@@ -13,13 +13,14 @@ interface ProductPriceProps {
     listPrice?: number | null | undefined
     salePrice?: number | null | undefined
     priceDisplay: string | null | undefined
+    displayVoucherOnly?: boolean
     onlineDiscountAmount?: number | null | undefined
     stockStatus?: string | null | undefined
     className?: string
     children?: React.ReactNode
 }
 
-export function ProductPrice({ price, originalPrice, listPrice, salePrice, priceDisplay, onlineDiscountAmount, stockStatus, className, children }: ProductPriceProps) {
+export function ProductPrice({ price, originalPrice, listPrice, salePrice, priceDisplay, onlineDiscountAmount, displayVoucherOnly = false, stockStatus, className, children }: ProductPriceProps) {
     const [installOption, setInstallOption] = useState<InstallOption>('none')
 
     const installationFee = getInstallationFee(installOption)
@@ -94,7 +95,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
                             {/* Right Content */}
                             <div className="flex-1 py-2.5 px-3 flex flex-col justify-center">
                                 <div className="text-[10px] font-bold text-orange-600/80 uppercase tracking-widest mb-0.5">
-                                    Độc quyền đặt Online
+                                    {displayVoucherOnly ? "Voucher đặt online" : "Độc quyền đặt Online"}
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-[13px] font-medium text-stone-600">Giảm thêm</span>
@@ -103,7 +104,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
                                     </span>
                                     <span className="text-[13px] font-medium text-stone-600">khi đặt Online</span>
                                 </div>
-                                {finalOnlinePrice !== null && <div className="text-[14px] font-bold text-emerald-800">Giá cuối online: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalOnlinePrice)}</div>}
+                                {!displayVoucherOnly && finalOnlinePrice !== null && <div className="text-[14px] font-bold text-emerald-800">Giá cuối online: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalOnlinePrice)}</div>}
                             </div>
                         </div>
                     )}

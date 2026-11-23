@@ -67,3 +67,12 @@ describe('ProductPrice', () => {
         expect(screen.queryByText(/950\.000/)).not.toBeInTheDocument()
     })
 })
+
+it('displays the canonical online voucher separately from the selling price', () => {
+    render(<ProductPrice price={900_000} originalPrice={1_000_000} listPrice={1_000_000} salePrice={900_000} priceDisplay={null}
+        onlineDiscountAmount={50_000} displayVoucherOnly stockStatus="in_stock" />)
+    expect(screen.getByText(/900\.000/)).toBeInTheDocument()
+    expect(screen.getByText('Voucher đặt online')).toBeInTheDocument()
+    expect(screen.getByText('50.000đ')).toBeInTheDocument()
+    expect(screen.queryByText(/850\.000|Giá cuối online/)).not.toBeInTheDocument()
+})

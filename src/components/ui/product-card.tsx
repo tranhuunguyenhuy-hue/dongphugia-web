@@ -77,6 +77,7 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
         compatibilityPrice: product.price,
         stockStatus: product.stock_status,
     });
+    const canonicalPricing = product.price_provenance === 'hita-exact-test';
     const onlineDiscount = Number(product.online_discount_amount);
     const finalOnlinePrice = commerce.priceMode === 'PUBLIC_PRICE'
         ? resolveFinalOnlinePrice(commerce.displayPrice, onlineDiscount) : null;
@@ -262,10 +263,10 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
                             </div>
                             {finalOnlinePrice !== null && (
                                 <span className="px-2 py-[5px] mt-0.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-[4px] leading-none whitespace-nowrap w-fit">
-                                    Giảm thêm {formatPrice(Number(product.online_discount_amount))}
+                                    {canonicalPricing ? "Voucher đặt online: " : ""}Giảm thêm {formatPrice(onlineDiscount)}
                                 </span>
                             )}
-                            {finalOnlinePrice !== null && <span className="text-[12px] font-bold text-emerald-800">Giá cuối online: {formatPrice(finalOnlinePrice)}</span>}
+                            {!canonicalPricing && finalOnlinePrice !== null && <span className="text-[12px] font-bold text-emerald-800">Giá cuối online: {formatPrice(finalOnlinePrice)}</span>}
                         </>
                     ) : (
                         <span className="font-semibold text-[14px] text-[#2E7A96] tracking-tight">

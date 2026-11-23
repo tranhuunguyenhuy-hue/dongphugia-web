@@ -70,7 +70,8 @@ export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
    }
    // #432: `?dong=` tags are honoured only together with a matching brand; anything else is dropped (the UI resets the URL via getSeriesFacet().dropped).
    const seriesSlugs=normalizeSeriesSelection(brandSlugs,parseSeriesParam(f.series_slugs).slugs).accepted
-   const live=await getLiveListing(category,listingSlug,page,size,{brandSlugs,featured:f.is_featured===true,seriesSlugs})
+   const live=await getLiveListing(category,listingSlug,page,size,{brandSlugs,featured:f.is_featured===true,seriesSlugs,
+    ...(f.sortBy==='price'?{priceSort:f.sortDir??'desc'}:{})})
    return {products:live.products,total:live.totalCount,totalPages:Math.max(1,Math.ceil(live.totalCount/size)),currentPage:page,page,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
   }
   throw new Error('PUBLIC_DATABASE_PRODUCT_QUERY_UNSUPPORTED')
