@@ -26,6 +26,7 @@ describe('Public route ownership baseline', () => {
       '/api/search',
       '/api/catalogue/listings/[categorySlug]/[listingSlug]',
       '/api/health',
+      '/api/orders',
     ])
     expect(PUBLIC_ROUTE_OWNERSHIP.every(({ owner }) => owner === 'public')).toBe(true)
   })

@@ -77,6 +77,9 @@ export async function createGuestOrder(
   deps: { binding?: OrderIntakeBinding; env?: NodeJS.ProcessEnv; connect?: (connectionString: string) => Promise<{ query: (text: string, values: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>; end: () => Promise<unknown> }> } = {},
 ): Promise<OrderIntakeResult> {
   if (!orderIntakeEnabled(deps.env)) return fail('ORDER_INTAKE_DISABLED', 404, 'Not found.')
+  // Browsers always send Origin on cross-site POSTs: refuse any that is not this deployment (CSRF-style submissions).
+  const origin = request.headers.get('origin')
+  if (origin !== null && origin !== new URL(request.url).origin) return fail('ORDER_ORIGIN_FORBIDDEN', 403, 'Yêu cầu không hợp lệ.')
   const idempotencyKey = request.headers.get('idempotency-key') ?? ''
   if (!IDEMPOTENCY_KEY.test(idempotencyKey)) return fail('INVALID_IDEMPOTENCY_KEY')
   const requestId = request.headers.get('x-request-id')

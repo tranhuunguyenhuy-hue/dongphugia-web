@@ -176,6 +176,20 @@ describe('Public Worker fail-closed policy', () => {
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/catalogue/listings/thiet-bi-bep/voi-rua-chen', { method: 'POST' }))).toBe('method-not-allowed')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/catalogue/listings/thiet-bi-bep/voi-rua-chen', { method: 'DELETE' }))).toBe('method-not-allowed')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/admin/export'))).toBe('not-found')
+    // #446: /api/orders is closed everywhere except the isolated TEST Preview that carries ORDER_INTAKE_DB.
+    const testPreview = { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: { connectionString: 'postgres://x' } }
+    const post = (url = 'https://preview.invalid/api/orders') => new Request(url, { method: 'POST' })
+    expect(classifyPublicApiRequest(post(), testPreview)).toBe('allow')
+    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/orders'), testPreview)).toBe('method-not-allowed')
+    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/orders', { method: 'PUT' }), testPreview)).toBe('method-not-allowed')
+    expect(classifyPublicApiRequest(post('https://preview.invalid/api/orders/1'), testPreview)).toBe('not-found')
+    expect(classifyPublicApiRequest(post('https://preview.invalid/api/orders/'), testPreview)).toBe('not-found')
+    for (const closed of [
+      undefined, {}, { APP_ENV: 'production', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: {} },
+      { APP_ENV: 'preview', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: {} },
+      { APP_ENV: 'staging', ORDER_INTAKE_DB: {} }, { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'false', ORDER_INTAKE_DB: {} },
+      { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true' }, { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: null },
+    ]) expect(classifyPublicApiRequest(post(), closed), JSON.stringify(closed)).toBe('not-found')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/thiet-bi-bep/voi-rua-chen'))).toBe('not-api')
   })
 })

@@ -54,6 +54,14 @@ describe('guest order intake (#446)', () => {
     expect(db.connect).not.toHaveBeenCalled()
     expect(parseOrderRequest({ ...body, items: Array.from({ length: 21 }, (_, i) => ({ productId: i + 1, sku: 'S', quantity: 1 })) })).toEqual({ ok: false, code: 'INVALID_INPUT' })
   })
+  it('refuses cross-origin submissions before touching the database', async () => {
+    const db = connectReturning({})
+    const cross = new Request('https://x.test/api/orders', { method: 'POST', headers: { 'idempotency-key': 'key-12345678', origin: 'https://evil.example' }, body: JSON.stringify(body) })
+    expect(await createGuestOrder(cross, { env, binding, connect: db.connect })).toMatchObject({ ok: false, status: 403 })
+    const same = new Request('https://x.test/api/orders', { method: 'POST', headers: { 'idempotency-key': 'key-12345678', origin: 'https://x.test' }, body: JSON.stringify(body) })
+    expect(await createGuestOrder(same, { env, binding, connect: connectReturning({ order_number: 'DPG-2', status: 'pending', payment_status: 'unpaid' }).connect })).toMatchObject({ ok: true })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
   it('rejects oversized bodies and reports a missing binding as unavailable', async () => {
     expect(await createGuestOrder(request('x'.repeat(20_000)), { env, binding })).toMatchObject({ status: 413 })
     expect(await createGuestOrder(request(body), { env, binding: undefined, connect: connectReturning({}).connect }).catch(() => null)).not.toBeNull()
