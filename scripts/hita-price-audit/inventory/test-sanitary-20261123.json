@@ -3,816 +3,952 @@
   "id": 3,
   "sku": "UAT-MWLVE786",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "UAT SP mwlve786"
  },
  {
   "id": 4,
   "sku": "UAT-MWLW03FU",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "UAT SP mwlw03fu"
  },
  {
   "id": 205,
   "sku": "LT700CTR#W",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Chậu Lavabo Đặt Bàn TOTO LT700CTR"
  },
  {
   "id": 207,
   "sku": "LT533R#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Chậu Lavabo Bán Âm Bàn TOTO LT533R"
  },
  {
   "id": 232,
   "sku": "LT328C#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Chậu lavabo treo tường TOTO LT328C"
  },
  {
   "id": 233,
   "sku": "LHT328C#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Chậu lavabo treo tường TOTO LHT328C chân lửng"
  },
  {
   "id": 248,
   "sku": "AC-4005VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bồn cầu 1 khối INAX AC-4005VN (AC4005VN) nắp đóng êm"
  },
  {
   "id": 249,
   "sku": "AC-2700VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bồn cầu 1 khối INAX AC-2700VN (AC2700VN) nắp đóng êm"
  },
  {
   "id": 262,
   "sku": "AC-959VAN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bồn cầu 1 khối INAX AC-959VAN (AC959VAN) nắp đóng êm"
  },
  {
   "id": 555,
   "sku": "BFV-3415T",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bộ sen tắm cây nhiệt độ INAX BFV-3415T (BFV3415T)"
  },
  {
   "id": 564,
   "sku": "BFV-655T",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sen tắm cây nhiệt độ INAX BFV-655T (BFV655T)"
  },
  {
   "id": 567,
   "sku": "BFV-639T",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sen tắm cây nhiệt độ INAX BFV-639T (BFV639T)"
  },
  {
   "id": 590,
   "sku": "TVLC101NSR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Vòi lavabo lạnh TOTO TVLC101NSR"
  },
  {
   "id": 592,
   "sku": "TVLM105CR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Vòi lavabo nóng lạnh CRES TOTO TVLM105CR"
  },
  {
   "id": 598,
   "sku": "TLG04304V",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Vòi lavabo nóng lạnh GA TOTO TLG04304V"
  },
  {
   "id": 677,
   "sku": "CS320DRT3#W",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bồn cầu 2 khối TOTO CS320DRT3 kèm nắp đóng êm TC385VS"
  },
  {
   "id": 1289,
   "sku": "119198",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Combo sen vòi cao cấp và phụ kiện SMC Essence GROHE 119198"
  },
  {
   "id": 1311,
   "sku": "CF-1032VS/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Nắp đóng êm INAX CF-1032VS/BW1"
  },
  {
   "id": 1822,
   "sku": "AC-952+CW-H18VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Bồn cầu treo tường nắp điện tử INAX AC-952 + CW-H18VN"
  },
  {
   "id": 2972,
   "sku": "DN8060",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Ghế phòng tắm MOEN DN8060"
  },
  {
   "id": 6106,
   "sku": "FX-M3-001",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 1"
  },
  {
   "id": 6107,
   "sku": "FX-M3-002",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 2"
  },
  {
   "id": 6108,
   "sku": "FX-M3-003",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 3"
  },
  {
   "id": 6109,
   "sku": "FX-M3-004",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 4"
  },
  {
   "id": 6110,
   "sku": "FX-M3-005",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 5"
  },
  {
   "id": 6111,
   "sku": "FX-M3-006",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 6"
  },
  {
   "id": 6112,
   "sku": "FX-M3-007",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 7"
  },
  {
   "id": 6113,
   "sku": "FX-M3-008",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 8"
  },
  {
   "id": 6114,
   "sku": "FX-M3-009",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 9"
  },
  {
   "id": 6115,
   "sku": "FX-M3-010",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 10"
  },
  {
   "id": 6116,
   "sku": "FX-M3-011",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 11"
  },
  {
   "id": 6117,
   "sku": "FX-M3-012",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 12"
  },
  {
   "id": 6118,
   "sku": "FX-M3-013",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 13"
  },
  {
   "id": 6119,
   "sku": "FX-M3-014",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 14"
  },
  {
   "id": 6120,
   "sku": "FX-M3-015",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 15"
  },
  {
   "id": 6121,
   "sku": "FX-M3-016",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 16"
  },
  {
   "id": 6122,
   "sku": "FX-M3-017",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 17"
  },
  {
   "id": 6123,
   "sku": "FX-M3-018",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 18"
  },
  {
   "id": 6124,
   "sku": "FX-M3-019",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 19"
  },
  {
   "id": 6125,
   "sku": "FX-M3-020",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 20"
  },
  {
   "id": 6126,
   "sku": "FX-M3-021",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 21"
  },
  {
   "id": 6127,
   "sku": "FX-M3-022",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 22"
  },
  {
   "id": 6128,
   "sku": "FX-M3-023",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 23"
  },
  {
   "id": 6129,
   "sku": "FX-M3-024",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 24"
  },
  {
   "id": 6130,
   "sku": "FX-M3-025",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 25"
  },
  {
   "id": 6131,
   "sku": "FX-M3-026",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 26"
  },
  {
   "id": 6132,
   "sku": "FX-M3-027",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 27"
  },
  {
   "id": 6133,
   "sku": "FX-M3-028",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 28"
  },
  {
   "id": 6134,
   "sku": "FX-M3-029",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 29"
  },
  {
   "id": 6135,
   "sku": "FX-M3-030",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 30"
  },
  {
   "id": 6136,
   "sku": "FX-M3-031",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 31"
  },
  {
   "id": 6137,
   "sku": "FX-M3-032",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 32"
  },
  {
   "id": 6138,
   "sku": "FX-M3-033",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 33"
  },
  {
   "id": 6139,
   "sku": "FX-M3-034",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 34"
  },
  {
   "id": 6140,
   "sku": "FX-M3-035",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 35"
  },
  {
   "id": 6141,
   "sku": "FX-M3-036",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 36"
  },
  {
   "id": 6142,
   "sku": "FX-M3-037",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 37"
  },
  {
   "id": 6143,
   "sku": "FX-M3-038",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 38"
  },
  {
   "id": 6144,
   "sku": "FX-M3-039",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 39"
  },
  {
   "id": 6145,
   "sku": "FX-M3-040",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 40"
  },
  {
   "id": 6146,
   "sku": "FX-M3-041",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 41"
  },
  {
   "id": 6147,
   "sku": "FX-M3-042",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 42"
  },
  {
   "id": 6148,
   "sku": "FX-M3-043",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 43"
  },
  {
   "id": 6149,
   "sku": "FX-M3-044",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 44"
  },
  {
   "id": 6150,
   "sku": "FX-M3-045",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 45"
  },
  {
   "id": 6151,
   "sku": "FX-M3-046",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 46"
  },
  {
   "id": 6152,
   "sku": "FX-M3-047",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 47"
  },
  {
   "id": 6153,
   "sku": "FX-M3-048",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 48"
  },
  {
   "id": 6154,
   "sku": "FX-M3-049",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 49"
  },
  {
   "id": 6155,
   "sku": "FX-M3-050",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 50"
  },
  {
   "id": 6156,
   "sku": "FX-M3-051",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 51"
  },
  {
   "id": 6157,
   "sku": "FX-M3-052",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 52"
  },
  {
   "id": 6158,
   "sku": "FX-M3-053",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 53"
  },
  {
   "id": 6159,
   "sku": "FX-M3-054",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 54"
  },
  {
   "id": 6160,
   "sku": "FX-M3-055",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 55"
  },
  {
   "id": 6161,
   "sku": "FX-M3-056",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 56"
  },
  {
   "id": 6162,
   "sku": "FX-M3-057",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Sản phẩm pilot M3 57"
  },
  {
   "id": 6163,
   "sku": "FX-M3-058",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "UI pilot 1795028381119"
  },
  {
   "id": 6164,
   "sku": "FX-M3-059",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "UI pilot 1795028312672"
  },
  {
   "id": 6165,
   "sku": "FX-M3-060",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "UI pilot 1795028357312"
  },
  {
   "id": 6194,
   "sku": "TLG11201B",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B"
  },
  {
   "id": 6195,
   "sku": "TLG11201B#PN",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#PN"
  },
  {
   "id": 6196,
   "sku": "TLG11201B#BN",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#BN"
  },
  {
   "id": 6197,
   "sku": "TLG11201B#PFG",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#PFG"
  },
  {
   "id": 6198,
   "sku": "TLG11201B#BFG",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#BFG"
  },
  {
   "id": 6199,
   "sku": "TLG11201B#PBR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#PBR"
  },
  {
   "id": 6200,
   "sku": "TLG11201B#BBR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#BBR"
  },
  {
   "id": 6201,
   "sku": "TLG11201B#MBL",
   "is_active": false,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11201B#MBL"
  },
  {
   "id": 6202,
   "sku": "FX-XBRAND-001",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "PREVIEW-SYNTHETIC FX-XBRAND-001"
  },
  {
   "id": 6203,
   "sku": "FX-XSUB-001",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO FX-XSUB-001"
  },
  {
   "id": 6204,
   "sku": "CS735DE2#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DE2#XW"
  },
  {
   "id": 6205,
   "sku": "CS735DE4#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DE4#XW"
  },
  {
   "id": 6206,
   "sku": "CS735DT3#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DT3#XW"
  },
  {
   "id": 6207,
   "sku": "CS735DT2#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DT2#XW"
  },
  {
   "id": 6208,
   "sku": "CS735DT8#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DT8#XW"
  },
  {
   "id": 6209,
   "sku": "CS735DW14#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DW14#XW"
  },
  {
   "id": 6210,
   "sku": "CS735DT10#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DT10#XW"
  },
  {
   "id": 6211,
   "sku": "CS735DW16#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DW16#XW"
  },
  {
   "id": 6212,
   "sku": "CS735DW11#XW",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DW11#XW"
  },
  {
   "id": 6213,
   "sku": "CS735DW7#XW",
   "is_active": false,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DW7#XW"
  },
  {
   "id": 6214,
   "sku": "CS735DW6#XW",
   "is_active": false,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO CS735DW6#XW"
  },
  {
   "id": 6215,
   "sku": "TLG11307BA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11307BA"
  },
  {
   "id": 6216,
   "sku": "TLG11308BA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG11308BA"
  },
  {
   "id": 6217,
   "sku": "TLG07301V",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG07301V"
  },
  {
   "id": 6218,
   "sku": "TLG07303V",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG07303V"
  },
  {
   "id": 6219,
   "sku": "TLG02310BB",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG02310BB"
  },
  {
   "id": 6220,
   "sku": "TLG08301V",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG08301V"
  },
  {
   "id": 6221,
   "sku": "TX109LD",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TX109LD"
  },
  {
   "id": 6222,
   "sku": "TLG08308BA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG08308BA"
  },
  {
   "id": 6223,
   "sku": "TLG08308BA#BN",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TLG08308BA#BN"
  },
  {
   "id": 6224,
   "sku": "TBG11303V",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG11303V"
  },
  {
   "id": 6225,
   "sku": "TBG07302VA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA"
  },
  {
   "id": 6226,
   "sku": "TBG07303VA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07303VA"
  },
  {
   "id": 6227,
   "sku": "TBG02303BA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG02303BA"
  },
  {
   "id": 6228,
   "sku": "TBG07302VA/TBW01010A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/TBW01010A"
  },
  {
   "id": 6229,
   "sku": "TBG07302VA/TBW02005A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/TBW02005A"
  },
  {
   "id": 6230,
   "sku": "TBG07302VA/TBW02006A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/TBW02006A"
  },
  {
   "id": 6231,
   "sku": "TBG07302VA/TBW02017A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/TBW02017A"
  },
  {
   "id": 6232,
   "sku": "TBG07302VA/DGH104ZR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/DGH104ZR"
  },
  {
   "id": 6233,
   "sku": "TBG07302VA/DGH108ZR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/DGH108ZR"
  },
  {
   "id": 6234,
   "sku": "TBG07302VA/TBW01008A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBG07302VA/TBW01008A"
  },
  {
   "id": 6235,
   "sku": "TBW01001BA",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBW01001BA"
  },
  {
   "id": 6236,
   "sku": "TBW01001BA/TBS02302V/TBW01008A",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBW01001BA/TBS02302V/TBW01008A"
  },
  {
   "id": 6237,
   "sku": "TBW01001BA/TBG01302VA/DGH108ZR",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "TOTO TBW01001BA/TBG01302VA/DGH108ZR"
  },
  {
   "id": 6238,
   "sku": "AC-G216VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX AC-G216VN/BW1"
  },
  {
   "id": 6239,
   "sku": "AC-G216VN/BKG-DEN",
   "is_active": false,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX AC-G216VN/BKG-DEN"
  },
  {
   "id": 6240,
   "sku": "ACT-902VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902VN/BW1"
  },
  {
   "id": 6241,
   "sku": "ACT-902+CW-S15VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-S15VN/BW1"
  },
  {
   "id": 6242,
   "sku": "ACT-902+CW-S32VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-S32VN/BW1"
  },
  {
   "id": 6243,
   "sku": "ACT-902+CW-H17VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-H17VN/BW1"
  },
  {
   "id": 6244,
   "sku": "ACT-902+CW-H18VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-H18VN/BW1"
  },
  {
   "id": 6245,
   "sku": "ACT-902+CW-KB22AVN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-KB22AVN/BW1"
  },
  {
   "id": 6246,
   "sku": "ACT-902+CW-KA22AVN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-KA22AVN/BW1"
  },
  {
   "id": 6247,
   "sku": "ACT-902+CW-H20VN/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "INAX ACT-902+CW-H20VN/BW1"
  },
  {
   "id": 7463,
   "sku": "AL-296VEC/BW1",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Chậu rửa lavabo đặt bàn INAX AL-296VEC (AL296VEC) men Aqua Ceramic"
  },
  {
   "id": 9222,
   "sku": "2557-VN",
   "is_active": true,
-  "category": "thiet-bi-ve-sinh"
+  "category": "thiet-bi-ve-sinh",
+  "name": "Thân vòi INAX B-2557-VN@401"
  }
 ]
