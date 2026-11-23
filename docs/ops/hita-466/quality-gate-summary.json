@@ -1,0 +1,19 @@
+{
+  "file": "codex/448-toto-hita-review@98e3101b9ab0c9fca9a84c260d3a923a67b10626:docs/ops/hita-448/toto/toto_prices_review.csv",
+  "sha256": "b795853e7964ef78d8cf09a81afb14615d99c1924629897d70503084b1d81159",
+  "gate_run_at_utc": "2026-11-23T18:53:36.000Z",
+  "max_age_hours": 24,
+  "inventory_rows": 4441,
+  "rows": 4441,
+  "file_issues": [],
+  "by_class": {
+    "ELIGIBLE_NO_PRICE": 11,
+    "ELIGIBLE_PRICED": 132,
+    "UNRESOLVED": 4298
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 0,
+  "eligible_priced_with_warnings": 0,
+  "fail_by_code": {},
+  "warn_by_code": {}
+}
