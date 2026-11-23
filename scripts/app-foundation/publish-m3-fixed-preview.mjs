@@ -5,7 +5,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-public-diagnostics.mjs'
 import { digestEnvironmentWorkerArtifact } from './environment-worker-artifact-digest.mjs'
-import { validateM3FixedPreviewConfig } from './m3-fixed-preview-config.mjs'
+import { expectedHyperdriveBindings, validateM3FixedPreviewConfig } from './m3-fixed-preview-config.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
 import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
 
@@ -177,7 +177,7 @@ async function main() {
   const configText = await readFile(join(root, 'wrangler.m3-fixed-preview.json'), 'utf8')
   assert.equal(createHash('sha256').update(configText).digest('hex'), meta.configSha256)
   const config = JSON.parse(configText)
-  validateM3FixedPreviewConfig(config, { sourceSha, publicHyperdriveId: meta.hyperdrive.public.id, adminHyperdriveId: meta.hyperdrive.admin.id })
+  validateM3FixedPreviewConfig(config, { sourceSha, publicHyperdriveId: meta.hyperdrive.public.id, adminHyperdriveId: meta.hyperdrive.admin.id, orderIntakeHyperdriveId: meta.hyperdrive.orderIntake?.id })
   assert.deepEqual(await digestEnvironmentWorkerArtifact(join(root, 'combined/public/server')), meta.hashes.publicServer)
   assert.deepEqual(await digestEnvironmentWorkerArtifact(join(root, 'combined/admin/server')), meta.hashes.adminServer)
   assert.deepEqual(await digestEnvironmentWorkerArtifact(join(root, 'combined/assets')), meta.hashes.assets)
@@ -196,7 +196,7 @@ async function main() {
   assert.equal(before.subdomain.enabled, true)
   assert.equal(before.subdomain.previews_enabled, true, 'M3_PREVIEW_URLS_ALREADY_ENABLED_REQUIRED')
   const productionHyperdrives = (await cf(`/workers/scripts/${FIXED_PREVIEW_WORKER}/settings`)).bindings.filter(b => b.type === 'hyperdrive').map(b => String(b.id || b.config_id || '').toLowerCase())
-  for (const id of [meta.hyperdrive.public.id, meta.hyperdrive.admin.id]) assert.ok(!productionHyperdrives.includes(id.toLowerCase()), 'M3_PRODUCTION_HYPERDRIVE_REUSE_FORBIDDEN')
+  for (const { id } of expectedHyperdriveBindings(meta)) assert.ok(!productionHyperdrives.includes(id.toLowerCase()), 'M3_PRODUCTION_HYPERDRIVE_REUSE_FORBIDDEN')
   phase = 'CI_ACCESS'
   const service = await cf('/access/service_tokens', 'POST', { name: `M3-staging-ci-${process.env.GITHUB_RUN_ID}`, duration: '1h' })
   tokenId = service.id
@@ -246,12 +246,12 @@ async function main() {
   const deployedEnv = deployment.env || Object.fromEntries((deployment.bindings || []).map(binding => [binding.name, binding]))
   const expectedVars = config.previews.vars
   assert.equal(deployedEnv.ASSETS?.type, 'assets', 'M3_ASSETS_BINDING_REQUIRED')
-  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', 'PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'ADMIN_API_HMAC_SECRET', 'IMAGES', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
+  assert.deepEqual(Object.keys(deployedEnv).sort(), ['ASSETS', ...expectedHyperdriveBindings(meta).map(b => b.name), 'ADMIN_PREVIEW_MEDIA_KEY', 'REVALIDATE_SECRET', 'ADMIN_API_HMAC_SECRET', 'IMAGES', ...Object.keys(expectedVars)].sort(), 'M3_PREVIEW_BINDING_ISOLATION')
   assert.equal(deployedEnv.IMAGES?.type, 'images', 'M3_IMAGES_BINDING_REQUIRED')
-  assert.equal(deployedEnv.PUBLIC_DB?.type, 'hyperdrive'); assert.equal(deployedEnv.HYPERDRIVE_ADMIN_NO_CACHE?.type, 'hyperdrive')
+  for (const { name } of expectedHyperdriveBindings(meta)) assert.equal(deployedEnv[name]?.type, 'hyperdrive')
   for (const [name, value] of Object.entries(expectedVars)) { assert.equal(deployedEnv[name]?.type, 'plain_text'); assert.equal(deployedEnv[name]?.text, value) }
   evidence.hyperdriveReadback = {}
-  for (const [name, expected] of [['PUBLIC_DB', meta.hyperdrive.public.id], ['HYPERDRIVE_ADMIN_NO_CACHE', meta.hyperdrive.admin.id]]) {
+  for (const { name, id: expected } of expectedHyperdriveBindings(meta)) {
     const actual = deployedEnv[name]?.id ?? deployedEnv[name]?.config_id ?? deployedEnv[name]?.hyperdrive_id
     if (actual !== undefined) assert.equal(String(actual).toLowerCase(), expected.toLowerCase(), 'M3_HYPERDRIVE_ID_READBACK_MISMATCH')
     evidence.hyperdriveReadback[name] = actual === undefined ? 'ID_NOT_EXPOSED_BY_PROVIDER' : 'EXACT_MATCH'
