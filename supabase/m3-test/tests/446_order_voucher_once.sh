@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# #446: isolated local PostgreSQL proof that 007/008 (TEST) deduct the online voucher exactly once and keep other
+# #446: isolated local PostgreSQL proof that 007/008/009 (TEST) deduct the online voucher exactly once and keep other
 # categories on the legacy branch; also proves rollback. Never point this at a hosted project.
 # Usage: 446_order_voucher_once.sh <host-or-socket-dir> <port> <user>
 set -euo pipefail
@@ -11,9 +11,25 @@ trap '"${PSQL[@]}" -d postgres -c "drop database if exists $DB" >/dev/null 2>&1 
 drop_roles
 "${PSQL[@]}" -d postgres -c "create database $DB"
 Q=("${PSQL[@]}" -d "$DB")
+# The hosted function owner is a NON-superuser: function files run as that role so FORCE RLS and grants apply to it.
+Qo=(env PGOPTIONS="-c role=dpg_order_intake_function_owner" "${Q[@]}")
 "${Q[@]}" -f supabase/m3-test/tests/446_synthetic_fixture.sql
 "${Q[@]}" -f supabase/m3-test/006_hita_canonical_price_pilot.sql
-"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql   # installs the ORIGINAL function definition
+# Hosted state before 007/008/009: owner holds only the legacy column grants, products has an owner policy, categories has NONE (FORCE RLS).
+"${Q[@]}" <<'SQL'
+grant usage on schema public, dpg_app, dpg_control to dpg_order_intake_function_owner;
+grant create on schema public to dpg_order_intake_function_owner;
+grant select on dpg_control.target_contract to dpg_order_intake_function_owner;
+grant execute on all functions in schema dpg_control, dpg_app to dpg_order_intake_function_owner;
+grant select (id, sku, name, price, original_price, list_price, sale_price, online_discount_amount, stock_status, price_source, source_system,
+  price_state, price_confidence, price_updated_at, is_active, publication_status, pdp_visibility, sellable_status) on dpg_app.products to dpg_order_intake_function_owner;
+grant select, insert, update, delete on dpg_app.orders, dpg_app.order_items, dpg_app.guest_order_idempotency_records, dpg_app.guest_order_rate_limit_windows to dpg_order_intake_function_owner;
+grant usage on all sequences in schema dpg_app to dpg_order_intake_function_owner;
+alter table dpg_app.products enable row level security; alter table dpg_app.products force row level security;
+create policy phase2_guest_products_select_public on dpg_app.products for select to dpg_order_intake_function_owner using (is_active);
+alter table dpg_app.categories enable row level security; alter table dpg_app.categories force row level security;
+SQL
+"${Qo[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql   # installs the ORIGINAL function definition (owned by the non-superuser owner)
 "${Q[@]}" <<'SQL'
 create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
 insert into dpg_app.products(id,sku,name,category_id,price,list_price,sale_price,original_price,online_discount_amount,stock_status,price_source,source_system,price_state,price_confidence,price_updated_at,regular_price_vnd,promotional_price_vnd,online_voucher_amount_vnd) values
@@ -25,8 +41,16 @@ SQL
 echo "PASS pre-008 gap confirmed"
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants.sql
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants.sql   # idempotent
-"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql
-"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql         # idempotent
+"${Qo[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql
+"${Qo[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql         # idempotent
+# Without 009 the owner sees no category under FORCE RLS: the canonical branch is skipped (Fixed Staging run 59 failure).
+"${Q[@]}" <<'SQL'
+create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
+select pg_temp.assert(public.guest_order_request_create('{"customer_name":"T","customer_phone":"0900000011","items":[{"productId":1,"sku":"VS-1","quantity":1}]}','rls-gap-key-0001')->>'error'='PRODUCT_REQUIRES_QUOTE','RLS gap reproduced: owner cannot see categories');
+SQL
+echo "PASS RLS gap reproduced (008 without 009: canonical SKU still quote-only)"
+"${Q[@]}" -f supabase/m3-test/009_hita_order_intake_categories_rls.sql
+"${Q[@]}" -f supabase/m3-test/009_hita_order_intake_categories_rls.sql     # idempotent
 "${Q[@]}" <<'SQL'
 create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
 create function pg_temp.mk(phone text, k text, items jsonb) returns jsonb language sql as
@@ -77,7 +101,9 @@ select (:'created')::boolean and (select count(*) = 1 from dpg_app.orders where 
 select 1 / (case when :'ok'::boolean then 1 else 0 end) as login_role_path; -- division by zero (script fails) when the order was not created correctly
 SQL
 echo "PASS login role (SET only, no INHERIT): direct EXECUTE denied, BEGIN/SET LOCAL ROLE/RPC/COMMIT creates the order"
-"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql
+"${Qo[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql
+"${Q[@]}" -f supabase/m3-test/009_hita_order_intake_categories_rls_rollback.sql
+"${Q[@]}" -f supabase/m3-test/009_hita_order_intake_categories_rls_rollback.sql
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql
 "${Q[@]}" <<'SQL'
