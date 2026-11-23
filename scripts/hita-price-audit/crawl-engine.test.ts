@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Blocked, politeFetch, runBatch, reusable, type CrawlResult, type FetchText } from './crawl-engine.mts'
+import { Blocked, checkRobots, politeFetch, runBatch, reusable, type CrawlResult, type FetchText } from './crawl-engine.mts'
 
 const sku = 'LT533R#XW'
 const pdp = `<div class="product-detail"><div class="product-column-right"><span class="product-code-location">${sku}</span>
@@ -80,5 +80,14 @@ describe('#448 polite fetch', () => {
     const impl = vi.fn(async () => resp(500, { 'content-type': 'text/html' }))
     await expect(politeFetch({ minIntervalMs: 0, fetchImpl: impl as unknown as typeof fetch })(new URL('https://hita.com.vn/x'), 'text/html')).rejects.not.toBeInstanceOf(Blocked)
     expect(impl).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('#448 robots gate', () => {
+  it('passes an empty/allow-all robots.txt, stops on a restriction or a block', async () => {
+    expect(await checkRobots(async () => 'User-agent: *\nDisallow:\n')).toBeNull()
+    expect(await checkRobots(async () => 'User-agent: *\nDisallow: /product/\n')).toBe('ROBOTS_POLICY_REVIEW_REQUIRED')
+    expect(await checkRobots(async () => 'Crawl-delay: 10\n')).toBe('ROBOTS_POLICY_REVIEW_REQUIRED')
+    expect(await checkRobots(async () => { throw new Blocked('HTTP_403_OR_CHALLENGE') })).toBe('HTTP_403_OR_CHALLENGE')
   })
 })

@@ -40,6 +40,16 @@ export async function crawlOne(row: InventoryRow, fetchText: FetchText, now: () 
   }
 }
 
+// robots.txt gate (same rule as the #450 pilot): a block, or any non-empty Disallow/Crawl-delay, stops the run for review.
+export async function checkRobots(fetchText: FetchText): Promise<string | null> {
+  try {
+    const robots = await fetchText(new URL('https://hita.com.vn/robots.txt'), 'text/plain')
+    return /^\s*(?:Disallow|Crawl-delay)\s*:\s*[^\s#]/im.test(robots) ? 'ROBOTS_POLICY_REVIEW_REQUIRED' : null
+  } catch (error) {
+    return error instanceof Error ? error.message : 'ROBOTS_UNAVAILABLE'
+  }
+}
+
 // Reuse rule on resume: a TERMINAL result younger than the TTL is kept; BLOCKED/UNKNOWN or stale results are crawled again.
 export function reusable(previous: CrawlResult | undefined, ttlMs: number, now: Date) {
   if (!previous || !TERMINAL.has(previous.status) || !previous.retrieved_at_utc) return false

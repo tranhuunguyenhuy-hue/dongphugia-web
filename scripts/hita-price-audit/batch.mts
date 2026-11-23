@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { planScope, validateInventory } from './batch-plan.mts'
-import { politeFetch, runBatch, type CrawlResult } from './crawl-engine.mts'
+import { checkRobots, politeFetch, runBatch, type CrawlResult } from './crawl-engine.mts'
 import { desiredPrices } from './pricing-policy.mts'
 
 // #448 batch crawler: Hita public pages, EXACT SKU only, polite (1 req/s), checkpointed and resumable.
@@ -20,9 +20,11 @@ try { for (const line of (await readFile(checkpointPath, 'utf8')).split('\n').fi
 
 const requestLog: unknown[] = []  // sanitized: path, status, duration only
 const startedAt = new Date().toISOString()
-const run = await runBatch({
+const fetchText = politeFetch({ minIntervalMs: Number(values['min-interval-ms']), log: entry => requestLog.push(entry) })
+const robotsStop = await checkRobots(fetchText)
+const run = robotsStop ? { results: [] as CrawlResult[], crawled: 0, reused: 0, haltReason: robotsStop, remaining: scope.toCrawl.length } : await runBatch({
   rows: scope.toCrawl, previous, ttlMs: Number(values['ttl-hours']) * 3600_000, limit: Number(values.limit),
-  fetchText: politeFetch({ minIntervalMs: Number(values['min-interval-ms']), log: entry => requestLog.push(entry) }),
+  fetchText,
   onResult: async (result, reused) => { if (!reused) await appendFile(checkpointPath, JSON.stringify(result) + '\n') },
 })
 const rows = run.results
