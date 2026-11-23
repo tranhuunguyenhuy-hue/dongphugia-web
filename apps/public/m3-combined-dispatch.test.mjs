@@ -221,3 +221,12 @@ it('no longer serves the legacy Admin UI on staging: pages redirect to the new A
   expect(calls.admin).toHaveLength(0)
   expect(calls.public).toHaveLength(0)
 })
+
+it('passes the order-intake binding to Public only; Admin never receives it (#446)', async () => {
+  const { publicEnvironment, adminEnvironment } = await import('./m3-combined-dispatch.mjs')
+  const environment = { APP_ENV: 'staging', ORDER_INTAKE_DB: { connectionString: 'postgres://intake' }, PUBLIC_DB: { connectionString: 'postgres://read' }, HYPERDRIVE_ADMIN_NO_CACHE: { connectionString: 'postgres://admin' } }
+  expect(publicEnvironment(environment).ORDER_INTAKE_DB).toBe(environment.ORDER_INTAKE_DB)
+  expect(publicEnvironment(environment)).not.toHaveProperty('HYPERDRIVE_ADMIN_NO_CACHE')
+  expect(adminEnvironment(environment)).not.toHaveProperty('ORDER_INTAKE_DB')
+  expect(adminEnvironment(environment)).not.toHaveProperty('PUBLIC_DB')
+})

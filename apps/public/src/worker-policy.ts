@@ -194,9 +194,25 @@ export function isForbiddenInternalControlRequest(request: Request) {
 
 export type PublicApiRequestDecision = 'not-api' | 'allow' | 'not-found' | 'method-not-allowed'
 
-export function classifyPublicApiRequest(request: Request): PublicApiRequestDecision {
+/** #446: order intake exists ONLY on the isolated TEST Preview that carries the dedicated ORDER_INTAKE_DB binding.
+ * Production (or any environment without the binding/flags) keeps `/api/orders` closed as `not-found`. */
+export function orderIntakeAllowed(environment: Record<string, unknown> | undefined) {
+  return environment?.APP_ENV === 'staging'
+    && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
+    && typeof environment.ORDER_INTAKE_DB === 'object' && environment.ORDER_INTAKE_DB !== null
+}
+
+export function classifyPublicApiRequest(request: Request, environment?: Record<string, unknown>): PublicApiRequestDecision {
   const { pathname } = new URL(request.url)
   if (!pathname.startsWith('/api/')) return 'not-api'
+
+  if (pathname === '/api/orders') {
+    const ownsOrders = PUBLIC_ROUTE_OWNERSHIP.some((route) =>
+      route.owner === 'public' && route.path === '/api/orders' && route.purpose === 'guest-order-intake-isolated-test-only',
+    )
+    if (!ownsOrders || !orderIntakeAllowed(environment)) return 'not-found'
+    return request.method === 'POST' ? 'allow' : 'method-not-allowed'
+  }
 
   const ownsHealth = PUBLIC_ROUTE_OWNERSHIP.some((route) =>
     route.owner === 'public' && route.path === '/api/health' && route.purpose === 'runtime-probe',

@@ -31,6 +31,8 @@ export interface FieldDef {
   slugFrom?: string
   /** Extra permission needed (on top of the resource write permission) to change this field. */
   permission?: Permission
+  /** Column privileges come from a separate reviewed migration (e.g. supabase/m3-test/007_*), not from the generated resource grants. */
+  externalGrant?: boolean
   /** Form hint for new rows. */
   initial?: unknown
   /** Media fields: legacy upload route parameters (folder + processing profile). */
@@ -164,15 +166,31 @@ const customerHook: WriteHook = ({ mode }) => (mode === 'create' ? { set: { last
 
 /** Product rules (mirrors src/lib/product-actions.ts): a sale price needs a higher list price, and a product can only be
  * activated with a price (unless it is "contact for quote") and a main image. Identity (sku/slug) is create-only. */
-const PRICE_FIELDS = ['price', 'list_price', 'sale_price', 'stock_status', 'image_main_url', 'is_active']
+const PRICE_FIELDS = ['price', 'list_price', 'sale_price', 'regular_price_vnd', 'stock_status', 'image_main_url', 'is_active']
 const asNumber = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value))
+/** #446 canonical Hita price contract (category-agnostic validation; scope to thiet-bi-ve-sinh is a data/import rule).
+ * Whole positive VND: 0 < promotional < regular; 0 < voucher < (promotional ?? regular); promotional/voucher need a regular price. */
+export const CANONICAL_PRICE_FIELDS = ['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd'] as const
+export function assertCanonicalPrices(final: Record<string, unknown>): void {
+  const read = (name: string): number | null => {
+    const value = final[name]
+    if (value === null || value === undefined || value === '') return null
+    const n = Number(value)
+    if (!Number.isSafeInteger(n) || n < 1) throw new ApiError(400, 'PRICE_RELATION_INVALID', [name])
+    return n
+  }
+  const regular = read('regular_price_vnd'), promo = read('promotional_price_vnd'), voucher = read('online_voucher_amount_vnd')
+  if (promo !== null && (regular === null || promo >= regular)) throw new ApiError(400, 'PRICE_RELATION_INVALID', ['promotional_price_vnd', 'regular_price_vnd'])
+  if (voucher !== null && (regular === null || voucher >= (promo ?? regular))) throw new ApiError(400, 'VOUCHER_INVALID', ['online_voucher_amount_vnd'])
+}
 const productHook: WriteHook = ({ mode, existing, input }) => {
   if (mode === 'delete') return undefined
   const final: Record<string, unknown> = { ...(existing ?? {}), ...input }
+  if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) assertCanonicalPrices(final)
   const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
   if (sale !== null && (list === null || sale >= list)) throw new ApiError(400, 'SALE_PRICE_INVALID', ['sale_price', 'list_price'])
   if (final.is_active === true && (mode === 'create' || PRICE_FIELDS.some((field) => field in input))) {
-    if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
+    if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
     if (typeof final.image_main_url !== 'string' || final.image_main_url.trim() === '') throw new ApiError(400, 'IMAGE_REQUIRED', ['image_main_url'])
   }
   return undefined
@@ -470,6 +488,9 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'list_price', label: 'Giá niêm yết', kind: 'money', min: 0.01, nullable: true, permission: 'commerce:write' },
       { name: 'sale_price', label: 'Giá khuyến mãi', kind: 'money', min: 0.01, nullable: true, permission: 'commerce:write' },
       { name: 'online_discount_amount', label: 'Giảm giá online', kind: 'money', nullable: true, permission: 'commerce:write' },
+      { name: 'regular_price_vnd', label: 'Giá gốc (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'promotional_price_vnd', label: 'Giá khuyến mãi (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'online_voucher_amount_vnd', label: 'Voucher online (VNĐ/sản phẩm)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'stock_status', label: 'Tồn kho', kind: 'enum', options: ['in_stock', 'out_of_stock', 'discontinued', 'pre_order', 'contact'], initial: 'in_stock' },
       { name: 'warranty_months', label: 'Bảo hành (tháng)', kind: 'int', min: 1, max: 600, nullable: true },
       { name: 'image_main_url', label: 'Ảnh chính', kind: 'media', max: 1000, upload: { folder: 'products', profile: 'product' } },
@@ -572,5 +593,11 @@ export const RESOURCES: ResourceDef[] = [
 
 const REGISTRY = new Map(RESOURCES.map((resource) => [resource.key, resource]))
 export const resourceByKey = (key: string): ResourceDef | undefined => REGISTRY.get(key)
-export const writableFields = (def: ResourceDef) => def.fields.filter((field) => !field.readOnly && !field.virtual)
-export const columnFields = (def: ResourceDef) => def.fields.filter((field) => !field.virtual)
+/** Columns of `externalGrant` fields that exist AND are visible to the API role (probed per request window, see
+ * probeExternalColumns). Fail-safe default is empty, so a database without the #446 price columns (Production until
+ * #449) never selects or writes them and the same code runs unchanged there. */
+let externalColumns: ReadonlySet<string> = new Set()
+export const setExternalColumns = (names: Iterable<string>) => { externalColumns = new Set(names) }
+export const activeFields = (def: ResourceDef) => def.fields.filter((field) => !field.externalGrant || externalColumns.has(field.name))
+export const writableFields = (def: ResourceDef) => activeFields(def).filter((field) => !field.readOnly && !field.virtual)
+export const columnFields = (def: ResourceDef) => activeFields(def).filter((field) => !field.virtual)

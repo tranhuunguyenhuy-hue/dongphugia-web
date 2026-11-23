@@ -37,9 +37,9 @@ export function collectGrants(resources: readonly ResourceDef[], extra: readonly
   for (const def of resources) {
     const grant = entry(def.table)
     grant.select.add('id')
-    for (const field of def.fields) if (!field.virtual) grant.select.add(field.name)
+    for (const field of def.fields) if (!field.virtual && !field.externalGrant) grant.select.add(field.name)
     for (const name of def.existingColumns ?? []) grant.select.add(name)
-    const writable = def.fields.filter((field) => !field.readOnly && !field.virtual).map((field) => field.name)
+    const writable = def.fields.filter((field) => !field.readOnly && !field.virtual && !field.externalGrant).map((field) => field.name)
     if (def.write && def.create) {
       for (const name of writable) grant.insert.add(name)
       if (def.autoSlug) grant.insert.add(def.autoSlug.column)
@@ -49,7 +49,7 @@ export function collectGrants(resources: readonly ResourceDef[], extra: readonly
     const canUpdate = Boolean(def.write && def.update !== false)
     const softDelete = Boolean(def.write && def.delete === 'soft')
     if (canUpdate) {
-      for (const field of def.fields) if (!field.readOnly && !field.virtual && !field.createOnly) grant.update.add(field.name)
+      for (const field of def.fields) if (!field.readOnly && !field.virtual && !field.createOnly && !field.externalGrant) grant.update.add(field.name)
       for (const name of def.hookColumns ?? []) grant.update.add(name)
     }
     if (canUpdate || softDelete) { if (!def.noUpdatedAt) grant.update.add('updated_at'); if (def.versioned) grant.update.add('version') }

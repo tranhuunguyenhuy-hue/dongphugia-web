@@ -90,6 +90,8 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
     // Generic Admin resources: real table shapes + the generated grants/policies (guard needs the TEST-only schema).
     await owner.query(await readFile(path.join(root, 'supabase/functions/admin-api/test-fixtures/resources.sql'), 'utf8'))
     await owner.query((await readFile(path.join(root, 'supabase/m3-test/005_m3_test_admin_resources.sql'), 'utf8')).replace(/-- guard:begin[\s\S]*?-- guard:end\n/, ''))
+    // #446: canonical price column grants live in a separate reviewed migration (target guard needs the TEST-only schema).
+    await owner.query((await readFile(path.join(root, 'supabase/m3-test/007_hita_canonical_price_admin_grants.sql'), 'utf8')).replace(/-- guard:begin[\s\S]*?-- guard:end\n/, ''))
     await owner.query(`alter role ${apiRole} password '${apiPassword}'`)
     const apiUrl = new URL(superUrl); apiUrl.username = apiRole; apiUrl.password = apiPassword
     apiPool = new Pool({ connectionString: apiUrl.toString(), max: 4 })
@@ -629,16 +631,32 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { sale_price: 3000000 } }, { token: t }))).toBe('SALE_PRICE_INVALID')
         expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { is_active: true } }, { token: t }))).toBe('IMAGE_REQUIRED')
         expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 1, input: { name: 'Stale' } }, { token: t }))).toBe('VERSION_CONFLICT')
-        const cleared = await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { sale_price: null, list_price: null, brand_id: null, description: '' } }, { token: t })
-        expect(cleared.json.data).toMatchObject({ sale_price: null, list_price: null, brand_id: null, description: null, version: 3 })
+        // #446 canonical Hita prices: whole positive VND, promo < regular, voucher < (promo ?? regular), both need a regular price
+        const canon = (input: Record<string, unknown>, v: number) => call('PATCH', `/r/products/${id}`, { expected_version: v, input }, { token: t })
+        expect(code2(await canon({ promotional_price_vnd: 800000 }, 2))).toBe('PRICE_RELATION_INVALID') // no regular price
+        expect(code2(await canon({ regular_price_vnd: 1000000, promotional_price_vnd: 1000000 }, 2))).toBe('PRICE_RELATION_INVALID')
+        expect(code2(await canon({ regular_price_vnd: 1000000, promotional_price_vnd: 900000, online_voucher_amount_vnd: 900000 }, 2))).toBe('VOUCHER_INVALID')
+        expect(code2(await canon({ online_voucher_amount_vnd: 50000 }, 2))).toBe('VOUCHER_INVALID') // no regular price
+        expect(code2(await canon({ regular_price_vnd: 1000000.5 }, 2))).toBe('PRICE_RELATION_INVALID') // not whole VND
+        expect(code2(await canon({ regular_price_vnd: 0 }, 2))).toBe('VALIDATION_FAILED')
+        expect(code2(await canon({ regular_price_vnd: -5 }, 2))).toBe('VALIDATION_FAILED')
+        expect(code2(await call('PATCH', `/r/products/${id}`, { expected_version: 2, input: { regular_price_vnd: 1000000 } }, { token: sale }))).toBe('FORBIDDEN') // commerce:write only
+        const canonOk = await canon({ regular_price_vnd: 1000000, promotional_price_vnd: 900000, online_voucher_amount_vnd: 50000 }, 2)
+        expect(canonOk.status).toBe(200)
+        expect(canonOk.json.data).toMatchObject({ regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000', version: 3 })
+        // legacy columns untouched by the canonical write; GET confirms saved values
+        expect((await call('GET', `/r/products/${id}`, undefined, { token: t })).json.data).toMatchObject({ regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000', price: '2500000' })
+        expect((await canon({ promotional_price_vnd: null, online_voucher_amount_vnd: null }, 3)).json.data).toMatchObject({ regular_price_vnd: '1000000', promotional_price_vnd: null, online_voucher_amount_vnd: null, version: 4 })
+        const cleared = await call('PATCH', `/r/products/${id}`, { expected_version: 4, input: { sale_price: null, list_price: null, brand_id: null, description: '' } }, { token: t })
+        expect(cleared.json.data).toMatchObject({ sale_price: null, list_price: null, brand_id: null, description: null, version: 5 })
         // identity and untouched columns stay as they were
         expect((await owner.query('select sku, slug from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ sku: 'NEW-1', slug: 'bon-cau-moi' })
         expect((await call('GET', '/r/products?q=bon-cau-moi&category_id=1&is_active=false', undefined, { token: t })).json.data.total).toBe(1)
         const audit = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows
-        expect(audit.map((a) => a.action)).toEqual(['products.create', 'products.update', 'products.update'])
+        expect(audit.map((a) => a.action)).toEqual(['products.create', 'products.update', 'products.update', 'products.update', 'products.update'])
         expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: sale }))).toBe('FORBIDDEN')
         expect(code2(await call('DELETE', `/r/products/${id}`, {}, { token: t }))).toBe('VALIDATION_FAILED') // version required
-        expect((await call('DELETE', `/r/products/${id}`, { expected_version: 3 }, { token: t })).json.data.result).toBe('deleted')
+        expect((await call('DELETE', `/r/products/${id}`, { expected_version: 5 }, { token: t })).json.data.result).toBe('deleted')
         expect(code2(await call('DELETE', '/r/products/1', { expected_version: 1 }, { token: t }))).not.toBe('NOT_FOUND')
       })
 

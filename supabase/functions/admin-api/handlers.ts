@@ -1,7 +1,7 @@
 import { getPermissions, type AdminRole } from './permissions.ts'
 import { ApiError, type Context, type Db, type Session } from './core.ts'
 import * as commerce from './commerce-handlers.ts'
-import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, resourceMeta, updateResource } from './resource-handlers.ts'
+import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, probeExternalColumns, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
 import { loginSchema } from './validation.ts'
 
@@ -93,6 +93,7 @@ async function login(deps: Deps, ctx: Context, body: string) {
 }
 
 async function dispatchResource(deps: Deps, ctx: Context, method: string, key: string, tail: string | undefined, search: URLSearchParams, body: string) {
+  await probeExternalColumns(deps.db)
   const def = findResource(key)
   const rd = { db: deps.db, allowedMediaHosts: deps.allowedMediaHosts, hashPassword: deps.hashPassword }
   if (tail === 'options') { if (method === 'GET') return optionsResource(rd, ctx, def); throw new ApiError(404, 'NOT_FOUND') }
@@ -174,6 +175,7 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
       result = { status: 200, body: { data: { id: ctx.session.userId, email: ctx.session.email, name: ctx.session.name, role: ctx.session.role, permissions: getPermissions(ctx.session.role) } } }
     } else if (request.method === 'GET' && path === '/schema') {
       if (!ctx.session) throw new ApiError(401, 'UNAUTHENTICATED')
+      await probeExternalColumns(deps.db)
       result = { status: 200, body: { data: { resources: resourceMeta(ctx.session.role) } } }
     } else {
       const generic = path.match(/^\/r\/([a-z][a-z0-9-]{1,40})(?:\/(options|\d{1,9}))?$/)

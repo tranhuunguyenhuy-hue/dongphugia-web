@@ -315,3 +315,41 @@ describe('#432 series facet and variant siblings', () => {
     expect(mocks.readPublicRows).not.toHaveBeenCalled()
   })
 })
+
+describe('Hita pricing in the isolated TEST catalogue', () => {
+  const sanitary = { ...product, category_slug: 'thiet-bi-ve-sinh', listing_slug: 'bon-cau' }
+  const prices = { regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }
+  beforeEach(() => {
+    mocks.readPublicRows.mockReset()
+    vi.stubEnv('APP_ENV', 'staging')
+    vi.stubEnv('PREVIEW_TEST_DATABASE_ISOLATED', 'true')
+    return () => vi.unstubAllEnvs()
+  })
+
+  it('reads the same SKU price in listing and search, with quote-only rows last in the listing', async () => {
+    mocks.readPublicRows.mockResolvedValue([{ ...sanitary, ...prices, total_count: '1' }])
+    const listing = await getLiveListing('thiet-bi-ve-sinh', 'bon-cau')
+    const search = await searchLiveProducts(sanitary.sku, 1, 12)
+    expect(listing.products[0]).toMatchObject({
+      price: 900_000, list_price: 1_000_000, sale_price: 900_000, online_discount_amount: 50_000,
+      price_provenance: 'hita-exact-test',
+    })
+    expect(mocks.readPublicRows.mock.calls[0][0]).toContain('regular_price_vnd IS NULL THEN 1 ELSE 0 END')
+    expect(search.results[0]).toMatchObject({ price: 900_000, online_discount_amount: 50_000, final_online_price: null })
+    for (const sort of ['asc', 'desc'] as const) {
+      await getLiveListing('thiet-bi-ve-sinh', 'bon-cau', 1, 48, { priceSort: sort })
+      const [statement] = mocks.readPublicRows.mock.calls.at(-1)!
+      expect(statement).toContain(`COALESCE(p.promotional_price_vnd,p.regular_price_vnd) ${sort.toUpperCase()} NULLS LAST`)
+    }
+  })
+
+  it('keeps missing prices quote-only and preserves the other category and Production projection', async () => {
+    expect(mapLiveProduct(sanitary)).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })
+    expect(mapLiveProduct({ ...product, ...prices })).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })
+    vi.stubEnv('APP_ENV', 'production')
+    mocks.readPublicRows.mockResolvedValue([{ ...sanitary, ...prices }])
+    const listing = await getLiveListing('thiet-bi-ve-sinh', 'bon-cau')
+    expect(listing.products[0]).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })
+    expect(mocks.readPublicRows.mock.calls[0][0]).not.toContain('regular_price_vnd')
+  })
+})

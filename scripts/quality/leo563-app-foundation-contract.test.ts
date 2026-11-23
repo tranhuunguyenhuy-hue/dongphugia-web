@@ -61,7 +61,20 @@ describe('LEO-563 application foundation contract', () => {
     const pgImportSources = publicSources.filter((filePath) =>
       /(?:from\s+|import\s*\()(['\"])pg\1/.test(readFileSync(filePath, 'utf8')),
     )
-    expect(pgImportSources).toEqual([resolve(root, 'apps/public/src/runtime/public-db.ts')])
+    // #446 (Owner-approved 23/11/2026): exactly one additional sanctioned writer, isolated to TEST Preview order intake.
+    expect(pgImportSources.sort()).toEqual([
+      resolve(root, 'apps/public/src/runtime/order-intake.ts'),
+      resolve(root, 'apps/public/src/runtime/public-db.ts'),
+    ])
+    const intake = readFileSync(resolve(root, 'apps/public/src/runtime/order-intake.ts'), 'utf8')
+    expect(intake).toContain('ORDER_INTAKE_DB')
+    expect(intake).not.toMatch(/PUBLIC_DB|HYPERDRIVE_ADMIN|PUBLIC_CATALOGUE/)
+    // The ONLY SQL it may run is the reviewed guest-order RPC (no table access, no dynamic SQL).
+    expect([...intake.matchAll(/\.query\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1])).toEqual([
+      'SELECT public.guest_order_request_create($1::jsonb, $2::text, $3::uuid) AS result',
+    ])
+    expect(intake).toContain('orderIntakeEnabled')
+    expect(readFileSync(resolve(root, 'apps/public/app/api/orders/route.ts'), 'utf8')).toContain('createGuestOrder')
     expect(readFileSync(resolve(root, 'apps/public/src/runtime/public-db.ts'), 'utf8'))
       .toContain('PUBLIC_DATABASE_READ_ONLY_REQUIRED')
     expect(sourceImports(resolve(root, 'apps/admin'))).not.toEqual(expect.arrayContaining([

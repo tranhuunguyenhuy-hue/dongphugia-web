@@ -250,6 +250,8 @@ jobs:
           # Non-secret, reviewed identifiers: dedicated TEST Hyperdrives (cache off) and the sole Production one to exclude.
           M3_TEST_PUBLIC_HYPERDRIVE_ID: 948e4215eca5477f8f2f026b27e5d165
           M3_TEST_ADMIN_HYPERDRIVE_ID: 9f81135c71ef4f74b144e544b62ca67e
+          # #446 (Owner-approved): TEST-only order-intake role dpg_order_intake_login, caching disabled, origin limit 5. Not a secret.
+          M3_TEST_ORDER_INTAKE_HYPERDRIVE_ID: 0f615c39a036418ca9fff2bdcd0d1486
           M3_PRODUCTION_HYPERDRIVE_IDS: 905f5791e9d84cf285f7533b92d03f49
           M3_PRODUCTION_HYPERDRIVE_INVENTORY_VERIFIED: 'true'
           M3_PREVIEW_MEDIA_ZONE_ID: ${{ vars.M3_PREVIEW_MEDIA_ZONE_ID }}

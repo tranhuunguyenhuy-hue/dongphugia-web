@@ -96,14 +96,14 @@ export default {
       })
     }
 
-    const publicApiDecision = classifyPublicApiRequest(request)
+    const publicApiDecision = classifyPublicApiRequest(request, environment as unknown as Record<string, unknown>)
     if (publicApiDecision === 'not-found' || publicApiDecision === 'method-not-allowed') {
       return new Response(publicApiDecision === 'not-found' ? 'Not found.' : 'Method not allowed.', {
         status: publicApiDecision === 'not-found' ? 404 : 405,
         headers: {
           'Cache-Control': PRIVATE_CACHE_CONTROL,
           ...robotHeaders,
-          ...(publicApiDecision === 'method-not-allowed' ? { Allow: 'GET, HEAD' } : {}),
+          ...(publicApiDecision === 'method-not-allowed' ? { Allow: new URL(request.url).pathname === '/api/orders' ? 'POST' : 'GET, HEAD' } : {}),
           ...sourceIdentityHeader,
         },
       })

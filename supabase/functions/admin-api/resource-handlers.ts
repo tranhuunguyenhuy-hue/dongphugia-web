@@ -4,7 +4,7 @@
 import { ApiError, mapDatabaseError, requirePermission, slugify, type Context, type Db } from './core.ts'
 import { can, type AdminRole } from './permissions.ts'
 import { allowsNull, resourceBodySchemas, resourceQuerySchema, parseAllowedMediaHosts } from './validation.ts'
-import { RESOURCES, columnFields, resourceByKey, writableFields, type FieldDef, type ResourceDef, type Row, type SqlRaw } from './resources.ts'
+import { RESOURCES, activeFields, columnFields, setExternalColumns, resourceByKey, writableFields, type FieldDef, type ResourceDef, type Row, type SqlRaw } from './resources.ts'
 
 export interface ResourceDeps { db: Db; allowedMediaHosts?: string; hashPassword?: (plain: string) => Promise<string> }
 type Result = { status: number; body: unknown }
@@ -37,6 +37,18 @@ function readableSelect(def: ResourceDef, alias = 't') {
   return columns.join(', ')
 }
 
+let externalProbeAt = 0
+/** Refreshes (at most every 60 s) which `externalGrant` columns this database exposes to the API role. */
+export async function probeExternalColumns(db: Db, now = Date.now()): Promise<void> {
+  if (now - externalProbeAt < 60_000) return
+  const names = [...new Set(RESOURCES.flatMap((def) => def.fields.filter((field) => field.externalGrant).map((field) => field.name)))]
+  if (names.length === 0) return
+  const rows = await db.query<{ column_name: string }>(
+    "select column_name from information_schema.columns where table_schema = 'dpg_app' and table_name = 'products' and column_name = any($1::text[])", [names])
+  setExternalColumns(rows.map((row) => row.column_name))
+  externalProbeAt = now
+}
+
 /** Field metadata for the SPA forms. Contains no permission strings or SQL. */
 export function resourceMeta(role: AdminRole) {
   return RESOURCES.filter((def) => !def.lookup && can(role, def.read)).map((def) => ({
@@ -45,7 +57,7 @@ export function resourceMeta(role: AdminRole) {
     canUpdate: Boolean(def.write && def.update !== false && can(role, def.write)),
     canDelete: Boolean(def.delete && can(role, def.remove ?? def.write ?? def.read) && def.write),
     versioned: Boolean(def.versioned), searchable: def.search.length > 0,
-    fields: def.fields.map((field) => ({
+    fields: activeFields(def).map((field) => ({
       name: field.name, label: field.label, kind: field.kind, required: Boolean(field.required), max: field.max, min: field.min,
       options: field.options, ref: field.ref, upload: field.upload, createOnly: Boolean(field.createOnly), readOnly: Boolean(field.readOnly), nullable: allowsNull(field), list: Boolean(field.list), slugFrom: field.slugFrom, initial: field.initial,
       editable: !field.readOnly && (!field.permission || can(role, field.permission)),
