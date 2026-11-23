@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { activeFields } from './resources.ts'
 
 const SLUG_HOST = /^[a-z0-9.-]+$/i
 export function parseAllowedMediaHosts(raw: string | undefined): string[] {
@@ -78,7 +79,7 @@ function fieldSchema(field: FieldDef, allowedMediaHosts: readonly string[], mode
 export function resourceBodySchemas(def: ResourceDef, allowedMediaHosts: readonly string[]) {
   const build = (mode: 'create' | 'update') => {
     const shape: Record<string, z.ZodType> = {}
-    for (const field of def.fields) if (!field.readOnly && !(mode === 'update' && field.createOnly)) shape[field.name] = fieldSchema(field, allowedMediaHosts, mode)
+    for (const field of activeFields(def)) if (!field.readOnly && !(mode === 'update' && field.createOnly)) shape[field.name] = fieldSchema(field, allowedMediaHosts, mode)
     for (const relation of def.relations ?? []) shape[relation.input] = z.array(z.number().int().min(1).max(INT_MAX)).max(relation.max).optional()
     return z.object(shape).strict()
   }

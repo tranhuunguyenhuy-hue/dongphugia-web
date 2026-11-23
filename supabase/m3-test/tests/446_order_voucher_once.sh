@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# #446: isolated local PostgreSQL proof that 007/008 (TEST) deduct the online voucher exactly once and keep other
+# categories on the legacy branch; also proves rollback. Never point this at a hosted project.
+# Usage: 446_order_voucher_once.sh <host-or-socket-dir> <port> <user>
+set -euo pipefail
+H=${1:?host}; P=${2:?port}; U=${3:?user}; DB=dpg446_$$
+cd "$(dirname "$0")/../../.."
+PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h "$H" -p "$P" -U "$U")
+drop_roles() { "${PSQL[@]}" -d postgres -c "drop role if exists dpg_admin_api_test" -c "drop role if exists dpg_order_intake_function_owner" >/dev/null 2>&1 || true; }
+trap '"${PSQL[@]}" -d postgres -c "drop database if exists $DB" >/dev/null 2>&1 || true; drop_roles' EXIT
+drop_roles
+"${PSQL[@]}" -d postgres -c "create database $DB"
+Q=("${PSQL[@]}" -d "$DB")
+"${Q[@]}" -f supabase/m3-test/tests/446_synthetic_fixture.sql
+"${Q[@]}" -f supabase/m3-test/006_hita_canonical_price_pilot.sql
+"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql   # installs the ORIGINAL function definition
+"${Q[@]}" <<'SQL'
+create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
+insert into dpg_app.products(id,sku,name,category_id,price,list_price,sale_price,original_price,online_discount_amount,stock_status,price_source,source_system,price_state,price_confidence,price_updated_at,regular_price_vnd,promotional_price_vnd,online_voucher_amount_vnd) values
+ (1,'VS-1','VS canonical',(select id from dpg_app.categories where slug='thiet-bi-ve-sinh'),null,null,null,null,null,'in_stock',null,null,null,null,null,1000000,900000,50000),
+ (2,'VS-2','VS legacy only',(select id from dpg_app.categories where slug='thiet-bi-ve-sinh'),700000,700000,null,700000,10000,'in_stock','hita','hita','priced','high','2026-07-02T00:00:00Z',null,null,null),
+ (3,'GL-1','Gach legacy',(select id from dpg_app.categories where slug='gach-op-lat'),500000,500000,null,500000,20000,'in_stock','hita','hita','priced','high','2026-07-02T00:00:00Z',null,null,null);
+select pg_temp.assert(public.guest_order_request_create('{"customer_name":"T","customer_phone":"0900000001","items":[{"productId":1,"sku":"VS-1","quantity":1}]}','before-key-0001')->>'error'='PRODUCT_REQUIRES_QUOTE','PRE-008 gap: canonical-only SKU must be quote-only under the old function');
+SQL
+echo "PASS pre-008 gap confirmed"
+"${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants.sql
+"${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants.sql   # idempotent
+"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql
+"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher.sql         # idempotent
+"${Q[@]}" <<'SQL'
+create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
+create function pg_temp.mk(phone text, k text, items jsonb) returns jsonb language sql as
+ $$ select public.guest_order_request_create(jsonb_build_object('customer_name','T','customer_phone',phone,'items',items),k) $$;
+-- 1) canonical vệ sinh x2: voucher x qty once, at order level only
+select pg_temp.assert((pg_temp.mk('0900000002','key-canon-0001','[{"productId":1,"sku":"VS-1","quantity":2}]')->>'order_number') is not null,'canonical order created');
+select pg_temp.assert((select subtotal=1800000 and discount=100000 and total=1700000 from dpg_app.orders order by id desc limit 1),'order totals 1.8M/-100k/1.7M');
+select pg_temp.assert((select unit_price=900000 and total_price=1800000 and (commercial_snapshot->>'final_unit_price')::numeric=850000 and (commercial_snapshot->>'online_voucher_amount_vnd')::numeric=50000 and commercial_snapshot->>'price_contract'='canonical_vnd_v1' from dpg_app.order_items order by id desc limit 1),'line snapshot pre-voucher unit + final 850k');
+-- 2) idempotent replay never creates/discounts again
+select pg_temp.mk('0900000002','key-canon-0001','[{"productId":1,"sku":"VS-1","quantity":2}]');
+select pg_temp.assert((select count(*) from dpg_app.orders)=1,'replay did not create a second order');
+-- 3) vệ sinh SKU with only legacy price: NO fallback
+select pg_temp.assert(pg_temp.mk('0900000003','key-nolegacy-01','[{"productId":2,"sku":"VS-2","quantity":1}]')->>'error'='PRODUCT_REQUIRES_QUOTE','no legacy fallback for vệ sinh');
+-- 4) other category untouched legacy branch (voucher 20k once)
+select pg_temp.mk('0900000004','key-legacy-0001','[{"productId":3,"sku":"GL-1","quantity":1}]');
+select pg_temp.assert((select subtotal=500000 and discount=20000 and total=480000 from dpg_app.orders order by id desc limit 1),'legacy category unchanged');
+-- 5) mixed cart
+select pg_temp.mk('0900000005','key-mixed-0001','[{"productId":1,"sku":"VS-1","quantity":1},{"productId":3,"sku":"GL-1","quantity":3}]');
+select pg_temp.assert((select subtotal=2400000 and discount=110000 and total=2290000 from dpg_app.orders order by id desc limit 1),'mixed cart 900k+1.5M, -50k-60k');
+-- 6) reconciliation: order total = sum(line total) - discount; discount = sum(voucher*qty)
+select pg_temp.assert(not exists (select 1 from dpg_app.orders o where o.total <> (select sum(total_price) from dpg_app.order_items i where i.order_id=o.id) - o.discount),'orders.total reconciles');
+select pg_temp.assert(not exists (select 1 from dpg_app.orders o where o.discount <> (select sum(coalesce((commercial_snapshot->>'online_voucher_amount_vnd')::numeric,(commercial_snapshot->>'online_discount_amount')::numeric,0)*quantity) from dpg_app.order_items i where i.order_id=o.id)),'discount = sum(voucher*qty)');
+-- 7) grants
+select pg_temp.assert(has_column_privilege('dpg_admin_api_test','dpg_app.products','regular_price_vnd','update') and has_column_privilege('dpg_admin_api_test','dpg_app.products','online_voucher_amount_vnd','insert'),'admin grants');
+SQL
+echo "PASS post-008: voucher once x qty, replay, no legacy fallback, other category, mixed cart, reconcile"
+"${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql
+"${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql
+"${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql
+"${Q[@]}" <<'SQL'
+create function pg_temp.assert(cond bool, msg text) returns void language plpgsql as $$ begin if not cond then raise exception 'ASSERT FAILED: %', msg; end if; end $$;
+select pg_temp.assert(not has_column_privilege('dpg_admin_api_test','dpg_app.products','regular_price_vnd','select'),'grants revoked');
+select pg_temp.assert(public.guest_order_request_create('{"customer_name":"T","customer_phone":"0900000009","items":[{"productId":1,"sku":"VS-1","quantity":1}]}','after-key-00001')->>'error'='PRODUCT_REQUIRES_QUOTE','rollback restores original function');
+SQL
+echo "PASS rollback 008+007 (twice) restores original behaviour and ACL"
