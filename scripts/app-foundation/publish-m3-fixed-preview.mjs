@@ -275,11 +275,14 @@ if (process.argv[1]?.endsWith('/publish-m3-fixed-preview.mjs')) main().catch(err
   evidence.reason = /^M3_[A-Z0-9_]{1,100}$/.test(message) ? message : 'M3_VALIDATION_FAILED'
   // Sanitized class only (never message text) so an un-coded failure is diagnosable from evidence.
   if (evidence.reason === 'M3_VALIDATION_FAILED' && error instanceof Error) evidence.errorClass = String(error.name).replace(/[^A-Za-z0-9_]/g, '').slice(0, 60) + (error.code ? ':' + String(error.code).replace(/[^A-Za-z0-9_]/g, '').slice(0, 30) : '')
+  // #447: also expose WHERE an un-coded failure happened (script file + line only, never message text or values), so it is
+  // readable from the job log instead of only from the evidence artifact.
+  if (evidence.reason === 'M3_VALIDATION_FAILED' && error instanceof Error) evidence.errorSite = (String(error.stack || '').split('\n').find(line => /publish-m3-fixed-preview\.mjs:\d+/.test(line)) || '').replace(/^.*(publish-m3-fixed-preview\.mjs:\d+).*$/, '$1').slice(0, 80)
   process.exitCode = 1
 }).finally(async () => {
   if (secretsFile) await rm(secretsFile, { force: true }).catch(() => {})
   await cleanup()
   if (before) await ensureProductionUnchanged().catch(() => { evidence.status = 'FAIL'; evidence.reason = 'M3_PRODUCTION_CHANGED_STOP'; process.exitCode = 1 })
   if (evidencePath) await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n', { mode: 0o600 })
-  console.log(JSON.stringify({ status: evidence.status, phase: evidence.phase || phase, reason: evidence.reason, deploymentId: evidence.deploymentId, gateC: evidence.gateC, rollbackPerformed: false }))
+  console.log(JSON.stringify({ status: evidence.status, phase: evidence.phase || phase, reason: evidence.reason, errorClass: evidence.errorClass, errorSite: evidence.errorSite, deploymentId: evidence.deploymentId, gateC: evidence.gateC, rollbackPerformed: false }))
 })
