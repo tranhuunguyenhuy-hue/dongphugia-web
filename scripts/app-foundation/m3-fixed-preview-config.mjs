@@ -155,3 +155,14 @@ export function validateM3FixedPreviewConfig(config, expected) {
   for (const property of productionProperties) assert.equal(property in config, false, `M3_PREVIEW_ONLY_CONFIG_REQUIRED:${property}`)
   return true
 }
+
+/** Hyperdrive bindings an assembled artifact declares (ids come from `m3-artifact.json`). The order-intake binding exists only
+ * when the artifact carries it; publication and read-back must expect exactly this set (issue #446). */
+export function expectedHyperdriveBindings(meta) {
+  const h = meta?.hyperdrive ?? {}
+  return [
+    { name: 'PUBLIC_DB', id: h.public?.id },
+    { name: 'HYPERDRIVE_ADMIN_NO_CACHE', id: h.admin?.id },
+    ...(h.orderIntake?.id ? [{ name: 'ORDER_INTAKE_DB', id: h.orderIntake.id }] : []),
+  ]
+}

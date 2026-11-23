@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createM3FixedPreviewConfig,
+  expectedHyperdriveBindings,
   validateM3FixedPreviewConfig,
 } from './m3-fixed-preview-config.mjs'
 
@@ -83,5 +84,15 @@ describe('M3 fixed Preview configuration', () => {
     ['wrong declared Production zone ID', { mediaTarget: { ...mediaTarget, productionZoneId: 402 } }, 'M3_PRODUCTION_MEDIA_ZONE_ID_MISMATCH'],
   ])('rejects %s', (_label, overrides, message) => {
     expect(() => create(overrides)).toThrow(message)
+  })
+
+  it('derives the expected deployed Hyperdrive set from the artifact metadata (publisher parity, #446)', () => {
+    const meta = { hyperdrive: { public: { id: publicId }, admin: { id: adminId } } }
+    expect(expectedHyperdriveBindings(meta)).toEqual([{ name: 'PUBLIC_DB', id: publicId }, { name: 'HYPERDRIVE_ADMIN_NO_CACHE', id: adminId }])
+    const withIntake = { hyperdrive: { ...meta.hyperdrive, orderIntake: { id: intakeId } } }
+    expect(expectedHyperdriveBindings(withIntake).map((b) => b.name)).toEqual(['PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE', 'ORDER_INTAKE_DB'])
+    // The publisher validates the same config the assembler emitted: bindings in the config and in the metadata must agree.
+    const config = create({ orderIntakeHyperdriveId: intakeId })
+    expect(config.previews.hyperdrive.map((b) => ({ name: b.binding, id: b.id }))).toEqual(expectedHyperdriveBindings(withIntake))
   })
 })
