@@ -6,7 +6,7 @@ import {notFound} from 'next/navigation'
 import {getPublicAppEnvironment} from '../../../src/config/env'
 import {publicPostgresEnabled} from '../../../src/runtime/public-db'
 import {getLiveListingRouteMetadata} from '../../../src/runtime/live-public-catalogue'
-import {resolveListingQuery} from '../../../src/runtime/listing-query'
+import {isSupportedListingSort,resolveListingQuery,supportedListingKeys} from '../../../src/runtime/listing-query'
 import {isExpectedPublicNotFound,publicRouteFailureSummary} from '../../../src/runtime/public-route-diagnostics'
 export const runtime='edge'
 export const dynamic='force-dynamic'
@@ -41,8 +41,9 @@ export default async function CanonicalRoute({params,searchParams}: {params:Prom
  const p=await params
  // Reject unsupported filters rather than silently returning misleading results, but ignore
  // marketing/transport parameters (utm_*, fbclid, gclid, _rsc): they must never turn a valid PLP into a 404.
- const resolvedQuery=resolveListingQuery(await searchParams,['page','brand','dong','is_featured'])
+ const resolvedQuery=resolveListingQuery(await searchParams,supportedListingKeys(p.categorySlug))
  if(!resolvedQuery.ok)notFound()
+ if('sort' in resolvedQuery.query&&!isSupportedListingSort(resolvedQuery.query.sort))notFound()
  const query=resolvedQuery.query
  const props={params:Promise.resolve({sub:p.subcategorySlug,slug:p.productSlug!}),searchParams:Promise.resolve(query)}
  try {

@@ -22,3 +22,20 @@ export function resolveListingQuery<T extends ListingQuery>(
   }
   return { ok: true, query: result as T }
 }
+
+// #447: price sorting exists in the listing UI and in the live query (promotional ?? regular price, NULL last), but the Public
+// route used to reject `?sort=` for every category (404 on Staging and Production alike), so the control had no effect.
+// It is accepted ONLY for thiet-bi-ve-sinh on the isolated TEST Preview; every other environment/category is unchanged.
+const BASE_LISTING_KEYS = ['page', 'brand', 'dong', 'is_featured'] as const
+export const LISTING_SORT_VALUES = ['default', 'price-asc', 'price-desc'] as const
+
+type ListingEnv = { APP_ENV?: string; PREVIEW_TEST_DATABASE_ISOLATED?: string }
+
+export function supportedListingKeys(categorySlug: string, env: ListingEnv = process.env): readonly string[] {
+  const sortEnabled = categorySlug === 'thiet-bi-ve-sinh' && env.APP_ENV === 'staging' && env.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
+  return sortEnabled ? [...BASE_LISTING_KEYS, 'sort'] : BASE_LISTING_KEYS
+}
+
+export function isSupportedListingSort(value: unknown): boolean {
+  return typeof value === 'string' && (LISTING_SORT_VALUES as readonly string[]).includes(value)
+}
