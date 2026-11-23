@@ -9,7 +9,7 @@ import { desiredPrices } from './pricing-policy.mts'
 //   npx tsx scripts/hita-price-audit/batch.mts --inventory <inventory.json> --output <dir> [--limit N] [--ttl-hours 6]
 const { values } = parseArgs({ options: {
   inventory: { type: 'string' }, output: { type: 'string', default: 'hita-batch-output' },
-  limit: { type: 'string', default: '1000' }, 'ttl-hours': { type: 'string', default: '6' }, 'min-interval-ms': { type: 'string', default: '1000' },
+  limit: { type: 'string', default: '1000' }, offset: { type: 'string', default: '0' }, reverse: { type: 'boolean', default: false }, 'ttl-hours': { type: 'string', default: '6' }, 'min-interval-ms': { type: 'string', default: '1000' },
 } })
 if (!values.inventory) throw new Error('--inventory is required')
 const scope = planScope(validateInventory(JSON.parse(await readFile(values.inventory, 'utf8'))))
@@ -18,12 +18,15 @@ const checkpointPath = join(values.output, 'checkpoint.jsonl')
 const previous = new Map<number, CrawlResult>()
 try { for (const line of (await readFile(checkpointPath, 'utf8')).split('\n').filter(Boolean)) { const r = JSON.parse(line) as CrawlResult; previous.set(r.dpg_id, r) } } catch { /* first run */ }
 
+// A slice of the crawl scope (stable order by DPG id, optionally reversed) so independent runs cover disjoint ranges.
+const ordered = values.reverse ? [...scope.toCrawl].reverse() : scope.toCrawl
+const slice = ordered.slice(Number(values.offset), Number(values.offset) + Number(values.limit))
 const requestLog: unknown[] = []  // sanitized: path, status, duration only
 const startedAt = new Date().toISOString()
 const fetchText = politeFetch({ minIntervalMs: Number(values['min-interval-ms']), log: entry => requestLog.push(entry) })
 const robotsStop = await checkRobots(fetchText)
-const run = robotsStop ? { results: [] as CrawlResult[], crawled: 0, reused: 0, haltReason: robotsStop, remaining: scope.toCrawl.length } : await runBatch({
-  rows: scope.toCrawl, previous, ttlMs: Number(values['ttl-hours']) * 3600_000, limit: Number(values.limit),
+const run = robotsStop ? { results: [] as CrawlResult[], crawled: 0, reused: 0, haltReason: robotsStop, remaining: slice.length } : await runBatch({
+  rows: slice, previous, ttlMs: Number(values['ttl-hours']) * 3600_000,
   fetchText,
   onResult: async (result, reused) => { if (!reused) await appendFile(checkpointPath, JSON.stringify(result) + '\n') },
 })
