@@ -22,7 +22,9 @@ describe('guest order intake (#446)', () => {
     const db = connectReturning({ order_number: 'DPG-1', status: 'pending', payment_status: 'unpaid' })
     const result = await createGuestOrder(request(body), { env, binding, connect: db.connect })
     expect(result).toMatchObject({ ok: true, status: 200, body: { success: true, order_number: 'DPG-1' } })
-    const [sql, values] = db.query.mock.calls[0]
+    // The login role only has SET on the intake role: the RPC must run inside BEGIN / SET LOCAL ROLE / COMMIT.
+    expect(db.query.mock.calls.map(([sql]) => String(sql).split('(')[0].trim())).toEqual(['BEGIN', 'SET LOCAL ROLE dpg_order_intake', 'SELECT public.guest_order_request_create', 'COMMIT'])
+    const [sql, values] = db.query.mock.calls.find(([text]) => String(text).includes('guest_order_request_create'))!
     expect(sql).toContain('public.guest_order_request_create')
     expect(JSON.parse(values[0]).items).toEqual([{ productId: 207, sku: 'LT533R#XW', quantity: 2 }])
     expect(values[1]).toBe('key-12345678')
@@ -35,8 +37,12 @@ describe('guest order intake (#446)', () => {
     expect(result).toMatchObject({ ok: false, status, body: { code } })
   })
   it('maps raised database errors and hides unknown ones', async () => {
-    const raise = (message: string) => ({ connect: vi.fn().mockResolvedValue({ query: vi.fn().mockRejectedValue(new Error(message)), end: vi.fn().mockResolvedValue(undefined) }) })
+    const calls: string[] = []
+    const raise = (message: string) => ({ connect: vi.fn().mockResolvedValue({
+      query: vi.fn(async (sql: string) => { calls.push(sql.split('(')[0].trim()); if (sql.startsWith('SELECT')) throw new Error(message); return { rows: [] } }),
+      end: vi.fn().mockResolvedValue(undefined) }) })
     expect(await createGuestOrder(request(body), { env, binding, connect: raise('INVALID_QUANTITY').connect })).toMatchObject({ status: 400, body: { code: 'INVALID_QUANTITY' } })
+    expect(calls).toEqual(['BEGIN', 'SET LOCAL ROLE dpg_order_intake', 'SELECT public.guest_order_request_create', 'ROLLBACK'])
     const hidden = await createGuestOrder(request(body), { env, binding, connect: raise('relation "x" does not exist').connect })
     expect(hidden).toMatchObject({ status: 500, body: { code: 'ORDER_REQUEST_FAILED' } })
     expect(JSON.stringify(hidden)).not.toContain('relation')

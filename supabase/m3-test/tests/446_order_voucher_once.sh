@@ -6,7 +6,7 @@ set -euo pipefail
 H=${1:?host}; P=${2:?port}; U=${3:?user}; DB=dpg446_$$
 cd "$(dirname "$0")/../../.."
 PSQL=(psql -X -q -v ON_ERROR_STOP=1 -h "$H" -p "$P" -U "$U")
-drop_roles() { "${PSQL[@]}" -d postgres -c "drop role if exists dpg_admin_api_test" -c "drop role if exists dpg_order_intake_function_owner" >/dev/null 2>&1 || true; }
+drop_roles() { "${PSQL[@]}" -d postgres -c "drop role if exists dpg_admin_api_test" -c "drop role if exists dpg_order_intake_function_owner" -c "drop role if exists dpg_order_intake_login" -c "drop role if exists dpg_order_intake" >/dev/null 2>&1 || true; }
 trap '"${PSQL[@]}" -d postgres -c "drop database if exists $DB" >/dev/null 2>&1 || true; drop_roles' EXIT
 drop_roles
 "${PSQL[@]}" -d postgres -c "create database $DB"
@@ -53,6 +53,30 @@ select pg_temp.assert(not exists (select 1 from dpg_app.orders o where o.discoun
 select pg_temp.assert(has_column_privilege('dpg_admin_api_test','dpg_app.products','regular_price_vnd','update') and has_column_privilege('dpg_admin_api_test','dpg_app.products','online_voucher_amount_vnd','insert'),'admin grants');
 SQL
 echo "PASS post-008: voucher once x qty, replay, no legacy fallback, other category, mixed cart, reconcile"
+# Hosted role model (#446): the login role has SET but NOT INHERIT on the intake role, and EXECUTE belongs to the intake role only.
+"${Q[@]}" <<'SQL'
+create role dpg_order_intake nologin;
+create role dpg_order_intake_login login noinherit;
+grant dpg_order_intake to dpg_order_intake_login with inherit false, set true;
+revoke all on function public.guest_order_request_create(jsonb, text, uuid) from public;
+grant execute on function public.guest_order_request_create(jsonb, text, uuid) to dpg_order_intake;
+grant usage on schema public to dpg_order_intake, dpg_order_intake_login;
+set role dpg_order_intake_login;
+-- Direct call must fail (the bug seen on Fixed Staging run 58: "permission denied for function").
+do $$ begin
+  perform public.guest_order_request_create('{}'::jsonb, 'direct-key-0001', null);
+  raise exception 'SHOULD_HAVE_FAILED';
+exception when insufficient_privilege then null; end $$;
+-- The application path: one transaction, SET LOCAL ROLE, RPC, COMMIT.
+begin;
+set local role dpg_order_intake;
+select public.guest_order_request_create('{"customer_name":"T","customer_phone":"0900000077","items":[{"productId":1,"sku":"VS-1","quantity":1}]}'::jsonb, 'login-key-00001', null) ->> 'order_number' is not null as created \gset
+commit;
+reset role;
+select (:'created')::boolean and (select count(*) = 1 from dpg_app.orders where customer_phone = '0900000077' and discount = 50000 and total = 850000) as ok \gset
+select 1 / (case when :'ok'::boolean then 1 else 0 end) as login_role_path; -- division by zero (script fails) when the order was not created correctly
+SQL
+echo "PASS login role (SET only, no INHERIT): direct EXECUTE denied, BEGIN/SET LOCAL ROLE/RPC/COMMIT creates the order"
 "${Q[@]}" -f supabase/m3-test/008_hita_canonical_order_voucher_rollback.sql
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql
 "${Q[@]}" -f supabase/m3-test/007_hita_canonical_price_admin_grants_rollback.sql

@@ -69,9 +69,14 @@ describe('LEO-563 application foundation contract', () => {
     const intake = readFileSync(resolve(root, 'apps/public/src/runtime/order-intake.ts'), 'utf8')
     expect(intake).toContain('ORDER_INTAKE_DB')
     expect(intake).not.toMatch(/PUBLIC_DB|HYPERDRIVE_ADMIN|PUBLIC_CATALOGUE/)
-    // The ONLY SQL it may run is the reviewed guest-order RPC (no table access, no dynamic SQL).
+    // The ONLY SQL it may run is the reviewed guest-order RPC (no table access, no dynamic SQL)
+    // plus the transaction wrapper that assumes the intake role (the login role holds SET only, never INHERIT).
     expect([...intake.matchAll(/\.query\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1])).toEqual([
+      'BEGIN',
+      'SET LOCAL ROLE dpg_order_intake',
       'SELECT public.guest_order_request_create($1::jsonb, $2::text, $3::uuid) AS result',
+      'COMMIT',
+      'ROLLBACK',
     ])
     expect(intake).toContain('orderIntakeEnabled')
     expect(readFileSync(resolve(root, 'apps/public/app/api/orders/route.ts'), 'utf8')).toContain('createGuestOrder')
