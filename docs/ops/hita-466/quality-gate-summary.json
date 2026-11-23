@@ -1,19 +1,25 @@
 {
-  "file": "codex/448-toto-hita-review@98e3101b9ab0c9fca9a84c260d3a923a67b10626:docs/ops/hita-448/toto/toto_prices_review.csv",
-  "sha256": "b795853e7964ef78d8cf09a81afb14615d99c1924629897d70503084b1d81159",
-  "gate_run_at_utc": "2026-11-23T18:53:36.000Z",
+  "file": "codex/448-toto-hita-review@7f9ba89c85176406043478f7f23403571b5f8ea1:docs/ops/hita-448/toto/toto_prices_review.csv",
+  "mode": "import-review",
+  "sha256": "6cefba4c5840748361c6aef23ad81f6ab86cc2ccde83c19c645d8a9f9fc5e5c4",
+  "gate_run_at_utc": "2026-11-23T19:13:48.000Z",
   "max_age_hours": 24,
   "inventory_rows": 4441,
   "rows": 4441,
   "file_issues": [],
   "by_class": {
-    "ELIGIBLE_NO_PRICE": 11,
-    "ELIGIBLE_PRICED": 132,
-    "UNRESOLVED": 4298
+    "AMBIGUOUS_UNVERIFIED": 32,
+    "CONTACT_VERIFIED": 52,
+    "DISCONTINUED_REVIEW": 16,
+    "NOT_FOUND_CANDIDATE_DELETE": 1,
+    "PRICE_VERIFIED": 533,
+    "UNRESOLVED": 3807
   },
   "rows_with_fail": 0,
-  "rows_with_warn": 0,
-  "eligible_priced_with_warnings": 0,
+  "rows_with_warn": 7,
+  "price_verified_with_warnings": 7,
   "fail_by_code": {},
-  "warn_by_code": {}
+  "warn_by_code": {
+    "LARGE_VOUCHER_REVIEW": 7
+  }
 }

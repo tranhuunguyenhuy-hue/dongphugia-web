@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseCsv, REQUIRED_COLUMNS, summarise, validate } from './quality-gate-core.mts'
+import { exportClass, parseCsv, parseCsvDetailed, REQUIRED_COLUMNS, summarise, validate } from './quality-gate-core.mts'
 
 const NOW = new Date('2026-11-23T20:00:00Z')
 const COLS = [...REQUIRED_COLUMNS, 'product_name', 'reason']
@@ -14,9 +14,9 @@ describe('#466-A CSV quality gate', () => {
     const t = parseCsv('﻿a,b\r\n"x,1","He said ""hi"""\r\n"line\nbreak",z\n')
     expect(t).toEqual([['a', 'b'], ['x,1', 'He said "hi"'], ['line\nbreak', 'z']])
   })
-  it('accepts a clean EXACT row as ELIGIBLE_PRICED with no issues (a human still has to approve)', () => {
+  it('accepts a clean EXACT row as PRICE_VERIFIED with no issues (a human still has to approve)', () => {
     const { codes, k } = row({})
-    expect(codes).toEqual([]); expect(k).toBe('ELIGIBLE_PRICED')
+    expect(codes).toEqual([]); expect(k).toBe('PRICE_VERIFIED')
   })
   it('hard-fails missing/duplicate columns at file level', () => {
     expect(validate(csv([{}], COLS.filter(c => c !== 'currency')), { now: NOW }).fileIssues).toContain('MISSING_COLUMN:currency')
@@ -35,13 +35,28 @@ describe('#466-A CSV quality gate', () => {
     expect(row({ voucher_condition: '' }).codes).toContain('FAIL:VOUCHER_WITHOUT_CONDITION')
     expect(row({ voucher_condition: 'Cashback chung' }).codes).toEqual(['WARN:VOUCHER_CONDITION_NOT_ONLINE'])
   })
-  it('non-EXACT outcomes must carry no price; BLOCKED/NOT_CRAWLED/UNKNOWN are UNRESOLVED, CONTACT/DISCONTINUED are no-price outcomes', () => {
+  it('non-EXACT outcomes must carry no price; unresolved statuses reach no conclusion', () => {
     expect(row({ status: 'CONTACT' }).codes).toContain('FAIL:PRICE_ON_NON_EXACT')
-    const blank = { regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', hita_exact_sku: '', hita_url: '', currency: '', source_checked_at_utc: '', price_valid_until: '', voucher_condition: '' }
-    expect(row({ ...blank, status: 'CONTACT' })).toMatchObject({ codes: [], k: 'ELIGIBLE_NO_PRICE' })
-    expect(row({ ...blank, status: 'DISCONTINUED' }).k).toBe('ELIGIBLE_NO_PRICE')
-    for (const status of ['BLOCKED', 'UNKNOWN', 'NOT_CRAWLED']) expect(row({ ...blank, status, review_status: 'NOT_CHECKED' }).k, status).toBe('UNRESOLVED')
-    expect(row({ ...blank, status: 'NOT_CRAWLED', review_status: 'NOT_CHECKED', regular_price_vnd: '0' }).codes).toContain('FAIL:PRICE_ON_NON_EXACT')
+    const blank = { regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', currency: '', price_valid_until: '', voucher_condition: '' }
+    for (const status of ['BLOCKED', 'UNKNOWN', 'NOT_CRAWLED']) expect(row({ ...blank, hita_exact_sku: '', hita_url: '', source_checked_at_utc: '', status, review_status: 'NOT_CHECKED' }).k, status).toBe('UNRESOLVED')
+    expect(row({ ...blank, hita_exact_sku: '', hita_url: '', source_checked_at_utc: '', status: 'NOT_CRAWLED', review_status: 'NOT_CHECKED', regular_price_vnd: '0' }).codes).toContain('FAIL:PRICE_ON_NON_EXACT')
+  })
+  it('CONTACT, NOT_FOUND, AMBIGUOUS and DISCONTINUED are four separate classes (Owner rule 24/11)', () => {
+    const blank = { regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', currency: '', price_valid_until: '', voucher_condition: '' }
+    const onPage = { ...blank, hita_exact_sku: 'A-1', hita_url: 'https://hita.com.vn/a-1-100.html' }
+    const off = { ...blank, hita_exact_sku: '', hita_url: '' }
+    expect(row({ ...onPage, status: 'CONTACT' })).toMatchObject({ codes: [], k: 'CONTACT_VERIFIED' })
+    expect(row({ ...onPage, status: 'DISCONTINUED' })).toMatchObject({ codes: [], k: 'DISCONTINUED_REVIEW' })
+    expect(row({ ...off, status: 'NOT_FOUND' })).toMatchObject({ codes: [], k: 'NOT_FOUND_CANDIDATE_DELETE' })
+    expect(row({ ...off, status: 'AMBIGUOUS' })).toMatchObject({ codes: [], k: 'AMBIGUOUS_UNVERIFIED' })
+  })
+  it('evidence rules for the non-priced outcomes: timestamp always, exact page for CONTACT/DISCONTINUED, no Hita SKU for NOT_FOUND', () => {
+    const blank = { regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', currency: '', price_valid_until: '', voucher_condition: '' }
+    expect(row({ ...blank, hita_exact_sku: '', hita_url: '', status: 'NOT_FOUND', source_checked_at_utc: '' }).codes).toContain('FAIL:OUTCOME_WITHOUT_TIMESTAMP')
+    expect(row({ ...blank, hita_exact_sku: 'OTHER', hita_url: 'https://hita.com.vn/a-1-100.html', status: 'CONTACT' }).codes).toContain('FAIL:OUTCOME_SKU_NOT_PROVEN')
+    expect(row({ ...blank, hita_exact_sku: 'A-1', hita_url: '', status: 'CONTACT' }).codes).toContain('FAIL:OUTCOME_URL_INVALID')
+    expect(row({ ...blank, hita_exact_sku: 'A-1', hita_url: '', status: 'NOT_FOUND' }).codes).toContain('FAIL:NOT_FOUND_WITH_HITA_SKU')
+    expect(row({ ...blank, hita_exact_sku: 'A-1', hita_url: 'https://hita.com.vn/a-1-100.html', status: 'CONTACT', regular_price_vnd: '999000' }).codes).toContain('FAIL:PRICE_ON_NON_EXACT')   // old DPG price is never a fallback
   })
   it('stale pilot rows are never eligible', () => {
     expect(row({ review_status: 'STALE_PILOT_2026-11-22' }).k).toBe('UNRESOLVED')
@@ -66,14 +81,14 @@ describe('#466-A CSV quality gate', () => {
   })
   it('unusual values are flagged for review but never excluded', () => {
     const deep = row({ promotional_price_vnd: '400000' })
-    expect(deep.codes).toEqual(['WARN:DEEP_DISCOUNT_REVIEW']); expect(deep.k).toBe('ELIGIBLE_PRICED')
+    expect(deep.codes).toEqual(['WARN:DEEP_DISCOUNT_REVIEW']); expect(deep.k).toBe('PRICE_VERIFIED')
     expect(row({ online_voucher_amount_vnd: '300000' }).codes).toEqual(['WARN:LARGE_VOUCHER_REVIEW'])
   })
   it('identity: duplicate id/sku (case-insensitive), whitespace, bad id, bad active flag, formula cells', () => {
     const r = validate(csv([{}, { dpg_id: '1', sku: 'x' }, { dpg_id: '2', sku: 'a-1' }, { dpg_id: '03', sku: 'B ' }, { dpg_id: '4', sku: 'C', is_active: 'yes' }, { dpg_id: '5', sku: '=1+1', hita_exact_sku: '=1+1' }]), { now: NOW })
     const codes = r.issues.filter(i => i.severity === 'FAIL').map(i => i.code)
     for (const c of ['DPG_ID_DUPLICATE', 'SKU_DUPLICATE', 'DPG_ID_INVALID', 'SKU_WHITESPACE', 'IS_ACTIVE_INVALID', 'FORMULA_CELL']) expect(codes, c).toContain(c)
-    expect(r.klass[0]).toBe('ELIGIBLE_PRICED')    // the first occurrence stays valid; the duplicates are the failures
+    expect(r.klass[0]).toBe('PRICE_VERIFIED')    // the first occurrence stays valid; the duplicates are the failures
   })
   it('cross-checks id, exact SKU and active flag against an inventory', () => {
     const inventory = new Map([[1, { id: 1, sku: 'A-1', is_active: false }]])
@@ -88,7 +103,26 @@ describe('#466-A CSV quality gate', () => {
   it('summary counts rows by class and issues by code', () => {
     const r = validate(csv([{}, { dpg_id: '2', sku: 'B', promotional_price_vnd: '2000000' }, { dpg_id: '3', sku: 'C', status: 'NOT_CRAWLED', review_status: 'NOT_CHECKED', regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '' }]), { now: NOW })
     const s = summarise(r)
-    expect(s.by_class).toEqual({ ELIGIBLE_PRICED: 1, INVALID: 1, UNRESOLVED: 1 })
+    expect(s.by_class).toEqual({ INVALID: 1, PRICE_VERIFIED: 1, UNRESOLVED: 1 })
     expect(s.fail_by_code).toMatchObject({ PROMO_NOT_BELOW_REGULAR: 1 })
+  })
+
+  it('detects malformed CSV: ragged rows, unterminated and misplaced quotes', () => {
+    const good = csv([{}])
+    const ragged = good.replace('\r\n', '\r\n').trimEnd() + '\r\n"9","only-two-cells"\r\n'
+    expect(validate(ragged, { now: NOW }).issues.some(i => i.code === 'ROW_COLUMN_COUNT' && i.severity === 'FAIL')).toBe(true)
+    expect(validate(good + '"1","abc\r\n', { now: NOW }).fileIssues).toContain('UNTERMINATED_QUOTE')
+    expect(parseCsvDetailed('a,b\r\nx"y,z\r\n').strayQuoteRows).toEqual([2])
+    expect(parseCsvDetailed('a,b\r\n"x"y,z\r\n').strayQuoteRows).toEqual([2])
+    expect(parseCsvDetailed('a,b\r\n"x",""\r\n').strayQuoteRows).toEqual([])
+    const stray = validate(good.replace('"A-1"', '"A-1"x'), { now: NOW })
+    expect(stray.issues.map(i => i.code)).toContain('STRAY_QUOTE')
+  })
+  it('exports each class as a review list that is explicitly not a delete command', () => {
+    const blank = { regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', currency: '', price_valid_until: '', voucher_condition: '', hita_exact_sku: '', hita_url: '' }
+    const r = validate(csv([{ ...blank, status: 'NOT_FOUND' }, { dpg_id: '2', sku: 'B' }]), { now: NOW })
+    const list = exportClass(r, 'NOT_FOUND_CANDIDATE_DELETE', 'KHÔNG phải lệnh xóa')
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({ dpg_id: '1', sku: 'A-1', status: 'NOT_FOUND', regular_price_vnd: '', future_action: 'KHÔNG phải lệnh xóa' })
   })
 })
