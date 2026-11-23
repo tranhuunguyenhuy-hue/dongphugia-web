@@ -3,7 +3,8 @@
 import { ShoppingBag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { siteConfig, siteLinks } from '@/config/site'
-import { useCartStore } from '@/lib/cart-store'
+import { useCartStore, type ApplyOnlineVoucher } from '@/lib/cart-store'
+import { applyOnlineVoucher as integratedVoucher } from '@/components/cart/checkout-pricing'
 
 type Props = {
     id: number
@@ -17,16 +18,17 @@ type Props = {
     imageUrl: string | null
     brandName?: string | null
     canOrder: boolean
+    applyOnlineVoucher?: ApplyOnlineVoucher
 }
 
-export function CanonicalProductCTA({ price, voucher, canOrder, id, ...product }: Props) {
+export function CanonicalProductCTA({ price, voucher, canOrder, id, applyOnlineVoucher = integratedVoucher, ...product }: Props) {
     const addItem = useCartStore(state => state.addItem)
 
     return (
         <div className="grid gap-3">
-            {canOrder && price !== null && product.sku.trim() && product.sku.length <= 100 && (
+            {applyOnlineVoucher && canOrder && price !== null && product.sku.trim() && product.sku.length <= 100 && (
                 <Button type="button" className="h-12 w-full bg-brand-700 text-white hover:bg-brand-800"
-                    onClick={() => addItem({ ...product, productId: id, price, priceDisplay: null, canonicalVoucher: { amount: voucher } })}>
+                    onClick={() => addItem({ ...product, productId: id, price, priceDisplay: null, canonicalVoucher: { amount: voucher, applyOnlineVoucher } })}>
                     <ShoppingBag aria-hidden="true" />
                     Thêm vào giỏ hàng
                 </Button>

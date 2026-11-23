@@ -3,7 +3,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { InstallOption } from '@/lib/order-pricing'
-import { applyOnlineVoucher } from '@/lib/cart-pricing'
 import { trackAddToCart } from '@/lib/tracking'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -30,9 +29,15 @@ export interface CartItem {
     finalUnitPrice?: number
 }
 
+export type ApplyOnlineVoucher = (input: {
+    unitPrice: number
+    voucherAmount: number | null
+    quantity: number
+}) => { unitPriceBefore: number; voucherPerUnit: number; finalUnitPrice: number } | null
+
 type NewCartItem = Omit<CartItem, 'quantity' | 'cartItemId' | 'unitPriceBefore' | 'voucherPerUnit' | 'finalUnitPrice'> & {
     quantity?: number
-    canonicalVoucher?: { amount: number | null }
+    canonicalVoucher?: { amount: number | null; applyOnlineVoucher: ApplyOnlineVoucher }
 }
 
 interface CartStore {
@@ -69,7 +74,7 @@ export const useCartStore = create<CartStore>()(
                 if (canonicalVoucher && (rest.categorySlug !== 'thiet-bi-ve-sinh' || !rest.sku.trim() || !rest.price)) return false
 
                 const priced = canonicalVoucher && !alreadyPriced
-                    ? applyOnlineVoucher({ unitPrice: rest.price!, voucherAmount: canonicalVoucher.amount, quantity })
+                    ? canonicalVoucher.applyOnlineVoucher({ unitPrice: rest.price!, voucherAmount: canonicalVoucher.amount, quantity })
                     : undefined
                 if (priced === null) return false
 
