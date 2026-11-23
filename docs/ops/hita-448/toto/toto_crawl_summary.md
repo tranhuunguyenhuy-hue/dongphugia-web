@@ -1,6 +1,6 @@
 # #448 · Giá Hita cho TOTO
 
-Báo cáo cập nhật lúc 2026-11-23T18:49:34.193Z. Phạm vi: đọc nguồn công khai và xuất dữ liệu để Owner duyệt.
+Báo cáo cập nhật lúc 2026-11-23T18:55:33.729Z. Phạm vi: đọc nguồn công khai và xuất dữ liệu để Owner duyệt.
 
 ## Kết quả
 
@@ -9,23 +9,23 @@ Báo cáo cập nhật lúc 2026-11-23T18:49:34.193Z. Phạm vi: đọc nguồn 
 | Inventory thiết bị vệ sinh TOTO trên DPG | 4.441 |
 | DPG active, đưa vào danh sách ưu tiên | 2.057 |
 | DPG inactive, crawl sau nhóm active | 2.384 |
-| Có kết quả kiểm trong đợt này (active / inactive) | 575 (575 / 0) |
-| SKU khớp đúng mã trên PDP, kể cả trang không công bố giá | 541 |
-| SKU có giá đủ bằng chứng | 447 |
-| Trong số giá mới, có giá gốc / khuyến mãi / voucher | 447 / 447 / 170 |
-| SKU chưa có giá đủ bằng chứng | 3.994 |
-| SKU chưa kiểm trong đợt crawl | 3.866 |
+| Có kết quả kiểm trong đợt này (active / inactive) | 731 (731 / 0) |
+| SKU khớp đúng mã trên PDP, kể cả trang không công bố giá | 661 |
+| SKU có giá đủ bằng chứng | 533 |
+| Trong số giá mới, có giá gốc / khuyến mãi / voucher | 533 / 533 / 207 |
+| SKU chưa có giá đủ bằng chứng | 3.908 |
+| SKU chưa kiểm trong đợt crawl | 3.710 |
 
 - `AMBIGUOUS`: 32
-- `CONTACT`: 47
+- `CONTACT`: 52
 - `DISCONTINUED`: 16
-- `EXACT`: 447
-- `NOT_CRAWLED`: 3.866
+- `EXACT`: 533
+- `NOT_CRAWLED`: 3.710
 - `NOT_FOUND`: 1
-- `UNKNOWN`: 32
+- `UNKNOWN`: 97
 
 Pilot #450: 7 requests, không bị chặn
-Batch #461: 575 SKU có checkpoint, đang chạy khi chụp báo cáo
+Batch #461: 731 SKU có checkpoint, phiên thực thi bị ngắt, báo cáo dùng checkpoint đã lưu
 
 ## Bằng chứng và phạm vi
 
