@@ -14,6 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import {
+  CANONICAL_PRICE_FIELDS, LEGACY_PRICE_FIELDS, PRICE_ERROR_TEXT, SANITARY_CATEGORY_SLUG, validateCanonicalPricing,
+} from '@/components/admin/products/canonical-pricing'
 import { api, ApiError, displayMediaUrl, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
 import { Alert, CTA, EmptyState, NativeSelect, PageHeader, SkeletonRows, money, toast, useConfirm } from './ui'
 
@@ -169,9 +172,11 @@ export function buildInput(meta: ResourceMeta, form: Row, original: Row | null):
 }
 
 // Product edit is organised in tabs; fields the server adds later and that are not listed here land in "Thông tin".
+const canonicalPriceNames = new Set<string>(CANONICAL_PRICE_FIELDS)
+const legacyPriceNames = new Set<string>(LEGACY_PRICE_FIELDS)
 const PRODUCT_TABS: { id: string; label: string; fields: string[] }[] = [
   { id: 'general', label: 'Thông tin', fields: ['sku', 'name', 'display_name', 'slug', 'category_id', 'subcategory_id', 'brand_id', 'origin_id', 'color_id', 'material_id', 'product_type_id', 'product_sub_type_id', 'product_type', 'product_sub_type', 'stock_status', 'warranty_months', 'hita_product_id', 'source_url'] },
-  { id: 'pricing', label: 'Giá', fields: ['price', 'price_display', 'original_price', 'list_price', 'sale_price', 'online_discount_amount'] },
+  { id: 'pricing', label: 'Giá', fields: [...LEGACY_PRICE_FIELDS, ...CANONICAL_PRICE_FIELDS] },
   { id: 'media', label: 'Hình ảnh', fields: ['image_main_url'] },
   { id: 'content', label: 'Nội dung', fields: ['description', 'features', 'specs'] },
   { id: 'visibility', label: 'Hiển thị & SEO', fields: ['is_active', 'is_featured', 'is_home_featured', 'is_promotion', 'is_combo', 'is_master', 'sort_order', 'publication_status', 'pdp_visibility', 'listing_visibility', 'search_visibility', 'sellable_status', 'seo_indexing', 'sitemap_include', 'seo_title', 'seo_description'] },
@@ -203,6 +208,17 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
     for (const ref of refs) api.options(ref).then((items) => { if (live) setOptions((o) => ({ ...o, [ref]: items })) }).catch(() => undefined)
     return () => { live = false }
   }, [meta, id])
+  const isProduct = meta.key === 'products'
+  const category = options.categories?.find(option => option.id === Number(form.category_id))
+  const hasCanonicalPrices = isProduct && CANONICAL_PRICE_FIELDS.every(name => meta.fields.some(f => f.name === name))
+  // Category options expose only an ID and the master-data label.
+  const usesCanonicalPrices = hasCanonicalPrices && category !== undefined && slugify(category.label) === SANITARY_CATEGORY_SLUG
+  const canResolvePricing = !hasCanonicalPrices || category !== undefined
+  const priceFieldAllowed = (name: string) => {
+    if (canonicalPriceNames.has(name)) return usesCanonicalPrices
+    if (legacyPriceNames.has(name)) return canResolvePricing && !usesCanonicalPrices
+    return true
+  }
   if (!loaded) return <div className="grid gap-4">{error ? <Alert>{error}</Alert> : <><Skeleton className="h-9 w-64" /><Skeleton className="h-72 rounded-xl" /></>}</div>
 
   const set = (name: string, value: unknown) => setForm((f) => {
@@ -239,7 +255,10 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
       }} aria-invalid={jsonError[f.name] || undefined} />
       case 'password': return <Input {...common} type="password" autoComplete="new-password" minLength={8} maxLength={f.max ?? 200} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
       case 'email': return <Input {...common} type="email" autoComplete="off" maxLength={f.max} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
-      case 'money': return <Input {...common} type="number" min={f.min ?? 0} step="any" value={value === null || value === undefined ? '' : String(value)} onChange={(e) => set(f.name, e.target.value)} />
+      case 'money': {
+        const wholeVnd = isProduct && canonicalPriceNames.has(f.name)
+        return <Input {...common} type="number" min={f.min ?? 0} max={wholeVnd ? f.max : undefined} step={wholeVnd ? 1 : 'any'} value={String(value ?? '')} onChange={(e) => set(f.name, e.target.value)} />
+      }
       case 'datetime': return <Input {...common} disabled value={value ? new Date(String(value)).toLocaleString('vi-VN') : ''} readOnly />
       default: return <Input {...common} type="text" maxLength={f.max} value={String(value ?? '')} onChange={(e) => { if (f.slugFrom) setTouched((t) => new Set(t).add(f.name)); set(f.name, e.target.value) }} />
     }
@@ -251,7 +270,7 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
     const toggles = fields.filter((f) => f.kind === 'bool'); const rest = fields.filter((f) => f.kind !== 'bool')
     return <>{rest.length > 0 && <div className="grid gap-5 sm:grid-cols-2">{rest.map(fieldRow)}</div>}{toggles.length > 0 && <div className="grid gap-3 sm:grid-cols-2">{toggles.map(fieldRow)}</div>}</>
   }
-  const visibleFields = meta.fields.filter((f) => !(creating && f.readOnly))
+  const visibleFields = meta.fields.filter((f) => !(creating && f.readOnly) && (!isProduct || priceFieldAllowed(f.name)))
   const version = original && meta.versioned ? Number(original.version) : undefined
   const relationSections = meta.relations.map((r) => (
     <Section key={r.input} title={r.label}>
@@ -264,18 +283,25 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
       </fieldset>
     </Section>))
   const childSections = !creating ? (meta.children ?? []).map((c) => { const child = resources.find((r) => r.key === c.key); return child ? <ChildPanel key={c.key} child={child} column={c.column} parentId={id} /> : null }) : []
-  const isProduct = meta.key === 'products'
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setError('')
     const badJson = meta.fields.filter((f) => jsonError[f.name]).map((f) => f.label)
     if (badJson.length) { setError(`JSON không hợp lệ: ${badJson.join(', ')}.`); return }
+    if (usesCanonicalPrices) {
+      const issue = validateCanonicalPricing(form)
+      if (issue) { setError(PRICE_ERROR_TEXT[issue]); setTab('pricing'); return }
+    }
+    const body = buildInput(isProduct ? { ...meta, fields: visibleFields } : meta, form, original)
     setBusy(true)
-    const body = buildInput(meta, form, original)
     if (!creating && !Object.keys(body).length) { toast('Không có thay đổi để lưu.'); setBusy(false); return }
     try {
       if (creating) { const row = await api.create(meta.key, body); toast.success('Đã tạo.'); go(`/r/${meta.key}/${row.id}`) }
       else { const row = await api.update(meta.key, id, version, body); setOriginal(row); setForm(row); toast.success('Đã lưu.') }
-    } catch (err) { setError(errorText(err, labels)) } finally { setBusy(false) }
+    } catch (err) {
+      if (err instanceof ApiError && (err.code === 'PRICE_RELATION_INVALID' || err.code === 'VOUCHER_INVALID')) {
+        setError(PRICE_ERROR_TEXT[err.code]); setTab('pricing')
+      } else setError(errorText(err, labels))
+    } finally { setBusy(false) }
   }
   const title = creating ? `Thêm: ${meta.label}` : String(original?.name ?? original?.title ?? original?.label ?? `${meta.label} #${id}`)
   return (
@@ -294,7 +320,15 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
             const fields = visibleFields.filter((f) => t.fields.includes(f.name) || (t.id === 'general' && !known.has(f.name)))
             return (
               <TabsContent key={t.id} value={t.id} className="grid gap-4">
-                <Section>{fieldGrid(fields)}</Section>
+                <Section>
+                  {t.id === 'pricing' && usesCanonicalPrices && <p className="text-sm text-muted-foreground">
+                    Để trống cả ba ô nếu sản phẩm cần báo giá. Voucher tính theo từng sản phẩm trong giỏ hàng.
+                  </p>}
+                  {t.id === 'pricing' && !canResolvePricing && <p className="text-sm text-muted-foreground">
+                    {form.category_id ? 'Chưa xác định được danh mục để hiển thị các trường giá.' : 'Chọn danh mục để hiển thị các trường giá.'}
+                  </p>}
+                  {fieldGrid(fields)}
+                </Section>
                 {t.id === 'media' && !creating && <Gallery productId={id} canEdit={meta.canUpdate} mainUrl={String(form.image_main_url ?? '')} onSetMain={(url) => set('image_main_url', url)} />}
                 {t.id === 'media' && creating && <p className="text-sm text-muted-foreground">Thư viện ảnh khả dụng sau khi tạo sản phẩm.</p>}
               </TabsContent>)
