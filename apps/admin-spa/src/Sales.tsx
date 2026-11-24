@@ -94,7 +94,7 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
         actions={<Button variant="outline" onClick={() => go(`/${label.nav}`)}>Danh sách</Button>} />
       {error && <Alert>{error}</Alert>}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="grid min-w-0 content-start gap-4">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
           <Card><CardHeader><CardTitle>Sản phẩm ({row.lines.length})</CardTitle></CardHeader><CardContent className="px-0">
             <Table>
               <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Tên</TableHead><TableHead className="text-right">SL</TableHead>{isOrder ? <><TableHead className="text-right">Đơn giá</TableHead><TableHead className="text-right">Voucher</TableHead><TableHead className="text-right">Thành tiền</TableHead></> : <><TableHead>Lý do báo giá</TableHead><TableHead className="text-right">Giá tham chiếu</TableHead></>}</TableRow></TableHeader>
@@ -112,7 +112,7 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
             <ul className="grid gap-1 text-sm">{row.events.map((e, i) => <li key={i} className="flex justify-between gap-3"><span>{e.action === 'created' ? 'Khách gửi' : e.action === 'status' ? `${SALES_STATUS[(e.from_status ?? 'new') as SalesStatus]} → ${SALES_STATUS[(e.to_status ?? 'new') as SalesStatus]}` : e.action === 'assign' ? 'Giao việc' : 'Ghi chú'} <span className="text-muted-foreground">· {e.actor === 'guest' ? 'khách' : e.actor.replace('admin:', 'nhân viên #')}</span></span><span className="text-muted-foreground">{dateText(e.at)}</span></li>)}</ul>
           </CardContent></Card>
         </div>
-        <div className="grid content-start gap-4">
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
           <Card><CardHeader><CardTitle>Khách hàng</CardTitle></CardHeader><CardContent className="grid gap-1 text-sm">
             <p className="font-medium">{row.customer_name}</p><p><a className="text-brand hover:underline" href={`tel:${row.customer_phone}`}>{row.customer_phone}</a></p>
             {row.customer_email && <p>{row.customer_email}</p>}{row.delivery_address && <p>{row.delivery_address}</p>}{row.note && <p className="mt-2 rounded-md bg-muted p-2 text-muted-foreground">Ghi chú của khách: {row.note}</p>}
