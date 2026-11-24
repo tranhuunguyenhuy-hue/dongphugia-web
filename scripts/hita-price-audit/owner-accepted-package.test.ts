@@ -138,3 +138,14 @@ describe('freshness is fail-closed: no blanket disable', () => {
     const other = direct(cohort, 'toto', 'inactive', 1); expect(other.rows).toEqual([]); expect(other.summary.skipped_other_state).toBe(1543)   // wrong state plans nothing: no row of the other state is ever written
   })
 })
+
+describe('status lane (CONTACT / DISCONTINUED rows of import-handoff) — no price, planner-compatible, not an Owner-approved import', () => {
+  const hand = path.resolve(__dirname, '../../docs/ops/hita-448/import-handoff')
+  it.each([['toto-active', 'toto', 'active', 1, 332], ['toto-inactive', 'toto', 'inactive', 1, 935], ['inax-active', 'inax', 'active', 2, 16], ['inax-inactive', 'inax', 'inactive', 2, 1]] as const)('%s: %i status rows, never a price, stale source is only a warning', (cohort, brand, state, brandId, n) => {
+    const csv = readFileSync(path.join(hand, cohort, 'status-review.csv'), 'utf8')
+    const p = buildPlan({ csvText: csv, expectedCsvSha256: sha256(csv), candidateSha: SHA, inventory, db: snapshot(brandId, state === 'active'), dbSizeBytes: DB_SIZE, now: NOW, brand, state })
+    expect(p.stopReasons).toEqual([]); expect(p.rows).toHaveLength(n)
+    expect(p.rows.every(r => r.after.regular === null && r.after.promo === null && r.after.voucher === null && ['CONTACT_VERIFIED', 'DISCONTINUED'].includes(String(r.after.status)))).toBe(true)
+  })
+})
+

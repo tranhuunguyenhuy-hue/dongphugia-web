@@ -1,6 +1,8 @@
 # #470 — RELEASE MANIFEST (ứng viên kỹ thuật, chưa phê duyệt, chưa merge)
 
-**Quyết định Owner 24/11 đã đưa vào candidate:** 1C (order/quote tương thích giá mới **và** khoá mọi đường tạo đơn/báo giá trực tiếp khi commerce OFF — P470-003 + P470-004), 2C (kích hoạt lại SKU luôn được phép; giá cũ quá 7 ngày bị ẩn bằng trạng thái `REVERIFY_REQUIRED`, giữ lịch sử), chấp nhận chip biến thể legacy (SKU, không xem trước giá/ảnh; #432/#433/#440 vẫn OFF), quy tắc giá ứng viên Owner-accepted (§9).
+**Quyết định Owner 24/11 (vòng cuối) đã đưa vào candidate:** nghiệm thu dữ liệu giá theo bằng chứng hiện có (#443 7127916878) — không còn yêu cầu refresh Hita trực tiếp cho tập đã duyệt; nhận package Codex #485 (head `3ccbafc3`); lane ngoại lệ freshness đóng-theo-pin cho giá lưu trữ và lane baseline INAX 547 (§11).
+
+**Quyết định Owner 24/11 trước đó đã đưa vào candidate:** 1C (order/quote tương thích giá mới **và** khoá mọi đường tạo đơn/báo giá trực tiếp khi commerce OFF — P470-003 + P470-004), 2C (kích hoạt lại SKU luôn được phép; giá cũ quá 7 ngày bị ẩn bằng trạng thái `REVERIFY_REQUIRED`, giữ lịch sử), chấp nhận chip biến thể legacy (SKU, không xem trước giá/ảnh; #432/#433/#440 vẫn OFF), quy tắc giá ứng viên Owner-accepted (§9).
 
 **Phạm vi đã duyệt (TL/Owner):** toàn bộ **6.531 SKU thiết bị vệ sinh TOTO + INAX**, gồm active và inactive — nhưng phát hành theo **từng hãng × từng trạng thái** (bảng §1b), mỗi đơn vị có gate/plan/ledger/rollback riêng và có thể phát hành độc lập.
 
@@ -17,7 +19,7 @@ Quy ước tên: SQL của #470 gọi là **P470-001/002/003/004** (tên file `0
 | Lane phát hành Worker | `.github/workflows/m4-production-admin-release.yml` (combined Public+Admin, PostgreSQL). Không dùng `v1-worker-release.yml` (Public-only, guard từ chối thay Worker có Admin) |
 | Lane Edge Function | `.github/workflows/m4-production-function-deploy.yml` (`operation=deploy` cần `owner_flag_and_migrations_confirmed=true` = **migration M4 cũ** + target flag, hiện đã đúng; không liên quan P470) |
 | Lane backup | `.github/workflows/m4-production-backup.yml` (đã chạy hằng ngày 02:41 VN; lần gần nhất thành công 24/11 04:26 UTC, run 45326372117) |
-| Gói dữ liệu Codex (offline, #481/#482 đã vào `main`) | 4 tập review + 4 tập ứng viên trong `docs/ops/hita-448/…` (bảng §1b/§9). sha256 CSV review hiện hành: TOTO active `858c9200…5a95`, TOTO inactive `d29a135d…24ff`, INAX active `9f1ed770…3869`, INAX inactive `58c1e47a…d6ac` — **chỉ để chứng minh planner nhận được; phải refresh gần cutover (hạn 24 h của Quality Gate, hạn Offer 2026-12-01) và pin lại CSV/plan SHA vào từng GO-D** |
+| Gói dữ liệu Codex (offline, #481/#482 đã vào `main`) | 4 tập review + 4 tập ứng viên trong `docs/ops/hita-448/…` (bảng §1b/§9). sha256 CSV review hiện hành: TOTO active `858c9200…5a95`, TOTO inactive `d29a135d…24ff`, INAX active `9f1ed770…3869`, INAX inactive `58c1e47a…d6ac` — **đã được thay bằng package #485 (§11); không còn yêu cầu refresh; hạn Offer 2026-12-01 vẫn là cổng cứng: quá hạn ⇒ planner dừng** |
 | Plan | chỉ tạo được SAU P470-001/002 (cần snapshot đọc-only có cột mới); basis gồm version + checked_at nên plan SHA đổi khi DB đổi |
 
 ## 1b. Phạm vi 6.531 SKU và đơn vị phát hành (đọc-only Production 24/11; ID hãng bất biến, planner ghim cả id lẫn slug)
@@ -108,7 +110,7 @@ Không thay đổi: SKU/URL, ngành/hãng ngoài phạm vi, Blog, media, auth Ad
 ## 8. Bằng chứng (local/CI; không phải PASS Production)
 Xem bình luận báo cáo trong #470: lint, typecheck, vitest toàn repo, `run-local.sh` + `import-local.sh`, tích hợp PG 13 pha với ACL/RLS thật (gồm gate series OFF khi quyền series tồn tại, tổ hợp cờ hãng TOTO/INAX, SKU inactive có giá không lộ, chip biến thể legacy), `import-local.sh` hai hãng × hai trạng thái (cô lập chéo hãng, `is_active` đồng thời, rollback từng plan), build combined Public+Admin off/on + `wrangler deploy --dry-run`, CI trên đúng head #479. `run-local.sh` nay gồm 003 theo hãng, kiểm *control* mở/đóng của 004 bằng role `authenticated`, rollback 004 khớp ACL từng byte; `import-local.sh` có thêm plan ứng viên (áp dụng/rollback). **UNKNOWN:** Worker local (`wrangler dev --remote`) cho cache/Hyperdrive thật và hành vi trên Production thật (chưa làm hosted theo quy định). Đăng ký Supabase Auth đã xác minh đọc-only (§6).
 
-## 9. Giá ứng viên Owner-accepted (quy tắc #443 comment 7127072994; TL note 7127074691)
+## 9. Giá ứng viên Owner-accepted (quy tắc #443 comment 7127072994; TL note 7127074691) — contract; file duyệt thật nằm ở §11
 Gói Codex có 1.339 ứng viên lịch sử (giá đơn, hãng chỉ được chứng minh gián tiếp): TOTO active 87, TOTO inactive 393, INAX active 467, INAX inactive 392. Planner ứng viên (`prod-import.mts --owner-candidates approval.json`, `prod-import-candidates.mts`) **không bao giờ nhập một tệp ứng viên một mình**:
 - cần **file duyệt của Owner** ghim sha256 CSV + danh sách `dpg_id` được duyệt + tham chiếu quyết định; thiếu/đổi CSV/không có id ⇒ kế hoạch dừng hoặc rỗng;
 - mỗi dòng phải: SKU đầy đủ khớp 3 nơi (`dpg_sku = source_sku = search_sku`), `EXACT_SKU*`, độ tin cậy MODERATE/HIGH, VND, **một giá duy nhất** (KM/voucher trống), giá PDP = Offer = CSV, không trùng id trang Hita giữa các SKU, danh tính khớp DB (hãng/trạng thái/ngành/SKU), còn mới ≤ 7 ngày (hết hạn ⇒ phải refresh ở nguồn, **không đổi timestamp/hạn**), không ghi đè giá đã lưu/Hita-verified và không ghi đè chỉnh sửa Admin mới hơn;
@@ -120,4 +122,37 @@ Kết quả chạy offline trên gói thật (chưa có file duyệt ⇒ nhập 
 - **Provenance ở mức dòng DB — ĐÃ CHỐT (Owner, 24/11): không cần phân biệt giá Hita trực tiếp với Owner-accepted trong DB/Admin.** Không thêm cột; cả hai là `PRICE_VERIFIED` ở DB, Public không hiển thị chữ “Hita”. Provenance chỉ lưu ở ledger/manifest của từng plan (`price_basis`, nguồn, rule, tham chiếu duyệt) để đối soát/rollback.
 - **Planner chưa dựng CSV ứng viên mới:** chỉ nhận tệp Codex theo hai bố cục hiện có (INAX và TOTO) và dừng nếu thiếu cột.
 - **Chính sách 7 ngày** dùng chung cho kích hoạt lại và độ mới ứng viên (hằng `CANONICAL_REACTIVATION_MAX_AGE_MS`, `CANDIDATE_MAX_AGE_HOURS`).
+
+## 11. Package #485 (Codex) và các lane import — số thật, offline
+Package `docs/ops/hita-448/owner-accepted-candidates/` + `docs/ops/hita-448/import-handoff/`, PR #485 head `3ccbafc3d30ea45020a5b477ba178bd6d57012c1` (đã `merge` vào nhánh #479 để kiểm; **SHA merge #485 vào `main` sẽ được pin vào GO-A/GO-D khi CI #485 PASS**; checksum toàn gói `SHA256SUMS` = `de9bfd66…`). Nguồn quyết định: Owner #443 7127916878, TL 7128033322. Không truy cập Hita, không DB.
+
+| Lane (một plan = hãng × trạng thái × lane; plan/ledger/checksum/rollback riêng) | TOTO active | TOTO inactive | INAX active | INAX inactive | Tổng |
+|---|---:|---:|---:|---:|---:|
+| **A. Giá lưu trữ — ngoại lệ freshness Owner** (`--archived-direct-approval`, review CSV + pin sha/id) | 1.543 | 926 | 305 | 8 | **2.782** |
+| **B. Ứng viên Owner-accepted** (`--owner-candidates`, chỉ giá gốc, KM/voucher NULL) | 67 | 393 | 467 | 392 | **1.319** |
+| **C. INAX active baseline** (`--inax-baseline-decision`; 545 gốc+KM, 2 chỉ gốc, voucher NULL) | — | — | 547 | — | **547** |
+| Cộng giá (A+B+C) | 1.610 | 1.319 | 1.319 | 400 | **4.648** (2.929 active / 1.719 inactive) |
+| **D. Trạng thái không giá** (`status-review.csv`: CONTACT/DISCONTINUED — Owner quyết định có nhập hay không) | 332 | 935 | 16 | 1 | 1.284 |
+Không nhập: 1.132 voucher (HOLD/NULL, giữ evidence, **điểm nghiệp vụ riêng cho Owner**, không phải quyết định bỏ voucher), 599 chưa xác minh (để trống = “Cần liên hệ xác nhận giá”), 20 ứng viên thiếu căn cứ. Tổng giá khi nhập đủ: **1.634 chỉ giá gốc + 3.014 gốc+KM, 0 voucher**. Đối soát đủ 6.531 SKU; `is_active`, SKU, URL, brand, category không đổi; commerce OFF.
+
+**Kết quả chạy planner thật trên package (test `owner-accepted-package.test.ts`, 20 ca):** 4.101 (lane A+B) + 547 (lane C) = 4.648, **không trùng SKU giữa các lane**; 0 dòng dừng. Tất cả pin kiểm theo cả hai chiều (đủ/thiếu id).
+
+**Pin CSV (sha256 đầy đủ nằm trong `SHA256SUMS` của package; tiền tố):** A: TOTO-a `796fe50f…`, TOTO-i `0f0d202c…`, INAX-a `03af3ba9…`, INAX-i `e8d7646f…` · B: `be316fa4…`, `5113c8ea…`, `0fab7930…`, `69d56924…` · C: `24538be8…` + `inax-baseline-owner-decision.json` · D: `00d70d70…`, `a79bdb0b…`, `a8861d99…`, `65546c08…`.
+
+**Hợp đồng ngoại lệ (không blanket):**
+- Giá **không còn qua được chỉ bằng cảnh báo**: một dòng *sẽ lưu giá* mà nguồn cũ hơn cổng 24 h ⇒ plan **dừng** (`CHECKED_STALE_NOT_APPROVED`) trừ khi nằm trong ngoại lệ Owner ghim đúng sha256 CSV + đúng tập id (bằng nhau hai chiều) + approver Owner + basis `ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION`; voucher phải rỗng; **Offer hết hạn (2026-12-01 23:59 UTC) luôn dừng**, kể cả có ngoại lệ ⇒ **cửa sổ import thật phải trước hạn này**.
+- Timestamp/nguồn giữ nguyên (không re-stamp, không “now”); ledger ghi `price_basis` (`HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION` / `OWNER_ACCEPTED_CANDIDATE` / `OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE`) + `not_reconfirmed`; DB/Admin không có trường provenance (Owner đã chốt).
+- Lane C: chỉ INAX×active; kiểm nguyên SKU/brand/category/state/identity, evidence nhãn (`STALE_PILOT_BASELINE_448`, `HITA_BASELINE_448`, `NOT_RECONFIRMED`), SKU Hita = SKU DPG, URL PDP, VND, giá đề xuất = giá lưu; chỉ 2 dòng (`BFV-7145T-3C` id 559, `AC-919R+CW-H17VN/BW1` id 7679) được bỏ khuyến mãi vì `DEEP_PROMO_TERMS_NOT_CONFIRMED`; không đè giá đã lưu hay chỉnh sửa Admin mới hơn; không biến UNRESOLVED nào khác thành giá.
+- Mọi lane: ghim brand id+slug, category, `is_active`, version; đổi `is_active`/chỉnh sửa Admin giữa plan và apply ⇒ batch abort nguyên khối; rollback khôi phục đúng trạng thái trước. Test local PG (`import-local.sh`) cho lane A, B, C: dừng khi thiếu ngoại lệ/sai tập id/sai hãng/hết hạn, race, áp dụng, không đè, rollback.
+
+**Dung lượng:** 4.648 dòng giá ≈ **9,38 MiB**, thêm lane D (1.284) ≈ **11,96 MiB** (đủ cả 6.531 ≈ 13,17 MiB) trên headroom 70,26 MiB (đo 24/11) ⇒ còn ≥ 57 MiB; planner dừng nếu < 8 MiB. Không DROP INDEX, không chi phí.
+
+## 12. Chuẩn bị GO (không chạy hosted) và rủi ro
+| Cổng | Nội dung chuẩn bị sẵn | Ghi chú |
+|---|---|---|
+| **GO-A** merge #479 | SHA = head cuối đã qua CI (nêu trong báo cáo TL) + SHA merge #485 | merge không đổi Production; lane Worker/Function chỉ chạy `main` + Owner |
+| **GO-B** | `m4-production-backup operation=backup` ngay trước C + xuất đọc-only giá legacy sanitary (checksum; giữ 7 ngày sau cutover ổn định) | không có PITR trên gói Free ⇒ đây là điểm khôi phục |
+| **GO-C** | P470-001→004 (sha §2) | **P470-004 là rủi ro đang mở:** chưa áp dụng Production ⇒ `authenticated` (kể cả tài khoản tự đăng ký) còn tạo/ghi đơn-báo giá trực tiếp; có thể áp riêng và sớm nhất, không phụ thuộc gì |
+| **GO-D** | tối đa 13 plan (A×4, B×4, C×1, D×4 nếu Owner nhập trạng thái); mỗi plan: snapshot đọc-only → dry-run → plan SHA/sha batch + rollback vào GO | thứ tự gợi ý: active trước (TOTO, INAX), rồi inactive; cửa sổ trước 2026-12-01 |
+| **GO-E** | Edge Function → Worker `verify` → `publish canonical_pricing=off` → `on` (`canonical_brands=toto` rồi `toto,inax`) | Public chỉ đọc active; inactive không hiển thị |
 

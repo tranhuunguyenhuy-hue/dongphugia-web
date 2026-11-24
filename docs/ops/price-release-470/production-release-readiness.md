@@ -2,7 +2,9 @@
 
 **Trạng thái: CHUẨN BỊ, CHƯA THỰC THI.** Không có ghi Production/TEST/Staging, DDL, DML, DROP INDEX, import hay deploy nào đã xảy ra. Mọi bước dưới đây cần **Owner GO riêng** nêu đúng SHA + SQL + rollback. Cập nhật: 2026-11-24 (UTC).
 
-## 0. Phạm vi đã duyệt (cập nhật 24/11)
+## 0. Phạm vi đã duyệt (cập nhật 24/11, vòng cuối)
+**Dữ liệu:** Owner đã nghiệm thu giá theo bằng chứng hiện có (không refresh Hita trực tiếp). Package Codex #485: 4.648 giá (lane ngoại lệ lưu trữ 2.782 + ứng viên 1.319 + baseline INAX 547), 1.284 trạng thái không giá, 1.132 voucher HOLD — số thật, pin CSV và hợp đồng ngoại lệ ở `release-manifest.md` §11, chuẩn bị GO ở §12.
+
 **6.531 SKU thiết bị vệ sinh TOTO + INAX, active (3.710) và inactive (2.821)** — số liệu, đơn vị phát hành theo hãng × trạng thái, cờ theo hãng, dung lượng 13,17 MiB / headroom 70,26 MiB và ca phát hành từng phần: xem `release-manifest.md` §1b, §5b. Mục 1 dưới đây là chi tiết lô đầu (TOTO active) và vẫn đúng.
 
 ## 1. Lô đầu — TOTO active (chi tiết; TL/Owner xem xét)

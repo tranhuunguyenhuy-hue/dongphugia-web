@@ -119,9 +119,12 @@ export function buildPlan(input: PlanInput): Plan {
       counts.blocked_identity++; stop.push(`IDENTITY_MISMATCH id=${r.dpg_id} sku=${r.sku.slice(0, 30)}`); return
     }
     const line = idx + 2, covered = !!exc && excIds.has(id) && !stop.some(s => s.startsWith('FRESHNESS_EXCEPTION_'))
-    if (expiredLines.has(line)) { stop.push(`PRICE_OFFER_EXPIRED id=${id}`); return }                // never importable, exception or not
-    if (staleLines.has(line) && !covered) { stop.push(`CHECKED_STALE_NOT_APPROVED id=${id}`); return }
-    if (covered && num(r.online_voucher_amount_vnd) !== null) { stop.push(`EXCEPTION_ROW_HAS_VOUCHER id=${id}`); return }   // voucher policy: held, never imported here
+    // Freshness guards protect MONEY: they apply to rows that would store a price. Status-only rows (CONTACT/DISCONTINUED/UNRESOLVED/NOT_FOUND) carry no price and keep the warn-only behaviour.
+    if (status === 'PRICE_VERIFIED') {
+      if (expiredLines.has(line)) { stop.push(`PRICE_OFFER_EXPIRED id=${id}`); return }                // never importable, exception or not
+      if (staleLines.has(line) && !covered) { stop.push(`CHECKED_STALE_NOT_APPROVED id=${id}`); return }
+      if (covered && num(r.online_voucher_amount_vnd) !== null) { stop.push(`EXCEPTION_ROW_HAS_VOUCHER id=${id}`); return }   // voucher policy: held, never imported here
+    }
     const after: Canon = status === 'PRICE_VERIFIED'
       ? { status, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) }
       : { status, regular: null, promo: null, voucher: null }
