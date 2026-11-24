@@ -47,7 +47,7 @@ describe('Admin shell gateway', () => {
   it('allows only well-formed generic resource routes and signs them like any other request', async () => {
     stubUpstream(json({ data: { items: [] } }))
     const env = environment()
-    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/banners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/sales/summary'], ['GET', '/sales/orders?status=new&page=2'], ['GET', '/sales/quotes?status=processing'], ['GET', '/sales/orders/4'], ['GET', '/sales/quotes/9'], ['POST', '/sales/orders/4/status'], ['POST', '/sales/quotes/9/note'], ['POST', '/sales/orders/4/assign'], ['POST', '/products/bulk'], ['GET', '/products/5/variants'], ['POST', '/products/5/variants'], ['DELETE', '/products/5/variants/7']]) {
+    for (const [method, path] of [['GET', '/schema'], ['GET', '/r/banners?q=a&page=2'], ['POST', '/r/blog-posts'], ['GET', '/r/blog-categories/options'], ['GET', '/r/blog-posts/12'], ['PATCH', '/r/blog-posts/12'], ['DELETE', '/r/banners/3'], ['GET', '/dashboard?period=week'], ['GET', '/assignees'], ['GET', '/sales/summary'], ['POST', '/sales/orders/list'], ['POST', '/sales/quotes/list'], ['GET', '/sales/orders/4'], ['GET', '/sales/quotes/9'], ['POST', '/sales/orders/4/status'], ['POST', '/sales/quotes/9/note'], ['POST', '/sales/orders/4/assign'], ['POST', '/products/bulk'], ['GET', '/products/5/variants'], ['POST', '/products/5/variants'], ['DELETE', '/products/5/variants/7']]) {
       const init = method === 'GET' ? {} : { method, body: '{}' }
       expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(200)
     }
@@ -56,10 +56,27 @@ describe('Admin shell gateway', () => {
     expect(url).toBe(`${FN}/r/banners/3`)
     expect(await verifyEnvelope(SECRET, { method: 'DELETE', route: routeOf(url), body: init.body, headers: new Headers(init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
     calls.length = 0
-    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['DELETE', '/sales/orders/1'], ['PATCH', '/sales/orders/1'], ['POST', '/sales/orders'], ['PATCH', '/sales/orders/1/status'], ['GET', '/sales/orders/1/status'], ['POST', '/sales/payments/1/status'], ['POST', '/sales/orders/abc/status'], ['POST', '/sales/orders/1/payment'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/status'], ['POST', '/quotes/9/complete'], ['GET', '/quotes/9'], ['POST', '/quotes'], ['PATCH', '/products/bulk'], ['GET', '/products/bulk'], ['PATCH', '/products/5/variants'], ['DELETE', '/products/5/variants'], ['POST', '/products/5/variants/7']]) {
+    for (const [method, path] of [['GET', '/r/Banners'], ['GET', '/r/banners/abc'], ['GET', '/r/banners/1/2'], ['PUT', '/r/banners/1'], ['DELETE', '/r/banners'], ['POST', '/r/banners/1'], ['PATCH', '/r/banners'], ['GET', '/r/'], ['GET', '/r/a'], ['POST', '/schema'], ['GET', '/r/banners/1234567890'], ['GET', '/sales/orders?q=0912345678'], ['GET', '/sales/orders'], ['GET', '/sales/quotes?status=new'], ['POST', '/sales/orders'], ['PATCH', '/sales/orders/list'], ['POST', '/sales/payments/list'], ['DELETE', '/sales/orders/1'], ['PATCH', '/sales/orders/1'], ['POST', '/sales/orders'], ['PATCH', '/sales/orders/1/status'], ['GET', '/sales/orders/1/status'], ['POST', '/sales/payments/1/status'], ['POST', '/sales/orders/abc/status'], ['POST', '/sales/orders/1/payment'], ['GET', '/orders?status=pending'], ['GET', '/orders/4'], ['PATCH', '/orders/4'], ['PATCH', '/orders/4/status'], ['POST', '/quotes/9/complete'], ['GET', '/quotes/9'], ['POST', '/quotes'], ['PATCH', '/products/bulk'], ['GET', '/products/bulk'], ['PATCH', '/products/5/variants'], ['DELETE', '/products/5/variants'], ['POST', '/products/5/variants/7']]) {
       const init = method === 'GET' ? {} : { method, body: '{}' }
       expect((await handleAdminNext(browser('/admin-next/api' + path, init), env, ctx)).status, `${method} ${path}`).toBe(404)
     }
+    expect(calls).toHaveLength(0)
+  })
+
+  it('order/quote search travels as a POST body: the phone is never in a URL, the upstream request is signed over the body, responses are no-store, cross-site POST is refused', async () => {
+    stubUpstream(json({ data: { items: [], total: 0, counts: {} } }))
+    const env = environment(), phone = '0912345678'
+    const response = await handleAdminNext(browser('/admin-next/api/sales/orders/list', { method: 'POST', body: JSON.stringify({ q: phone, status: 'new', page: 1, limit: 25 }), headers: { cookie: `dpg-admin-session=${TOKEN}` } }), env, ctx)
+    expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('private, no-store')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(`${FN}/sales/orders/list`); expect(calls[0].url).not.toContain(phone); expect(calls[0].url).not.toContain('?')   // no query string at all
+    expect(calls[0].init.body).toContain(phone)                                                                                        // it is in the signed body only
+    expect(await verifyEnvelope(SECRET, { method: 'POST', route: routeOf(calls[0].url), body: calls[0].init.body, headers: new Headers(calls[0].init.headers) })).toMatchObject({ ok: true, origin: ORIGIN })
+    calls.length = 0
+    const crossSite = await handleAdminNext(new Request(ORIGIN + '/admin-next/api/sales/orders/list', { method: 'POST', body: '{}', headers: { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site', 'content-type': 'application/json' } }), env, ctx)
+    expect(crossSite.status).toBe(403); expect(calls).toHaveLength(0)
+    expect((await handleAdminNext(browser('/admin-next/api/sales/orders/list', { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } }), env, ctx)).status).toBe(415)
+    for (const url of ['/admin-next/api/sales/orders?q=0912345678', '/admin-next/api/sales/quotes?q=0912345678&status=new']) expect((await handleAdminNext(browser(url), env, ctx)).status, url).toBe(404)   // the old GET search is gone
     expect(calls).toHaveLength(0)
   })
 

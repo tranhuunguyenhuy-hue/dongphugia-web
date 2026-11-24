@@ -95,15 +95,15 @@ export type SalesRow = { id: number; code: string; status: SalesStatus; customer
 export type SalesLine = { line_no: number; product_id: number; sku: string; product_name: string; brand: string | null; quantity: number; regular_vnd?: Money; unit_selling_vnd: Money; unit_voucher_vnd?: Money; line_subtotal_vnd?: Money; line_voucher_vnd?: Money; reason?: string }
 export type SalesDetail = SalesRow & { customer_email: string | null; note: string | null; staff_note: string | null; version: number; delivery_address?: string; subtotal_vnd?: Money; voucher_vnd?: Money; assigned_name: string | null; lines: SalesLine[]; events: { actor: string; action: string; from_status: string | null; to_status: string | null; at: string }[] }
 export type Dashboard = {
-  stats: { new_orders: number; new_quotes: number; processing_orders: number; processing_quotes: number; total_products: number; active_products: number }
+  scope: 'all' | 'own'
+  stats: { new_orders: number; new_quotes: number; processing_orders: number; processing_quotes: number; total_products: number | null; active_products: number | null }
   new_orders: { id: number; code: string; customer_name: string; customer_phone: string; total_vnd: Money; line_count: number; created_at: string }[]
   new_quotes: { id: number; code: string; customer_name: string; customer_phone: string; line_count: number; created_at: string }[]
 }
-const qs = (params: Record<string, string | number>) => new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '').map(([k, v]) => [k, String(v)]))
 export const commerce = {
   assignees: () => request<{ items: { id: number; name: string; role: string }[] }>('GET', '/assignees').then((r) => r.items),
   dashboard: () => request<Dashboard>('GET', '/dashboard'),
-  list: (kind: SalesKind, params: Record<string, string | number>) => request<{ items: SalesRow[]; total: number; counts: Record<SalesStatus, number> }>('GET', `/sales/${kind}?${qs(params)}`),
+  list: (kind: SalesKind, params: Record<string, string | number>) => request<{ items: SalesRow[]; total: number; counts: Record<SalesStatus, number> }>('POST', `/sales/${kind}/list`, Object.fromEntries(Object.entries(params).filter(([, v]) => v !== ''))),   // POST body: search terms (phones) never go in a URL
   get: (kind: SalesKind, id: number) => request<SalesDetail>('GET', `/sales/${kind}/${id}`),
   setStatus: (kind: SalesKind, id: number, status: Exclude<SalesStatus, 'new'>, expected_version: number, note?: string) => request<SalesDetail>('POST', `/sales/${kind}/${id}/status`, { status, expected_version, ...(note ? { note } : {}) }),
   setNote: (kind: SalesKind, id: number, note: string, expected_version: number) => request<SalesDetail>('POST', `/sales/${kind}/${id}/note`, { note, expected_version }),
