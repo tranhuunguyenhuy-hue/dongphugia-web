@@ -27,12 +27,25 @@ describe('commerce v1 inbox (Admin SPA)', () => {
     expect(screen.getByRole('button', { name: 'Bắt đầu xử lý' })).toBeInTheDocument()
   })
   it('moves the status with the version it loaded (optimistic lock)', async () => {
-    vi.spyOn(commerce, 'get').mockResolvedValue(order({ version: 4 }))
-    const set = vi.spyOn(commerce, 'setStatus').mockResolvedValue(order({ status: 'processing', version: 5 }))
+    vi.spyOn(commerce, 'get').mockResolvedValueOnce(order({ version: 4 })).mockResolvedValue(order({ status: 'processing', version: 5 }))
+    // the real API answers a write with the changed row ONLY (no lines/events): the page must not crash on it and must re-read the detail
+    const { lines: _l, events: _e, ...partial } = order({ status: 'processing', version: 5 })
+    const set = vi.spyOn(commerce, 'setStatus').mockResolvedValue(partial as unknown as SalesDetail)
     page(admin)
     fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu xử lý' }))
     await waitFor(() => expect(set).toHaveBeenCalledWith('orders', 5, 'processing', 4, undefined))
     expect(await screen.findByRole('button', { name: 'Hoàn tất' })).toBeInTheDocument()
+    expect(screen.getByText('TOTO 2')).toBeInTheDocument()          // lines + history still rendered after the action
+  })
+  it('saving the internal note keeps the page alive (regression: partial write response crashed the detail)', async () => {
+    vi.spyOn(commerce, 'get').mockResolvedValueOnce(order({ version: 2 })).mockResolvedValue(order({ version: 3, staff_note: 'Da goi khach' }))
+    const { lines: _l, events: _e, ...partial } = order({ version: 3, staff_note: 'Da goi khach' })
+    const save = vi.spyOn(commerce, 'setNote').mockResolvedValue(partial as unknown as SalesDetail)
+    page(admin)
+    fireEvent.change(await screen.findByLabelText('Ghi chú nội bộ'), { target: { value: 'Da goi khach' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu ghi chú' }))
+    await waitFor(() => expect(save).toHaveBeenCalledWith('orders', 5, 'Da goi khach', 2))
+    expect(await screen.findByText('TOTO 2')).toBeInTheDocument(); expect(screen.getByLabelText('Ghi chú nội bộ')).toHaveValue('Da goi khach')
   })
   it('a sale user (no orders:cancel) never sees the cancel button; terminal states offer no action', async () => {
     vi.spyOn(commerce, 'get').mockResolvedValue(order())
