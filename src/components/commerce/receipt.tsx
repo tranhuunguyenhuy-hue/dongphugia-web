@@ -13,6 +13,8 @@ import { useCommerceCart } from '@/lib/commerce/cart-store'
 export function CommerceReceipt() {
     const [receipts, setReceipts] = useState<Receipt[] | null>(null)
     const remaining = useCommerceCart(state => state.lines.length)
+    // Receipts live only in this browser session (sessionStorage): read after mount to keep SSR/hydration identical.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setReceipts(loadReceipts()) }, [])
     if (receipts === null) return null
     if (receipts.length === 0) {
