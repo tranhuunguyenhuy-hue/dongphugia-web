@@ -63,7 +63,9 @@ export function planPageCache(request:Request):PageCachePlan|null{
   return {cls,ttlSeconds:cls==='static'?STATIC_PAGE_CACHE_TTL_SECONDS:PAGE_CACHE_TTL_SECONDS,staleSeconds:staleIfErrorSeconds(cls),search}
 }
 
-export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:string,catalogueCheckpoint:string|null){
+/** pricingVariant (#470): the canonical-pricing mode + brand scope. Omitted/'off' keeps the exact pre-#470 key; any change of the
+ * flag or scope therefore lands on a different key, so a flip ON/OFF never serves HTML rendered under the other setting. */
+export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:string,catalogueCheckpoint:string|null,pricingVariant?:string){
   if(!/^[0-9a-f]{40}$/.test(sourceCommit))throw new Error('PUBLIC_WORKER_CACHE_SOURCE_INVALID')
   if(catalogueCheckpoint&&!/^[0-9a-f]{40}$/.test(catalogueCheckpoint))throw new Error('PUBLIC_CATALOGUE_CHECKPOINT_INVALID')
   const url=new URL(request.url)
@@ -72,6 +74,10 @@ export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:str
   key.searchParams.set('__dpg_source',sourceCommit)
   if(catalogueCheckpoint)key.searchParams.set('__dpg_catalogue',catalogueCheckpoint)
   if(plan.search)key.searchParams.set('__dpg_q',plan.search)
+  if(pricingVariant&&pricingVariant!=='off'){
+    if(!/^[a-z]+(?::[a-z0-9,-]{1,200})?$/.test(pricingVariant))throw new Error('PUBLIC_WORKER_CACHE_PRICING_VARIANT_INVALID')
+    key.searchParams.set('__dpg_pricing',pricingVariant)
+  }
   return new Request(key.toString(),{method:'GET'})
 }
 
