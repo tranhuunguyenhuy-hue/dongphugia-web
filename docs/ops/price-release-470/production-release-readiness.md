@@ -50,15 +50,14 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 - Worker rollback tách riêng và **không** hoàn tác SQL; ngược lại cũng vậy.
 - Stop rule: dừng ngay nếu lệch row-count, lệch plan SHA, headroom < 8 MiB, hoặc lỗi guard — không tự retry.
 
-## 7. KHOẢNG TRỐNG CODE CÒN LẠI — cần 1 quyết định kiến trúc (không tự quyết)
-Đã làm & kiểm thử local: DB (001–003), planner/import, Admin API (#473). **Chưa làm** — vì Production hiện không dùng đường đọc giá canonical:
-- `scripts/app-foundation/m2-public-snapshot.mts:28,83` **cứng `price: null`** và ném lỗi nếu `price !== null`; Public Production hiển thị "Liên hệ báo giá" cho mọi SKU. Mapper canonical (`live-public-catalogue.ts`) chỉ chạy ở Preview TEST (`APP_ENV==='staging' && PREVIEW_TEST_DATABASE_ISOLATED`), cũng như sort giá (`listing-query.ts:35`), UI sort, `worker.ts:152`, `worker-policy.ts:135/201`, `public-snapshot-mode.ts:24`.
-- Giỏ hàng/đặt hàng: `apps/public/app/gio-hang/page.tsx:12` trả 404 ngoài staging, `order-intake.ts:40` chỉ bật ở TEST. AGENTS.md: *không thêm commerce/checkout mới* nếu chưa được duyệt.
+## 7. KIẾN TRÚC GIÁ PUBLIC — Owner chọn A (24/11) nhưng có SỰ THẬT MỚI cần xác nhận lại
+**Đính chính báo cáo trước:** câu "Public Production cứng `price: null`" chỉ đúng với builder M2 (`m2-public-snapshot.mts`, dùng cho Preview). Pipeline snapshot thật (`scripts/catalogue-direct/`) vốn đã hiển thị **giá legacy khôi phục** (quyết định PM 03/11, `public-restored-pricing.mjs`).
 
-**Quyết định cần TL/Owner:** đường nào đưa giá canonical lên Public Production?
-- **(A) Khuyến nghị**: dựng lại snapshot với giá canonical cho sanitary (`PRICE_VERIFIED` mới có giá; NULL/UNRESOLVED/… = "Liên hệ báo giá"; không fallback legacy), giữ Public read-only và không mở live DB. Đợt đầu **chỉ hiển thị giá + báo giá**; giỏ hàng/đặt hàng giữ tắt (003 vẫn triển khai để API hiện có không lộ giá legacy). Giá đổi ⇒ cần rebuild snapshot.
-- (B) Bật đường đọc live DB cho giá (đổi chính sách Worker/role) — thay đổi kiến trúc lớn hơn, không khuyến nghị cho đợt đầu.
-Sau khi chọn, code Public/PDP/PLP/schema.org sẽ làm trong PR riêng (chỉ test local/CI).
+**Đọc-only Cloudflare (24/11, Worker `dongphugia-v1-public-production`):** Production **đang chạy `PUBLIC_CATALOGUE_SOURCE=postgresql` với binding Hyperdrive `PUBLIC_DB`** (đọc DB sống bằng role `dpg_public_catalogue`, không phải snapshot tĩnh); `v1-worker-release.yml` chỉ cho phép xuất bản bản PostgreSQL, snapshot là chế độ rollback. Vì role này không đọc được bất kỳ cột giá legacy, **hiện nay Public Production không hiển thị giá nào** (mapper `live-public-catalogue.ts` chỉ nạp giá khi `APP_ENV=staging` + TEST). Tiền đề "đọc snapshot tĩnh" của quyết định A do đó **chưa đúng với thực tế deploy**.
+
+Đã làm theo A (đúng cho đường snapshot/rollback và Preview): PR **#475** — `public-canonical-pricing.mjs` + projection (scope sanitary × brand `toto`, mặc định TẮT, buộc CSV/plan SHA vào manifest, build dừng nếu `canonical_price_checked_at` quá hạn), hợp đồng listing, PDP/PLP/search, JSON-LD (Offer chỉ khi có giá, không khai availability), CTA giỏ hàng tắt (`cartEnabled=false`). Đường **live PostgreSQL** (đang là Production thật) chưa được đụng: cần mở rộng `live-public-catalogue.ts` (SELECT thêm 4 cột + `canonical_price_status`, cùng DTO `hita-exact-v1`) và đã có sẵn grants ở 002. Không làm trước khi Owner/TL xác nhận lại hướng.
+
+**Thứ tự cutover (áp dụng cho cả hai đường):** 1 preflight + sao lưu (mục 5) + đo headroom → 2 001 → 002 → (kiểm CHECK/ACL) → 3 crawl lại + Gate + plan SHA mới → 4 import 10 batch + đối soát theo status → 5 003 (hàm order/quote) → 6 build artifact từ **đúng** candidate SHA + CSV sha + plan SHA (snapshot: `PUBLIC_CANONICAL_PRICING=on` + hai SHA bắt buộc, manifest ghi lại; live: cờ tương đương) → 7 kiểm file/preview cô lập (`preview2-candidate-audit`, smoke contract) → 8 publish bằng Owner GO riêng → 9 smoke + giám sát 24h → rollback. Rollback phải **đồng bộ**: chỉ rollback Worker hoặc chỉ rollback SQL đều không đủ — nếu Worker cũ chạy trên DB đã import thì giá canonical vô hại (cột bị bỏ qua) nhưng nếu SQL bị rollback khi Worker mới còn chạy thì mọi SKU in-scope thành "Cần liên hệ xác nhận giá"; vì vậy thứ tự rollback là Worker trước, SQL sau.
 
 ## 7b. PASS / FAIL / UNKNOWN
 | Hạng mục | Kết quả |
@@ -68,8 +67,9 @@ Sau khi chọn, code Public/PDP/PLP/schema.org sẽ làm trong PR riêng (chỉ 
 | Planner: dry-run mặc định, guard identity/SHA/headroom/row-count, rollback batch, idempotent | PASS (local) |
 | Admin API giữ status nhất quán (37/37 tích hợp + 5 unit) | PASS (local) |
 | Admin API trên DB có cột status thật (sau 001) | UNKNOWN |
-| CI `quality` trên PR | UNKNOWN (đang chạy) |
-| Public/PDP/PLP/snapshot dùng giá canonical ở Production | **CHƯA LÀM** (chờ quyết định mục 7) |
+| CI `quality` #471/#472/#473/#474 | PASS (xanh trên đầu nhánh); #475 chưa kiểm |
+| Snapshot projection + PDP/PLP/search/JSON-LD canonical (PR #475; vitest 125 + 46 + 2 pass, tsc sạch) | PASS (local), mặc định TẮT |
+| Đường live PostgreSQL (Production thật) dùng giá canonical | **CHƯA LÀM — chờ xác nhận hướng (mục 7)** |
 | `price_valid_until` thật của Hita / 28 WARN voucher lớn | UNKNOWN — cần crawl lại + Owner nhìn |
 | 181 SKU active chưa xác minh | Codex tiếp tục; không chặn nếu Owner chấp nhận ẩn giá |
 | Sao lưu (5.1, 5.2) | CHƯA TẠO |
