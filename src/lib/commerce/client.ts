@@ -45,6 +45,10 @@ export async function attemptKey(kind: 'order' | 'quote', payload: unknown): Pro
     if (!key) { key = `${kind}-${crypto.randomUUID()}`; try { sessionStorage.setItem(storageKey, key) } catch { /* ignore */ } }
     return { storageKey, key }
 }
+/** Failures where the server has certainly written NOTHING for this key (validated and refused). Everything else — network error, 5xx, 429, unparsable/unknown response — may have committed: KEEP the key so the retry replays the same receipt. */
+const NOT_WRITTEN = new Set(['INVALID_INPUT', 'INVALID_IDEMPOTENCY_KEY', 'INVALID_ITEMS', 'INVALID_ITEM', 'INVALID_QUANTITY', 'DUPLICATE_PRODUCT', 'INVALID_CUSTOMER_NAME', 'INVALID_CUSTOMER_PHONE',
+    'INVALID_CUSTOMER_EMAIL', 'INVALID_DELIVERY_ADDRESS', 'INVALID_NOTE', 'PRICE_CHANGED', 'ITEMS_NOT_ORDERABLE', 'PRODUCT_UNAVAILABLE', 'IDEMPOTENCY_KEY_REUSED'])
+export const attemptSurelyNotWritten = (result: ApiFailure) => result.http >= 400 && result.http < 500 && result.http !== 429 && NOT_WRITTEN.has(result.code)
 export const forgetAttempt = (storageKey: string) => { try { sessionStorage.removeItem(storageKey) } catch { /* ignore */ } }
 
 const RECEIPTS_KEY = 'dpg-receipts-v2'

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { siteConfig } from '@/config/site'
 import { formatPrice } from '@/lib/utils'
 import { useCommerceCart } from '@/lib/commerce/cart-store'
-import { attemptKey, checkCart, forgetAttempt, saveReceipt, submitOrder, submitQuote, type CartCheck, type CheckedLine, type Contact } from '@/lib/commerce/client'
+import { attemptKey, attemptSurelyNotWritten, checkCart, forgetAttempt, saveReceipt, submitOrder, submitQuote, type CartCheck, type CheckedLine, type Contact } from '@/lib/commerce/client'
 
 const PHONE = /^(?:\+84|84|0)(?:3|5|7|8|9)\d{8}$/
 const EMPTY: Contact = { customerName: '', customerPhone: '', customerEmail: '', deliveryAddress: '', note: '' }
@@ -20,26 +20,33 @@ const REASON: Record<string, string> = { NO_PRICE: 'Chưa có giá bán trực t
 export function CommerceCartPage() {
     const router = useRouter()
     const { lines, setQuantity, remove, removeMany } = useCommerceCart()
-    const [check, setCheck] = useState<CartCheck | null>(null)
+    const [check, setCheck] = useState<(CartCheck & { signature: string }) | null>(null)
+    const [checkFailed, setCheckFailed] = useState(false)
     const [loading, setLoading] = useState(false)
     const [contact, setContact] = useState<Contact>(EMPTY)
     const [error, setError] = useState<string | null>(null)
     const [priceNotice, setPriceNotice] = useState(false)
     const [busy, setBusy] = useState<'order' | 'quote' | null>(null)
     const submitting = useRef(false)
+    const checkSeq = useRef(0)
     const signature = useMemo(() => JSON.stringify(lines.map(l => [l.productId, l.quantity])), [lines])
 
+    // Only the LATEST check may update the screen (fast qty/remove clicks fire several): an older, slower answer is dropped.
     const refresh = useCallback(async () => {
-        if (lines.length === 0) { setCheck(null); return }
+        const seq = ++checkSeq.current
+        if (lines.length === 0) { setCheck(null); setCheckFailed(false); setLoading(false); return }
         setLoading(true)
         const result = await checkCart(lines)
+        if (seq !== checkSeq.current) return
         setLoading(false)
-        if (result.ok) { setCheck({ lines: result.lines, order: result.order, quoteCount: result.quoteCount, unavailableCount: result.unavailableCount }); setError(null) }
-        else setError(result.error)
+        if (result.ok) { setCheck({ lines: result.lines, order: result.order, quoteCount: result.quoteCount, unavailableCount: result.unavailableCount, signature }); setCheckFailed(false); setError(null) }
+        else { setCheckFailed(true); setError(result.error) }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [signature])
     useEffect(() => { void refresh() }, [refresh])
 
+    // The snapshot is trusted only while it describes EXACTLY the cart on screen; otherwise nothing can be submitted and nothing is silently re-priced.
+    const fresh = check !== null && check.signature === signature && !loading
     const byId = useMemo(() => new Map<number, CheckedLine>((check?.lines ?? []).map(line => [line.productId, line])), [check])
     const orderLines = lines.filter(l => byId.get(l.productId)?.mode === 'order')
     const quoteLines = lines.filter(l => byId.get(l.productId)?.mode === 'quote')
@@ -48,7 +55,7 @@ export function CommerceCartPage() {
     const phoneBad = contact.customerPhone.length > 0 && !PHONE.test(contact.customerPhone.replace(/[\s().-]/g, ''))
 
     async function send(kind: 'order' | 'quote') {
-        if (submitting.current || !check) return
+        if (submitting.current || !check || !fresh) return
         const group = kind === 'order' ? orderLines : quoteLines
         if (group.length === 0) return
         if (contact.customerName.trim().length < 2) return setError('Vui lòng nhập họ tên.')
@@ -70,7 +77,8 @@ export function CommerceCartPage() {
         }
         if (result.code === 'PRICE_CHANGED') { setPriceNotice(true); await refresh() }
         else if (result.code === 'ITEMS_NOT_ORDERABLE' || result.code === 'PRODUCT_UNAVAILABLE') await refresh()
-        if (result.code !== 'NETWORK') forgetAttempt(attempt.storageKey)
+        // Keep the key whenever the write MAY have happened (network, 5xx, 429, odd response): the retry then replays the same receipt instead of creating a second record.
+        if (attemptSurelyNotWritten(result)) forgetAttempt(attempt.storageKey)
         setError(result.error)
     }
 
@@ -89,6 +97,7 @@ export function CommerceCartPage() {
             <div className="grid content-start gap-4">
                 <h1 className="text-2xl font-bold text-stone-900">Giỏ hàng</h1>
                 {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+                {checkFailed && <Button type="button" variant="outline" onClick={() => void refresh()}>Kiểm tra lại giá</Button>}
                 {priceNotice && <p role="status" className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Giá vừa thay đổi. Tổng tiền mới đã được cập nhật bên dưới — vui lòng kiểm tra rồi bấm gửi lại để xác nhận.</p>}
                 <ul className="grid gap-3">
                     {lines.map(line => {
@@ -100,13 +109,13 @@ export function CommerceCartPage() {
                                         <Link prefetch={false} className="font-semibold text-stone-900 hover:text-brand-700" href={`/${line.categorySlug}/${line.subcategorySlug ?? '-'}/${line.slug}`}>{line.name}</Link>
                                         <p className="text-sm text-stone-500">{line.sku}{line.brandName ? ` · ${line.brandName}` : ''}</p>
                                     </div>
-                                    <button type="button" aria-label={`Xóa ${line.name}`} className="p-2 text-stone-500 hover:text-red-600" onClick={() => remove(line.productId)}><Trash2 className="h-5 w-5" aria-hidden="true" /></button>
+                                    <button type="button" aria-label={`Xóa ${line.name}`} className="p-2 text-stone-500 hover:text-red-600" disabled={busy !== null} onClick={() => remove(line.productId)}><Trash2 className="h-5 w-5" aria-hidden="true" /></button>
                                 </div>
                                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                                     <div className="flex items-center rounded-lg border border-stone-300">
-                                        <button type="button" aria-label="Giảm số lượng" className="h-10 w-10" onClick={() => setQuantity(line.productId, line.quantity - 1)}><Minus className="mx-auto h-4 w-4" aria-hidden="true" /></button>
+                                        <button type="button" aria-label="Giảm số lượng" className="h-10 w-10" disabled={busy !== null} onClick={() => setQuantity(line.productId, line.quantity - 1)}><Minus className="mx-auto h-4 w-4" aria-hidden="true" /></button>
                                         <span aria-label="Số lượng" className="w-10 text-center">{line.quantity}</span>
-                                        <button type="button" aria-label="Tăng số lượng" className="h-10 w-10" onClick={() => setQuantity(line.productId, line.quantity + 1)}><Plus className="mx-auto h-4 w-4" aria-hidden="true" /></button>
+                                        <button type="button" aria-label="Tăng số lượng" className="h-10 w-10" disabled={busy !== null} onClick={() => setQuantity(line.productId, line.quantity + 1)}><Plus className="mx-auto h-4 w-4" aria-hidden="true" /></button>
                                     </div>
                                     {info?.mode === 'order' && (
                                         <div className="text-right text-sm">
@@ -138,6 +147,7 @@ export function CommerceCartPage() {
                     <label className="grid gap-1 text-sm">Ghi chú<Textarea value={contact.note} onChange={set('note')} rows={2} maxLength={1000} /></label>
                 </div>
 
+                {check && !fresh && !checkFailed && <p role="status" className="text-sm text-stone-500">Đang cập nhật giá theo giỏ hàng của bạn…</p>}
                 {orderLines.length > 0 && check && (
                     <div className="grid gap-3 rounded-xl border border-brand-200 p-4" aria-label="Đặt hàng">
                         <h2 className="font-semibold text-stone-900">Đặt hàng ({orderLines.length} sản phẩm)</h2>
@@ -147,7 +157,7 @@ export function CommerceCartPage() {
                             <div className="flex justify-between text-base font-bold text-stone-900"><dt>Tổng cộng</dt><dd>{money(check.order.totalVnd)}</dd></div>
                         </dl>
                         <p className="text-xs text-stone-500">Chưa gồm phí vận chuyển/lắp đặt. Đây là đơn đặt hàng gửi Đông Phú Gia — <strong>chưa phải thanh toán</strong> và chưa đảm bảo tồn kho. Nhân viên sẽ liên hệ xác nhận tồn kho, giao hàng, chi phí và hình thức thanh toán.</p>
-                        <Button type="button" disabled={busy !== null || loading} onClick={() => void send('order')} className="h-12 bg-brand-700 text-white hover:bg-brand-800">
+                        <Button type="button" disabled={busy !== null || !fresh} onClick={() => void send('order')} className="h-12 bg-brand-700 text-white hover:bg-brand-800">
                             {busy === 'order' ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}{priceNotice ? 'Xác nhận và gửi đơn hàng' : 'Gửi đơn đặt hàng'}
                         </Button>
                     </div>
@@ -157,7 +167,7 @@ export function CommerceCartPage() {
                     <div className="grid gap-3 rounded-xl border border-stone-300 p-4" aria-label="Yêu cầu báo giá">
                         <h2 className="font-semibold text-stone-900">Yêu cầu báo giá ({quoteLines.length} sản phẩm)</h2>
                         <p className="text-xs text-stone-500">Các sản phẩm này chưa có giá bán trực tuyến. Nhân viên sẽ gửi báo giá cho bạn.</p>
-                        <Button type="button" disabled={busy !== null || loading} onClick={() => void send('quote')} variant="outline" className="h-12 border-brand-700 text-brand-700">
+                        <Button type="button" disabled={busy !== null || !fresh} onClick={() => void send('quote')} variant="outline" className="h-12 border-brand-700 text-brand-700">
                             {busy === 'quote' ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}Gửi yêu cầu báo giá
                         </Button>
                     </div>
