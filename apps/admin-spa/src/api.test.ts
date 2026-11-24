@@ -21,7 +21,8 @@ describe('order/quote search never puts a customer phone in a URL', () => {
     vi.stubGlobal('fetch', fetchMock)
     await commerce.list('orders', { q: '0912345678', status: 'new', page: 1, limit: 25 })
     await commerce.list('quotes', { q: '', status: '', page: 1, limit: 25 })
-    const [first, second] = fetchMock.mock.calls as unknown as [string, RequestInit][][] as any
+    type Call = [string, { method: string; cache: string; credentials: string; body: string }]
+    const [first, second] = fetchMock.mock.calls as unknown as Call[]
     expect(first[0]).toBe('/admin-next/api/sales/orders/list'); expect(first[0]).not.toMatch(/0912|\?/)
     expect(first[1]).toMatchObject({ method: 'POST', cache: 'no-store', credentials: 'same-origin' }); expect(JSON.parse(first[1].body)).toEqual({ q: '0912345678', status: 'new', page: 1, limit: 25 })
     expect(second[0]).toBe('/admin-next/api/sales/quotes/list'); expect(JSON.parse(second[1].body)).toEqual({ page: 1, limit: 25 })     // empty filters are not sent
