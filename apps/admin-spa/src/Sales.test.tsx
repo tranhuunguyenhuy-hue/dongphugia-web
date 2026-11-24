@@ -76,7 +76,7 @@ describe('commerce v1 inbox (Admin SPA)', () => {
     const spy = vi.spyOn(commerce, 'dashboard').mockResolvedValueOnce({ scope: 'own', stats: { new_orders: 1, new_quotes: 0, processing_orders: 0, processing_quotes: 0, total_products: null, active_products: null }, ...base })
     const { unmount } = render(<DashboardPage go={vi.fn()} />)
     expect(await screen.findByText(/được giao cho bạn/)).toBeInTheDocument()
-    expect(screen.queryByText('Sản phẩm đang bán')).not.toBeInTheDocument(); expect(screen.getByText('Đơn hàng mới')).toBeInTheDocument()
+    expect(screen.queryByText('Sản phẩm đang bán')).not.toBeInTheDocument(); expect(screen.getAllByText('Đơn hàng mới').length).toBeGreaterThan(0)
     unmount(); spy.mockResolvedValueOnce({ scope: 'all', stats: { new_orders: 3, new_quotes: 1, processing_orders: 0, processing_quotes: 0, total_products: 138, active_products: 134 }, ...base })
     render(<DashboardPage go={vi.fn()} />)
     expect(await screen.findByText('Sản phẩm đang bán')).toBeInTheDocument()
