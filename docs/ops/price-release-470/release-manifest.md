@@ -117,7 +117,7 @@ Gói Codex có 1.339 ứng viên lịch sử (giá đơn, hãng chỉ được c
 Kết quả chạy offline trên gói thật (chưa có file duyệt ⇒ nhập được 0; với giả định duyệt hết phạm vi): TOTO inactive **393**, INAX active **467**, INAX inactive **392** đạt mọi quy tắc (= 1.252 đã có đối chiếu gián tiếp); **TOTO active 87 bị loại 87/87** (`match_type`/`confidence` trống: bằng chứng hãng chưa lưu) — đúng với “87 TOTO active rà bổ sung”. 547 INAX baseline stale và 30 WARN xử lý riêng, planner không đụng timestamp.
 
 ## 10. Khoảng trống cần báo (không tự mở rộng)
-- **Provenance ở mức dòng DB:** cột DB hiện chỉ có trạng thái + 3 giá + `checked_at`; Owner-accepted và Hita trực tiếp cùng là `PRICE_VERIFIED` trong DB (Public không hiển thị chữ “Hita” nên không có tuyên bố sai trên giao diện). Phân biệt nằm ở ledger/manifest/ledger sha. Nếu Owner muốn phân biệt ngay trong DB/Admin thì cần thêm 1 cột nhỏ (quyết định riêng; không làm trong candidate này).
+- **Provenance ở mức dòng DB — ĐÃ CHỐT (Owner, 24/11): không cần phân biệt giá Hita trực tiếp với Owner-accepted trong DB/Admin.** Không thêm cột; cả hai là `PRICE_VERIFIED` ở DB, Public không hiển thị chữ “Hita”. Provenance chỉ lưu ở ledger/manifest của từng plan (`price_basis`, nguồn, rule, tham chiếu duyệt) để đối soát/rollback.
 - **Planner chưa dựng CSV ứng viên mới:** chỉ nhận tệp Codex theo hai bố cục hiện có (INAX và TOTO) và dừng nếu thiếu cột.
 - **Chính sách 7 ngày** dùng chung cho kích hoạt lại và độ mới ứng viên (hằng `CANONICAL_REACTIVATION_MAX_AGE_MS`, `CANDIDATE_MAX_AGE_HOURS`).
 
