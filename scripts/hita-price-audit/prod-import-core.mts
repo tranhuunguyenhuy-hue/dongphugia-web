@@ -1,0 +1,164 @@
+// #470 Step 3b — Production price import PLANNER (pure functions; no network, no database, no psql).
+// It can NOT write: it only turns an approved CSV + a read-only DB snapshot into reviewed SQL batches + a rollback ledger.
+// Execution is a separate, manual operator step that needs an Owner GO naming the exact plan SHA (embedded in every batch).
+import { createHash } from 'node:crypto'
+import { summarise, validate, type InvRow } from './quality-gate-core.mts'
+
+export const SANITARY_CATEGORY_ID = 1
+export const DB_CEILING_BYTES = 367_001_600            // leo538 trigger: 350 MiB hard ceiling
+export const SAFETY_MARGIN_BYTES = 8 * 1024 * 1024     // never plan to end closer than this to the ceiling
+export const BYTES_PER_CHANGED_ROW = 2_115             // measured non-HOT update cost on products (heap+indexes), conservative
+export const DEFAULT_BATCH_SIZE = 200
+export type CanonStatus = 'PRICE_VERIFIED' | 'CONTACT_VERIFIED' | 'UNRESOLVED' | 'NOT_FOUND' | 'DISCONTINUED'
+export type Canon = { status: CanonStatus | null; regular: number | null; promo: number | null; voucher: number | null }
+export type DbRow = { id: number; sku: string; category_id: number; is_active: boolean; version?: number; canonical_price_status?: string | null
+  regular_price_vnd?: number | string | null; promotional_price_vnd?: number | string | null; online_voucher_amount_vnd?: number | string | null }
+export type PlanRow = { id: number; sku: string; is_active: boolean; klass: string; before: Canon; after: Canon; checkedAt: string; sourceUrl: string }
+export type Plan = {
+  csvSha256: string; candidateSha: string; planSha: string; batchSize: number; goToken: string
+  summary: Record<string, unknown>; stopReasons: string[]; rows: PlanRow[]; batches: PlanRow[][]
+}
+
+const num = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number.isSafeInteger(Number(v)) ? Number(v) : NaN)
+const canonOf = (r: DbRow): Canon => ({ status: (r.canonical_price_status ?? null) as CanonStatus | null, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) })
+const same = (a: Canon, b: Canon) => a.status === b.status && a.regular === b.regular && a.promo === b.promo && a.voucher === b.voucher
+export const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
+const SKU_SAFE = /^[\x21-\x7e]{1,100}$/                // printable ASCII, no space: keeps generated SQL literal-safe
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+
+// Hita class -> stored status. Unverified outcomes (NOT_CRAWLED / BLOCKED / UNKNOWN) are NEVER written: they stay NULL
+// (price hidden, "cần liên hệ") and can never become CONTACT_VERIFIED (Owner decision #466).
+const STATUS_OF: Record<string, CanonStatus | undefined> = {
+  PRICE_VERIFIED: 'PRICE_VERIFIED', CONTACT_VERIFIED: 'CONTACT_VERIFIED', NOT_FOUND_CANDIDATE_DELETE: 'NOT_FOUND',
+  DISCONTINUED_REVIEW: 'DISCONTINUED', AMBIGUOUS_UNVERIFIED: 'UNRESOLVED',
+}
+
+export type PlanInput = {
+  csvText: string; expectedCsvSha256: string; candidateSha: string; inventory: InvRow[]; db: DbRow[]; dbSizeBytes: number
+  now: Date; maxAgeHours?: number; batchSize?: number; activeOnly?: boolean
+}
+
+export function buildPlan(input: PlanInput): Plan {
+  const stop: string[] = []
+  const csvSha256 = sha256(input.csvText)
+  if (!/^[0-9a-f]{64}$/.test(input.expectedCsvSha256)) stop.push('EXPECTED_CSV_SHA256_MISSING_OR_MALFORMED')
+  else if (csvSha256 !== input.expectedCsvSha256) stop.push(`CSV_SHA256_MISMATCH expected=${input.expectedCsvSha256} actual=${csvSha256}`)
+  if (!/^[0-9a-f]{40}$/.test(input.candidateSha)) stop.push('CANDIDATE_SHA_MISSING_OR_MALFORMED')
+  const batchSize = input.batchSize ?? DEFAULT_BATCH_SIZE
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 500) stop.push('BATCH_SIZE_OUT_OF_RANGE_1_500')
+
+  const inv = new Map(input.inventory.map(r => [r.id, r]))
+  const result = validate(input.csvText, { now: input.now, maxAgeHours: input.maxAgeHours ?? 24, inventory: inv })
+  const gate = summarise(result)
+  if (result.fileIssues.length) stop.push(...result.fileIssues.map(f => `CSV_FILE_ISSUE:${f}`))
+  const failRows = new Set(result.issues.filter(i => i.severity === 'FAIL').map(i => i.line))
+  if (failRows.size) stop.push(`QUALITY_GATE_FAIL rows=${failRows.size}`)
+
+  const db = new Map(input.db.map(r => [r.id, r]))
+  const rows: PlanRow[] = []
+  const counts = { in_csv: result.data?.length ?? 0, skipped_inactive: 0, skipped_unverified: 0, unchanged: 0, to_change: 0, blocked_identity: 0 }
+  const byStatus: Record<string, number> = {}
+  const warnLines = new Set(result.issues.filter(i => i.severity === 'WARN').map(i => i.line))
+  if (!result.fileIssues.length) result.data.forEach((r, idx) => {
+    const klass = result.klass[idx]
+    const status = STATUS_OF[klass]
+    const id = Number(r.dpg_id), active = r.is_active === 'true'
+    if (input.activeOnly !== false && !active) { counts.skipped_inactive++; return }
+    if (!status) { counts.skipped_unverified++; return }
+    const cur = db.get(id)
+    // identity: id + SKU + category + is_active must agree across CSV, inventory and the live row. Any miss stops the whole plan.
+    if (!cur || cur.sku !== r.sku || cur.category_id !== SANITARY_CATEGORY_ID || cur.is_active !== active || !SKU_SAFE.test(r.sku) || r.category !== 'thiet-bi-ve-sinh') {
+      counts.blocked_identity++; stop.push(`IDENTITY_MISMATCH id=${r.dpg_id} sku=${r.sku.slice(0, 30)}`); return
+    }
+    const after: Canon = status === 'PRICE_VERIFIED'
+      ? { status, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) }
+      : { status, regular: null, promo: null, voucher: null }
+    if (!ISO.test(r.source_checked_at_utc)) { stop.push(`CHECKED_AT_INVALID id=${id}`); return }
+    const before = canonOf(cur)
+    ;[...Object.values(before), ...Object.values(after)].forEach(v => { if (typeof v === 'number' && !Number.isSafeInteger(v)) stop.push(`NON_INTEGER_VALUE id=${id}`) })
+    byStatus[status] = (byStatus[status] ?? 0) + 1
+    if (same(before, after)) { counts.unchanged++; return }
+    counts.to_change++
+    rows.push({ id, sku: r.sku, is_active: active, klass, before, after, checkedAt: r.source_checked_at_utc, sourceUrl: r.hita_url })
+  })
+  rows.sort((a, b) => a.id - b.id)
+  const dup = rows.length - new Set(rows.map(r => r.id)).size
+  if (dup) stop.push(`DUPLICATE_IDS_IN_PLAN count=${dup}`)
+
+  // Size guard: stop BEFORE any write when the projected size would leave less than the safety margin under the 350 MiB trigger.
+  const estGrowth = rows.length * BYTES_PER_CHANGED_ROW
+  const projected = input.dbSizeBytes + estGrowth
+  if (projected > DB_CEILING_BYTES - SAFETY_MARGIN_BYTES) stop.push(`DB_HEADROOM_INSUFFICIENT projected=${projected} limit=${DB_CEILING_BYTES - SAFETY_MARGIN_BYTES}`)
+
+  const batches: PlanRow[][] = []
+  for (let i = 0; i < rows.length; i += batchSize) batches.push(rows.slice(i, i + batchSize))
+  const planSha = sha256(JSON.stringify({ csvSha256, candidateSha: input.candidateSha, batchSize, rows: rows.map(r => [r.id, r.sku, r.after, r.checkedAt]) }))
+  const summary = {
+    ...counts, rows_by_status: byStatus, batches: batches.length, batch_size: batchSize, quality_gate: { rows_with_fail: failRows.size, rows_with_warn: warnLines.size, warn_by_code: gate.warn_by_code, fail_by_code: gate.fail_by_code },
+    db_size_bytes: input.dbSizeBytes, est_growth_bytes: estGrowth, projected_db_bytes: projected, headroom_after_bytes: DB_CEILING_BYTES - projected,
+  }
+  return { csvSha256, candidateSha: input.candidateSha, planSha, batchSize, goToken: `${input.candidateSha}:${csvSha256}:${planSha}`, summary, stopReasons: [...new Set(stop)], rows, batches }
+}
+
+const lit = (v: number | null) => (v === null ? 'null::bigint' : String(v))
+const stat = (s: CanonStatus | null) => (s === null ? 'null::text' : `'${s}'::text`)
+const batchBytes = (n: number) => n * BYTES_PER_CHANGED_ROW
+
+function batchSql(plan: Plan, idx: number, direction: 'apply' | 'rollback'): string {
+  const rows = plan.batches[idx]
+  const n = rows.length
+  const values = rows.map(r => {
+    const from = direction === 'apply' ? r.before : r.after, to = direction === 'apply' ? r.after : r.before
+    const checkedTo = direction === 'apply' ? `'${r.checkedAt}'::timestamptz` : 'null::timestamptz'
+    return `(${r.id}, '${r.sku}', ${r.is_active}, ${stat(from.status)}, ${lit(from.regular)}, ${lit(from.promo)}, ${lit(from.voucher)}, ${stat(to.status)}, ${lit(to.regular)}, ${lit(to.promo)}, ${lit(to.voucher)}, ${checkedTo})`
+  }).join(',\n    ')
+  return `-- #470 import batch ${idx + 1}/${plan.batches.length} (${direction}) — plan ${plan.planSha}
+-- DRAFT: execute only after Owner GO on candidate ${plan.candidateSha}, CSV ${plan.csvSha256}, plan ${plan.planSha}.
+--   psql -v ON_ERROR_STOP=1 -v approved_sha=${plan.planSha} -f <this file>   (as the Production operator postgres)
+begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
+select set_config('dpg.price_release_go', :'approved_sha', true);
+do $$
+declare n integer;
+begin
+  if current_setting('dpg.price_release_go', true) is distinct from '${plan.planSha}' then raise exception 'PRICE_IMPORT_PLAN_SHA_MISMATCH'; end if;
+  if not exists (select 1 from dpg_control.target_contract where environment <> 'preview_synthetic' and hard_database_ceiling_bytes = ${DB_CEILING_BYTES}) then
+    raise exception 'PRICE_IMPORT_TARGET_NOT_PRODUCTION_CONTRACT';
+  end if;
+  -- stop rule: this batch must still leave the safety margin under the 350 MiB trigger
+  if pg_database_size(current_database()) + ${batchBytes(n)} > ${DB_CEILING_BYTES - SAFETY_MARGIN_BYTES} then raise exception 'PRICE_IMPORT_HEADROOM_STOP'; end if;
+  -- optimistic basis: rows must still match the snapshot the diff was computed from, else the count check below aborts the batch
+  update dpg_app.products p set
+    canonical_price_status = v.to_status, regular_price_vnd = v.to_regular, promotional_price_vnd = v.to_promo,
+    online_voucher_amount_vnd = v.to_voucher, canonical_price_checked_at = v.to_checked, version = p.version + 1
+  from (values
+    ${values}
+  ) as v(id, sku, is_active, from_status, from_regular, from_promo, from_voucher, to_status, to_regular, to_promo, to_voucher, to_checked)
+  where p.id = v.id and p.sku = v.sku and p.category_id = ${SANITARY_CATEGORY_ID} and p.is_active = v.is_active
+    and p.canonical_price_status is not distinct from v.from_status
+    and p.regular_price_vnd is not distinct from v.from_regular
+    and p.promotional_price_vnd is not distinct from v.from_promo
+    and p.online_voucher_amount_vnd is not distinct from v.from_voucher;
+  get diagnostics n = row_count;
+  if n <> ${n} then raise exception 'PRICE_IMPORT_ROWCOUNT_MISMATCH batch=${idx + 1} expected=${n} got=%', n; end if;
+end
+$$;
+commit;
+`
+}
+
+export const applySql = (plan: Plan, idx: number) => batchSql(plan, idx, 'apply')
+export const rollbackSql = (plan: Plan, idx: number) => batchSql(plan, idx, 'rollback')
+
+/** Ledger = the full before/after of every planned row; the offline rollback source. One JSON object per line. */
+export const ledgerJsonl = (plan: Plan) => plan.batches.flatMap((b, i) => b.map(r => JSON.stringify({ batch: i + 1, id: r.id, sku: r.sku, klass: r.klass, before: r.before, after: r.after, checked_at: r.checkedAt, source_url: r.sourceUrl }))).join('\n') + '\n'
+
+/** The only way to authorise execution: the Owner GO must quote candidate:csv:plan exactly. The planner itself never executes. */
+export function goTokenMatches(plan: Plan, token: string | undefined) { return !!token && plan.stopReasons.length === 0 && token === plan.goToken }
+
+/** Read-only query that produces the DbRow snapshot (run on Production with the read-only role). */
+export const SNAPSHOT_SQL = `select id, sku, category_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd
+  from dpg_app.products where category_id = ${SANITARY_CATEGORY_ID} order by id;
+select pg_database_size(current_database()) as db_size_bytes;`
+export const SNAPSHOT_SQL_PRE_001 = `select id, sku, category_id, is_active, version from dpg_app.products where category_id = ${SANITARY_CATEGORY_ID} order by id;`
