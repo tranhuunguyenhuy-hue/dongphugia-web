@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { VariantSibling } from '@/lib/public-api-products'
-import { CanonicalProductCTA } from '@/components/product/canonical-product-cta'
-import { ProductCTA } from '@/components/product/product-cta'
+import { ProductActions } from '@/components/commerce/product-actions'
 import { ProductPrice } from '@/components/product/product-price'
 import { HistoricalReferencePriceNotice } from '@/components/product/historical-reference-price'
 import { canonicalPriceLabel } from '@/lib/canonical-price'
@@ -26,6 +25,8 @@ interface ProductPurchasePanelProps {
     canonicalPricing?: boolean
     /** #470: Production keeps cart/checkout OFF; only the TEST pilot passes true. Defaults to true to preserve the pilot behaviour. */
     cartEnabled?: boolean
+    /** #470 commerce v1: server-decided (commerceEnabled()). OFF => contact actions only. */
+    commerce?: boolean
     historicalReferencePrice?: {amountVnd:number;recordedUpdateDate:string;provenance:string}|null
     variantSiblings?: VariantSibling[]
     verifiedVariantOptions?: readonly VerifiedVariantOption[]
@@ -42,6 +43,7 @@ export function ProductPurchasePanel({
     product,
     canonicalPricing = false,
     cartEnabled = true,
+    commerce = false,
     historicalReferencePrice,
     variantSiblings = [],
     verifiedVariantOptions,
@@ -95,6 +97,10 @@ export function ProductPurchasePanel({
         salePrice: displaySalePrice,
         stockStatus: displayProduct.stock_status,
     })
+    // #470 commerce v1: a direct purchase is offered only for an active SKU shown with an official canonical price; the SERVER decides again on every cart check and submit.
+    const commerceCanOrder = canonicalPricing && displayProduct.is_active
+        && !['not_sellable', 'discontinued'].includes(displayProduct.sale_status ?? '')
+        && displayCommerce.priceMode === 'PUBLIC_PRICE'
     const canOrder = cartEnabled && displayProduct.is_active
         && !['not_sellable', 'discontinued'].includes(displayProduct.sale_status ?? '')
         && displayCommerce.availability !== 'Discontinued'
@@ -136,42 +142,16 @@ export function ProductPurchasePanel({
                 salePrice={toClientMoney(displaySalePrice)}
                 priceDisplay={canonicalPricing ? canonicalPriceLabel(displayProduct.price_display) : displayProduct.price_display}
                 displayVoucherOnly={canonicalPricing}
-                voucherCartNote={cartEnabled}
+                voucherCartNote={commerce}
                 onlineDiscountAmount={displayVoucher}
                 stockStatus={displayProduct.stock_status}
             >
-                {canonicalPricing ? (
-                    <CanonicalProductCTA
-                        id={displayProduct.id}
-                        sku={displayProduct.sku}
-                        name={displayProduct.name}
-                        slug={displayProduct.slug}
-                        categorySlug={categorySlug}
-                        subcategorySlug={subcategorySlug}
-                        price={displayCommerce.displayPrice}
-                        voucher={displayVoucher}
-                        imageUrl={displayProduct.image_main_url}
-                        brandName={displayProduct.brands?.name}
-                        canOrder={canOrder}
-                    />
-                ) : (
-                    <ProductCTA
-                        productId={displayProduct.id}
-                        productSku={displayProduct.sku}
-                        productName={displayProduct.name}
-                        price={toClientMoney(displayCompatibilityPrice)}
-                        originalPrice={toClientMoney(displayOriginalPrice)}
-                        listPrice={toClientMoney(displayProduct.list_price)}
-                        salePrice={toClientMoney(displaySalePrice)}
-                        priceDisplay={displayProduct.price_display}
-                        imageUrl={displayProduct.image_main_url || (product.product_images && product.product_images.length > 0 ? product.product_images[0].image_url : null)}
-                        categorySlug={categorySlug}
-                        subcategorySlug={subcategorySlug}
-                        brandName={product.brands?.name}
-                        slug={displayProduct.slug}
-                        stockStatus={displayProduct.stock_status}
-                    />
-                )}
+                <ProductActions
+                    commerce={commerce}
+                    canOrder={commerceCanOrder}
+                    price={displayCommerce.displayPrice}
+                    product={{ productId: displayProduct.id, sku: displayProduct.sku, name: displayProduct.name, slug: displayProduct.slug, categorySlug, subcategorySlug, imageUrl: displayProduct.image_main_url ?? null, brandName: displayProduct.brands?.name }}
+                />
             </ProductPrice>
             {!canonicalPricing && <HistoricalReferencePriceNotice referencePrice={historicalReferencePrice} />}
         </>

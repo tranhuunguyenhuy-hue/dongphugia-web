@@ -7,7 +7,12 @@ export type CommerceClient = { query: (text: string, values: unknown[]) => Promi
 export type CommerceKind = 'cart' | 'orders' | 'quotes'
 export const COMMERCE_BODY_LIMIT_BYTES = 16_384
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,100}$/
-const FUNCTION_OF: Record<CommerceKind, string> = { cart: 'dpg_commerce.cart_check', orders: 'dpg_commerce.order_submit', quotes: 'dpg_commerce.quote_submit' }
+// the ONLY SQL this module may run (static strings, no interpolation, no table access)
+const SQL: Record<CommerceKind, string> = {
+  cart: 'SELECT dpg_commerce.cart_check($1::jsonb, $2::text) AS result',
+  orders: 'SELECT dpg_commerce.order_submit($1::jsonb, $2::text, $3::text) AS result',
+  quotes: 'SELECT dpg_commerce.quote_submit($1::jsonb, $2::text, $3::text) AS result',
+}
 // stable business errors from the database -> HTTP status + a Vietnamese message that never echoes input
 const ERRORS: Record<string, { status: number; message: string }> = {
   INVALID_INPUT: { status: 400, message: 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.' },
@@ -110,9 +115,7 @@ export async function handleCommerce(kind: CommerceKind, request: Request, deps:
     // The login role cannot INHERIT the intake role (SET only): one transaction, SET LOCAL ROLE, one function call. Business refusals come back as JSON {error} (COMMIT keeps the rate-limit counter).
     await client.query('BEGIN', []); inTransaction = true
     await client.query('SET LOCAL ROLE dpg_commerce_intake', [])
-    const response = kind === 'cart'
-      ? await client.query(`SELECT ${FUNCTION_OF.cart}($1::jsonb, $2::text) AS result`, [JSON.stringify(checked.input), hash])
-      : await client.query(`SELECT ${FUNCTION_OF[kind]}($1::jsonb, $2::text, $3::text) AS result`, [JSON.stringify(checked.input), key, hash])
+    const response = await client.query(SQL[kind], kind === 'cart' ? [JSON.stringify(checked.input), hash] : [JSON.stringify(checked.input), key, hash])
     await client.query('COMMIT', []); inTransaction = false
     const result = response.rows[0]?.result as Record<string, unknown> | string | undefined
     const value = typeof result === 'string' ? JSON.parse(result) as Record<string, unknown> : result

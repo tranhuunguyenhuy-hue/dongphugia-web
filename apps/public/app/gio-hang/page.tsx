@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { CartPage } from '@/components/cart/cart-page'
+import { CommerceCartPage } from '@/components/commerce/cart-page'
+import { commerceEnabled } from '@/lib/commerce/flags'
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
@@ -9,6 +10,6 @@ export const metadata: Metadata = {
 }
 
 export default function PublicCartRoute() {
-    if (process.env.APP_ENV !== 'staging' || process.env.PREVIEW_TEST_DATABASE_ISOLATED !== 'true') notFound()
-    return <CartPage isolatedCheckout />
+    if (!commerceEnabled()) notFound()
+    return <CommerceCartPage />
 }

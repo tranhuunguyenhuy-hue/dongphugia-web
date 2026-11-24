@@ -1,6 +1,7 @@
 import { Header } from "@/components/layout/header-lazy"
 import { Footer } from "@/components/layout/footer"
 import { FloatingContact } from "@/components/layout/floating-contact"
+import { commerceEnabled } from "@/lib/commerce/flags"
 
 export default function PublicLayout({
     children,
@@ -15,7 +16,7 @@ export default function PublicLayout({
             >
                 Chuyển đến nội dung chính
             </a>
-            <Header />
+            <Header commerce={commerceEnabled()} />
             <main id="main-content" tabIndex={-1} className="flex-1 pt-[72px] lg:pt-[88px]">
                 {children}
             </main>

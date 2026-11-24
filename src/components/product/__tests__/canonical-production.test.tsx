@@ -1,12 +1,11 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useCartStore } from '@/lib/cart-store'
+import { useCommerceCart } from '@/lib/commerce/cart-store'
 import { ProductPurchasePanel } from '../product-purchase-panel'
 import { ProductCard } from '@/components/ui/product-card'
 import { buildProductSchema } from '@/lib/seo/schema'
 
-vi.mock('@/components/product/product-cta', () => ({ ProductCTA: () => <span>Existing CTA</span> }))
-vi.mock('@/lib/tracking', () => ({ trackAddToCart: vi.fn() }))
+vi.mock('@/lib/tracking', () => ({ trackViewItem: vi.fn(), trackAddToCart: vi.fn() }))
 
 // #470 Architecture A: Production snapshot rows carry provenance 'hita-exact-v1'. Cart/checkout stay OFF; voucher is separate.
 const priced = {
@@ -20,11 +19,11 @@ const unverified = { ...priced, price: null, original_price: null, list_price: n
     final_online_price: null, is_promotion: false, price_display: 'Cần liên hệ xác nhận giá' }
 const contact = { ...unverified, price_display: 'Liên hệ báo giá' }
 const cat = 'thiet-bi-ve-sinh'
-beforeEach(() => useCartStore.setState({ items: [], isOpen: false }))
+beforeEach(() => useCommerceCart.setState({ lines: [] }))
 
-describe('#470 Production PDP (cart OFF)', () => {
+describe('#470 Production PDP (commerce OFF)', () => {
     it('shows price, original and the voucher as a separate line; voucher is not deducted from the price; no cart button', () => {
-        render(<ProductPurchasePanel product={priced} categorySlug={cat} canonicalPricing cartEnabled={false} />)
+        render(<ProductPurchasePanel product={priced} categorySlug={cat} canonicalPricing />)
         expect(screen.getByText(/900\.000/)).toBeInTheDocument()
         expect(screen.getByText(/1\.000\.000/)).toBeInTheDocument()
         expect(screen.getByText('50.000đ')).toBeInTheDocument()
@@ -33,18 +32,24 @@ describe('#470 Production PDP (cart OFF)', () => {
         expect(screen.queryByText(/giỏ/)).not.toBeInTheDocument()      // cart is OFF: no wording that promises a cart step
     })
     it('unverified and CONTACT_VERIFIED rows use different labels and never show a price, voucher or cart', () => {
-        const { unmount } = render(<ProductPurchasePanel product={unverified} categorySlug={cat} canonicalPricing cartEnabled={false} />)
+        const { unmount } = render(<ProductPurchasePanel product={unverified} categorySlug={cat} canonicalPricing />)
         expect(screen.getByText('Cần liên hệ xác nhận giá')).toBeInTheDocument()
         expect(screen.queryByText('Liên hệ báo giá')).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /Thêm vào giỏ/ })).not.toBeInTheDocument()
         unmount()
-        render(<ProductPurchasePanel product={contact} categorySlug={cat} canonicalPricing cartEnabled={false} />)
+        render(<ProductPurchasePanel product={contact} categorySlug={cat} canonicalPricing />)
         expect(screen.getByText('Liên hệ báo giá')).toBeInTheDocument()
         expect(screen.queryByText('Cần liên hệ xác nhận giá')).not.toBeInTheDocument()
     })
-    it('the TEST pilot behaviour is unchanged (cart still available when enabled)', () => {
-        render(<ProductPurchasePanel product={priced} categorySlug={cat} canonicalPricing />)
-        expect(screen.getByRole('button', { name: 'Thêm vào giỏ hàng' })).toBeInTheDocument()
+    it('commerce ON: a priced SKU offers "Thêm vào giỏ hàng"; an unverified or contact SKU offers "Yêu cầu báo giá" only', () => {
+        const { unmount } = render(<ProductPurchasePanel product={priced} categorySlug={cat} canonicalPricing commerce />)
+        expect(screen.getByRole('button', { name: 'Thêm vào giỏ hàng' })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Yêu cầu báo giá' })).not.toBeInTheDocument()
+        unmount()
+        for (const row of [unverified, contact]) {
+            const view = render(<ProductPurchasePanel product={row} categorySlug={cat} canonicalPricing commerce />)
+            expect(screen.getByRole('button', { name: 'Yêu cầu báo giá' })).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Thêm vào giỏ hàng' })).not.toBeInTheDocument()
+            view.unmount()
+        }
     })
 })
 

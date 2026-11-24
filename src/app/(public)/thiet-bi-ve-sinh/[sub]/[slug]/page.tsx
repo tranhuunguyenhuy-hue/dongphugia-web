@@ -16,6 +16,7 @@ import { BrandBadge } from "@/components/ui/brand-badge"
 import { JsonLd } from "@/components/seo/json-ld"
 import { buildProductSchema, buildBreadcrumbSchema } from "@/lib/seo/schema"
 import { canonicalCartEnabled, isCanonicalPriceProvenance } from "@/lib/canonical-price"
+import { commerceEnabled } from "@/lib/commerce/flags"
 import { buildProductMetadata, toNullableNumber } from "@/lib/seo/product-seo"
 import { getCanonicalProductPath } from "@/lib/taxonomy-paths"
 
@@ -242,6 +243,7 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
                         product={purchaseProduct}
                         canonicalPricing={'price_provenance' in product && isCanonicalPriceProvenance(product.price_provenance)}
                         cartEnabled={!('price_provenance' in product) || canonicalCartEnabled(product.price_provenance)}
+                        commerce={commerceEnabled()}
                         historicalReferencePrice={getPdpHistoricalReferencePrice(product)}
                         verifiedVariantOptions={variantOptions}
                         categorySlug={canonicalCategorySlug}

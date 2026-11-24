@@ -5,7 +5,8 @@ import { getPdpDescriptionBlocks, getPdpHistoricalReferencePrice, getPdpDocument
 import { VariantSelector } from "@/components/product/variant-selector"
 import { ProductImageGallery } from "@/components/product/product-image-gallery"
 import { ProductDetailTabs } from "@/components/product/product-detail-tabs"
-import { ProductCTA } from "@/components/product/product-cta"
+import { ProductActions } from "@/components/commerce/product-actions"
+import { commerceEnabled } from "@/lib/commerce/flags"
 import { ProductBoxIncludes } from "@/components/product/product-box-includes"
 import { ProductCard } from "@/components/ui/product-card"
 import { RecentlyViewedProducts } from "@/components/product/recently-viewed"
@@ -231,21 +232,11 @@ export default async function ProductDetailPage({ params }: PageProps) {
                         onlineDiscountAmount={onlineDiscountAmount}
                         stockStatus={product.stock_status}
                     >
-                        <ProductCTA
-                            productId={product.id}
-                            productSku={product.sku}
-                            productName={product.name}
+                        <ProductActions
+                            commerce={commerceEnabled()}
+                            canOrder={false}
                             price={currentPrice}
-                            originalPrice={currentOriginalPrice}
-                            listPrice={toNullableNumber(product.list_price)}
-                            salePrice={toNullableNumber(product.sale_price)}
-                            priceDisplay={product.price_display}
-                            stockStatus={product.stock_status}
-                            imageUrl={product.image_main_url || (product.product_images && product.product_images.length > 0 ? product.product_images[0].image_url : null)}
-                            categorySlug={canonicalCategorySlug}
-                            subcategorySlug={canonicalSubcategorySlug ?? null}
-                            brandName={product.brands?.name}
-                            slug={product.slug}
+                            product={{ productId: product.id, sku: product.sku, name: product.name, slug: product.slug, categorySlug: canonicalCategorySlug, subcategorySlug: canonicalSubcategorySlug ?? null, imageUrl: product.image_main_url ?? null, brandName: product.brands?.name }}
                         />
                     </ProductPrice>
                     <HistoricalReferencePriceNotice referencePrice={getPdpHistoricalReferencePrice(product)} />

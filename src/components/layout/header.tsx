@@ -6,8 +6,7 @@ import dynamic from "next/dynamic"
 import { Phone, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect, useId } from "react"
-import { CartIcon } from '@/components/cart/cart-icon'
-import { LazyCartDrawer } from '@/components/cart/lazy-cart-drawer'
+import { CommerceCartIcon } from '@/components/commerce/cart-icon'
 import { SearchBar } from '@/components/home/search-bar'
 import { trackGenerateLead } from '@/lib/tracking'
 
@@ -102,7 +101,7 @@ function AboutDropdown() {
     )
 }
 
-export function Header() {
+export function Header({ commerce = false }: { commerce?: boolean }) {
     const [isScrolled, setIsScrolled] = useState(false)
     const [mobileMenuRequested, setMobileMenuRequested] = useState(false)
 
@@ -149,7 +148,7 @@ export function Header() {
                             <div className="hidden lg:flex items-center gap-4">
                                 <SearchBar />
                                 <div className="h-6 w-px bg-stone-200 ml-1"></div>
-                                <CartIcon />
+                                {commerce && <CommerceCartIcon />}
                                 <Button asChild className="px-6 h-11 text-[15px] font-medium gap-2 bg-brand-700 hover:bg-brand-800 text-white rounded-full shadow-sm ml-2">
                                     <Link prefetch={false} href="/lien-he" aria-label="Liên hệ" onClick={() => trackGenerateLead('navbar_contact')}>
                                         Liên hệ
@@ -161,7 +160,7 @@ export function Header() {
                             {/* Mobile: Search + Cart + Menu */}
                             <div className="flex lg:hidden items-center gap-0.5">
                                 <SearchBar />
-                                <CartIcon />
+                                {commerce && <CommerceCartIcon />}
                                 {mobileMenuRequested ? (
                                     <MobileMenuSheet initiallyOpen />
                                 ) : (
@@ -190,7 +189,6 @@ export function Header() {
                     </div>
                 </div>
             </header>
-            <LazyCartDrawer />
         </>
     )
 }
