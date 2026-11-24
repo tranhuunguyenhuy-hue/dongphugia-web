@@ -158,6 +158,58 @@ echo "PASS candidate applied: regular price only, promo/voucher NULL, checked-at
 "${B3[@]}" -v approved_sha=$PC -f $T3/plan/batch-0001-rollback.sql >/dev/null
 [ "$("${S[@]}" -c "select canonical_price_status is null and regular_price_vnd is null and canonical_price_checked_at is null from dpg_app.products where sku='IN-1'")" = "t" ]
 echo "PASS candidate rollback restores the exact prior (empty) state"
+# ---------- PHASE 4: Owner freshness exception (archived-direct) and the INAX baseline lane: pins, fail-closed, race, rollback ----------
+T4=$T/p4; mkdir -p $T4
+snap4() { "${S[@]}" -c "select json_build_object('db_size_bytes', pg_database_size(current_database()), 'rows', (select json_agg(t) from (select id, sku, category_id, brand_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_checked_at from dpg_app.products where category_id=1 and brand_id=2 order by id) t))" > $T4/snap.json; }
+snap4
+# (a) archived-direct: the Phase-2 review CSV (source 2026-11-23T19:00Z) is >24 h old at 2026-11-26 => stops unless the Owner exception pins that exact CSV + id set
+CS2=$(sha256sum $T2/inax.csv | cut -d' ' -f1)
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local-test\",\"rule_ref\":\"#443 comment 7127916878\",\"csv_sha256\":\"$CS2\",\"approved_ids\":[$IN1,$IN2,$II1],\"approved_basis\":\"ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION\"}" > $T4/exc.json
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local-test\",\"rule_ref\":\"x\",\"csv_sha256\":\"$CS2\",\"approved_ids\":[$IN1,$IN2],\"approved_basis\":\"ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION\"}" > $T4/exc-short.json
+direct4() { npx tsx scripts/hita-price-audit/prod-import.mts $T2/inax.csv --csv-sha256 "$CS2" --candidate-sha "$CAND" --inventory $T2/inv.json --db-snapshot $T4/snap.json --now 2026-11-26T01:00:00Z --brand inax --state active "$@"; }
+if direct4 --out $T4/nox > $T4/nox.out 2>&1; then echo "FAIL: stale CSV planned without the Owner exception"; exit 1; fi; grep -q CHECKED_STALE_NOT_APPROVED $T4/nox.out; [ ! -e $T4/nox ]
+if direct4 --archived-direct-approval $T4/exc-short.json --out $T4/short > $T4/short.out 2>&1; then echo "FAIL: exception with a missing id accepted"; exit 1; fi; grep -q FRESHNESS_EXCEPTION_SCOPE_MISMATCH $T4/short.out; [ ! -e $T4/short ]
+echo "PASS stale source without the exception stops; an exception whose id set differs from the CSV stops (no SQL emitted)"
+direct4 --archived-direct-approval $T4/exc.json --out $T4/direct > $T4/direct.json
+PD=$(node -p "require('$T4/direct.json').plan_sha"); grep -q '"price_basis":"HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION"' $T4/direct/ledger.jsonl
+B4=("${PSQL[@]}" -U dpg_operator -d "$DB")
+# race: an Admin edit between plan and apply aborts the batch as a whole
+"${S[@]}" -c "update dpg_app.products set name = name || ' x', version = version + 1 where sku = 'IN-2'"
+if "${B4[@]}" -v approved_sha=$PD -f $T4/direct/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: batch ran over a concurrent Admin edit"; exit 1; fi
+[ "$("${S[@]}" -c "select count(*) from dpg_app.products where sku in ('IN-1','IN-2') and canonical_price_status is not null")" = "0" ]
+echo "PASS concurrent Admin edit aborts the exception batch atomically (nothing written)"
+snap4; direct4 --archived-direct-approval $T4/exc.json --out $T4/direct2 > $T4/direct2.json; PD2=$(node -p "require('$T4/direct2.json').plan_sha")
+"${B4[@]}" -v approved_sha=$PD2 -f $T4/direct2/batch-0001-apply.sql >/dev/null
+[ "$("${S[@]}" -c "select string_agg(sku||':'||canonical_price_status||':'||regular_price_vnd||':'||to_char(canonical_price_checked_at at time zone 'utc','YYYY-MM-DD\"T\"HH24:MI'), ' ' order by sku) from dpg_app.products where sku in ('IN-1','IN-2')")" = "IN-1:PRICE_VERIFIED:1500000:2026-11-23T19:00 IN-2:PRICE_VERIFIED:2500000:2026-11-23T19:00" ] || { echo "FAIL exception state"; exit 1; }
+"${B4[@]}" -v approved_sha=$PD2 -f $T4/direct2/batch-0001-rollback.sql >/dev/null
+[ "$("${S[@]}" -c "select count(*) from dpg_app.products where sku in ('IN-1','IN-2') and (canonical_price_status is not null or canonical_price_checked_at is not null)")" = "0" ]
+echo "PASS exception applied (source timestamp kept, never now) and rolled back to the exact prior state"
+# (b) INAX baseline lane
+node -e '
+const [dir,id1,id2,id3]=process.argv.slice(1); const fs=require("fs");
+const cols=["brand","dpg_id","sku","category","is_active","hita_exact_sku","hita_url","regular_price_vnd","promotional_price_vnd","online_voucher_amount_vnd","currency","source_checked_at_utc","price_valid_until","status","review_status","price_source","baseline_status","proposed_regular_price_vnd","proposed_promotional_price_vnd","proposed_online_voucher_amount_vnd","price_basis","direct_freshness","exception_reason"];
+const R=(id,sku,reg,promo,voucher,pp,reason)=>({brand:"INAX",dpg_id:id,sku,category:"thiet-bi-ve-sinh",is_active:"true",hita_exact_sku:sku,hita_url:`https://hita.com.vn/p-${id}-${id}.html`,regular_price_vnd:reg,promotional_price_vnd:promo,online_voucher_amount_vnd:voucher,currency:"VND",source_checked_at_utc:"2026-11-24T03:04:35.244Z",price_valid_until:"2026-12-01",status:"EXACT",review_status:"STALE_PILOT_BASELINE_448",price_source:"HITA_BASELINE_448",baseline_status:"EXACT",proposed_regular_price_vnd:reg,proposed_promotional_price_vnd:pp,proposed_online_voucher_amount_vnd:"",price_basis:"OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE",direct_freshness:"NOT_RECONFIRMED",exception_reason:reason});
+const q=v=>`"${String(v).replaceAll("\"","\"\"")}"`; const rows=[R(id1,"IN-1","26660000","13863200","267000","13863200","NO_BASELINE_EXCEPTION_LANE_IN_CONTRACT"),R(id2,"IN-2","12460000","6105400","125000","","DEEP_PROMO_TERMS_NOT_CONFIRMED")];
+fs.writeFileSync(dir+"/baseline.csv",cols.map(q).join(",")+"\r\n"+rows.map(r=>cols.map(c=>q(r[c])).join(",")).join("\r\n")+"\r\n");
+' $T4 $IN1 $IN2 $II1
+BS=$(sha256sum $T4/baseline.csv | cut -d' ' -f1)
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local-test\",\"rule_ref\":\"#443 comment 7127916878\",\"review_csv_sha256\":\"$BS\",\"scope_ids\":[$IN1,$IN2],\"planner_lane\":\"UNSUPPORTED_DO_NOT_IMPORT\",\"production_go\":false}" > $T4/decision.json
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local-test\",\"rule_ref\":\"x\",\"review_csv_sha256\":\"$BS\",\"scope_ids\":[$IN1],\"production_go\":false}" > $T4/decision-short.json
+base4() { npx tsx scripts/hita-price-audit/prod-import.mts $T4/baseline.csv --csv-sha256 "$BS" --candidate-sha "$CAND" --db-snapshot $T4/snap.json --now 2026-11-26T01:00:00Z --brand inax --state active --inax-baseline-decision "$1" "${@:2}"; }
+snap4
+if base4 $T4/decision-short.json --out $T4/bshort > $T4/bshort.out 2>&1; then echo "FAIL: baseline with a missing id accepted"; exit 1; fi; grep -q OWNER_DECISION_SCOPE_MISMATCH $T4/bshort.out; [ ! -e $T4/bshort ]
+if npx tsx scripts/hita-price-audit/prod-import.mts $T4/baseline.csv --csv-sha256 "$BS" --candidate-sha "$CAND" --db-snapshot $T4/snap.json --now 2026-11-26T01:00:00Z --brand toto --state active --inax-baseline-decision $T4/decision.json > $T4/bwrong.out 2>&1; then echo "FAIL: baseline lane accepted another brand"; exit 1; fi; grep -q BASELINE_LANE_IS_INAX_ACTIVE_ONLY $T4/bwrong.out
+if base4 $T4/decision.json --now 2026-12-03T00:00:00Z --out $T4/bexp > $T4/bexp.out 2>&1; then echo "FAIL: expired baseline planned"; exit 1; fi
+echo "PASS baseline lane stops on a decision with a different id set, on another brand, and (HOLD) once the Offer validity has passed"
+base4 $T4/decision.json --out $T4/bplan > $T4/bplan.json; PB=$(node -p "require('$T4/bplan.json').plan_sha")
+node -e 'const r=require(process.argv[1]); if(r.to_change!==2||r.regular_only!==1||r.regular_and_promo!==1||r.price_basis!=="OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE")process.exit(1)' $T4/bplan.json
+"${B4[@]}" -v approved_sha=$PB -f $T4/bplan/batch-0001-apply.sql >/dev/null
+[ "$("${S[@]}" -c "select string_agg(sku||':'||canonical_price_status||':'||regular_price_vnd||':'||coalesce(promotional_price_vnd::text,'-')||':'||coalesce(online_voucher_amount_vnd::text,'-')||':'||to_char(canonical_price_checked_at at time zone 'utc','YYYY-MM-DD\"T\"HH24:MI'), ' ' order by sku) from dpg_app.products where sku in ('IN-1','IN-2')")" = "IN-1:PRICE_VERIFIED:26660000:13863200:-:2026-11-24T03:04 IN-2:PRICE_VERIFIED:12460000:-:-:2026-11-24T03:04" ] || { echo "FAIL baseline state"; exit 1; }
+echo "PASS baseline applied: regular+promotion / regular-only for the documented row, voucher NULL, source time kept, is_active untouched"
+snap4; if base4 $T4/decision.json --out $T4/again > $T4/again.out 2>&1; then :; fi; node -e 'const r=require("fs").readFileSync(process.argv[1],"utf8"); if(!/BASELINE_DOES_NOT_OVERRIDE_STORED_PRICE/.test(r))process.exit(1)' $T4/again.out
+"${B4[@]}" -v approved_sha=$PB -f $T4/bplan/batch-0001-rollback.sql >/dev/null
+[ "$("${S[@]}" -c "select count(*) from dpg_app.products where sku in ('IN-1','IN-2') and (canonical_price_status is not null or regular_price_vnd is not null or canonical_price_checked_at is not null)")" = "0" ]
+echo "PASS baseline never overwrites a stored price (re-plan skips both); rollback restores the exact prior state"
 # stop rule: headroom
 node -e 'const s=require(process.argv[1]); s.db_size_bytes=360*1024*1024; require("fs").writeFileSync(process.argv[1],JSON.stringify(s))' $T/snap.json
 if run > $T/stop.json 2>&1; then echo "FAIL: planner did not stop on headroom"; exit 1; fi; grep -q DB_HEADROOM_INSUFFICIENT $T/stop.json

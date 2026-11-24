@@ -26,13 +26,17 @@ export const PRODUCTION_TARGET = { projectName: 'dongphugia-runtime', region: 'a
 export const BRANDS = { toto: { id: 1, slug: 'toto' }, inax: { id: 2, slug: 'inax' } } as const
 export type BrandKey = keyof typeof BRANDS
 export type PlanState = 'active' | 'inactive'
+export type PlanSource = 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE' | 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION' | 'OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE'
+/** Owner decision that lets rows of ONE pinned CSV be planned although their source time is older than the 24 h gate (no re-crawl). Never a blanket switch:
+ * the CSV sha256 and the exact id set are pinned (set equality, both directions), an expired Offer still stops the plan, vouchers must be empty, timestamps are never touched. */
+export type FreshnessException = { approved_by: 'Owner'; approval_ref: string; rule_ref: string; csv_sha256: string; approved_ids: number[]; approved_basis: 'ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION' }
 export type Plan = {
   csvSha256: string; candidateSha: string; planSha: string; batchSize: number; brandId: number; brand: BrandKey; state: PlanState
   /** candidate:csv:plan — an IDENTITY string for the manifest, never an authorisation: only the Owner's GO authorises execution. */
   releaseBinding: string
   summary: Record<string, unknown>; stopReasons: string[]; rows: PlanRow[]; batches: PlanRow[][]
   /** HITA_REVIEW = direct Hita EXACT crawl row (default). OWNER_ACCEPTED_CANDIDATE = Owner-approved single historical price (never labelled as direct Hita-verified). */
-  source?: 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE'
+  source?: PlanSource
   approvalRef?: string
 }
 
@@ -57,6 +61,8 @@ export type PlanInput = {
   brand?: BrandKey
   /** The ONE approved is_active state of this plan (default active). Rows of the other state are skipped, never touched; is_active is never changed. */
   state?: PlanState
+  /** Owner exception for a pinned archived-direct CSV (see FreshnessException). Without it a stale (> maxAgeHours) or expired planned row STOPS the plan. */
+  freshnessException?: FreshnessException | null
 }
 
 export function buildPlan(input: PlanInput): Plan {
@@ -85,6 +91,21 @@ export function buildPlan(input: PlanInput): Plan {
   const newerEdits: number[] = []
   const byStatus: Record<string, number> = {}
   const warnLines = new Set(result.issues.filter(i => i.severity === 'WARN').map(i => i.line))
+  // Freshness is fail-closed: a planned row older than the gate, or whose Offer validity has passed, stops the plan unless the Owner exception pins it.
+  const staleLines = new Set(result.issues.filter(i => i.code === 'CHECKED_STALE').map(i => i.line))
+  const expiredLines = new Set(result.issues.filter(i => i.code === 'VALID_UNTIL_EXPIRED').map(i => i.line))
+  const exc = input.freshnessException ?? null
+  const excIds = new Set<number>()
+  if (exc) {
+    if (exc.approved_by !== 'Owner' || !exc.approval_ref || !exc.rule_ref || exc.approved_basis !== 'ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION') stop.push('FRESHNESS_EXCEPTION_INCOMPLETE')
+    if (exc.csv_sha256 !== csvSha256) stop.push('FRESHNESS_EXCEPTION_FOR_A_DIFFERENT_CSV')
+    if (!Array.isArray(exc.approved_ids) || exc.approved_ids.some(i => !Number.isSafeInteger(i)) || new Set(exc.approved_ids).size !== exc.approved_ids.length) stop.push('FRESHNESS_EXCEPTION_IDS_INVALID')
+    else {
+      exc.approved_ids.forEach(i => excIds.add(i))
+      const inCsv = new Set((result.data ?? []).map(r => Number(r.dpg_id)))
+      if (inCsv.size !== excIds.size || [...inCsv].some(i => !excIds.has(i))) stop.push('FRESHNESS_EXCEPTION_SCOPE_MISMATCH')   // exact set, both directions
+    }
+  }
   if (!result.fileIssues.length) result.data.forEach((r, idx) => {
     const klass = result.klass[idx]
     const status = STATUS_OF[klass]
@@ -97,6 +118,10 @@ export function buildPlan(input: PlanInput): Plan {
       || !Number.isSafeInteger(cur.version) || (cur.version as number) < 1) {
       counts.blocked_identity++; stop.push(`IDENTITY_MISMATCH id=${r.dpg_id} sku=${r.sku.slice(0, 30)}`); return
     }
+    const line = idx + 2, covered = !!exc && excIds.has(id) && !stop.some(s => s.startsWith('FRESHNESS_EXCEPTION_'))
+    if (expiredLines.has(line)) { stop.push(`PRICE_OFFER_EXPIRED id=${id}`); return }                // never importable, exception or not
+    if (staleLines.has(line) && !covered) { stop.push(`CHECKED_STALE_NOT_APPROVED id=${id}`); return }
+    if (covered && num(r.online_voucher_amount_vnd) !== null) { stop.push(`EXCEPTION_ROW_HAS_VOUCHER id=${id}`); return }   // voucher policy: held, never imported here
     const after: Canon = status === 'PRICE_VERIFIED'
       ? { status, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) }
       : { status, regular: null, promo: null, voucher: null }
@@ -109,7 +134,8 @@ export function buildPlan(input: PlanInput): Plan {
     const beforeCheckedAt = cur.canonical_price_checked_at ? new Date(cur.canonical_price_checked_at).toISOString() : null
     if (beforeCheckedAt && Date.parse(beforeCheckedAt) > Date.parse(r.source_checked_at_utc)) { counts.skipped_newer_db_edit++; newerEdits.push(id); return }
     counts.to_change++
-    rows.push({ id, sku: r.sku, is_active: active, klass, before, after, beforeCheckedAt, version: cur.version as number, checkedAt: r.source_checked_at_utc, sourceUrl: r.hita_url })
+    rows.push({ id, sku: r.sku, is_active: active, klass, before, after, beforeCheckedAt, version: cur.version as number, checkedAt: r.source_checked_at_utc, sourceUrl: r.hita_url,
+      ...(covered ? { provenance: { basis: 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION', not_reconfirmed: true, source_checked_at_utc: r.source_checked_at_utc, approval_ref: exc!.approval_ref, rule_ref: exc!.rule_ref } } : {}) })
   })
   rows.sort((a, b) => a.id - b.id)
   const dup = rows.length - new Set(rows.map(r => r.id)).size
@@ -122,12 +148,13 @@ export function buildPlan(input: PlanInput): Plan {
 
   const batches: PlanRow[][] = []
   for (let i = 0; i < rows.length; i += batchSize) batches.push(rows.slice(i, i + batchSize))
-  const planSha = sha256(JSON.stringify({ csvSha256, candidateSha: input.candidateSha, batchSize, brand, brandId, state, target: PRODUCTION_TARGET, rows: rows.map(r => [r.id, r.sku, r.version, r.before, r.beforeCheckedAt, r.after, r.checkedAt]) }))
+  const planSha = sha256(JSON.stringify({ csvSha256, candidateSha: input.candidateSha, batchSize, brand, brandId, state, target: PRODUCTION_TARGET, ...(exc ? { freshnessException: [exc.approval_ref, exc.rule_ref, exc.csv_sha256, [...excIds].sort((a, b) => a - b)] } : {}), rows: rows.map(r => [r.id, r.sku, r.version, r.before, r.beforeCheckedAt, r.after, r.checkedAt]) }))
   const summary = {
     ...counts, newer_db_edit_ids: newerEdits.slice(0, 50), brand, brand_id: brandId, state, rows_by_status: byStatus, batches: batches.length, batch_size: batchSize, quality_gate: { rows_with_fail: failRows.size, rows_with_warn: warnLines.size, warn_by_code: gate.warn_by_code, fail_by_code: gate.fail_by_code },
     db_size_bytes: input.dbSizeBytes, est_growth_bytes: estGrowth, projected_db_bytes: projected, headroom_after_bytes: DB_CEILING_BYTES - projected,
   }
-  return { csvSha256, candidateSha: input.candidateSha, planSha, batchSize, brandId, brand, state, releaseBinding: `${input.candidateSha}:${csvSha256}:${planSha}`, summary, stopReasons: [...new Set(stop)], rows, batches }
+  return { csvSha256, candidateSha: input.candidateSha, planSha, batchSize, brandId, brand, state, releaseBinding: `${input.candidateSha}:${csvSha256}:${planSha}`, summary, stopReasons: [...new Set(stop)], rows, batches,
+    ...(exc ? { source: 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION' as const, approvalRef: exc.approval_ref } : {}) }
 }
 
 const lit = (v: number | null) => (v === null ? 'null::bigint' : String(v))
