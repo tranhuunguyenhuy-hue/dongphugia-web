@@ -186,6 +186,9 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         const siblings = await m.getLiveVariantSiblings('G1', 1)
         const facet = await m.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau-lavabo', ['toto'], ['toto-x'])
         const listing = await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { brandSlugs: ['toto'], seriesSlugs: ['toto-x'] })
+        const legacy = await (await import('../../../apps/public/src/runtime/canonical-public-api')).getVariantSelectionData('G1', 1)
+        expect((legacy.siblings as { sku: string }[]).map(s => s.sku)).toEqual(['T-PROMO'])           // legacy chips survive under the real Production ACL, same brand/sub-category only
+        expect(log.join('\n')).not.toMatch(/spec_options|spec_definitions|product_spec_values/); log.length = 0
         expect(siblings).toEqual([]); expect(facet).toMatchObject({ applicable: false, dropped: ['toto-x'] })
         expect(listing.products.length).toBeGreaterThan(2)                                  // series filter ignored (not applied) -> brand filter only
         expect(log.join('\n')).not.toMatch(/spec_options|spec_definitions|product_spec_values/)   // no series/variant statement at all

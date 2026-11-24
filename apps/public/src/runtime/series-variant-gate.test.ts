@@ -29,9 +29,17 @@ describe('series/variant gate — Production default OFF', () => {
         expect(sqlAll()).not.toMatch(/spec_definitions|spec_options|product_spec_values/)
         mocks.readPublicRows.mockClear()
         expect(await api.getSeriesFacet('thiet-bi-ve-sinh', 'chau', ['toto'], ['toto-x'])).toMatchObject({ applicable: false, selected: [], dropped: ['toto-x'] })
-        expect(await api.getVariantSelectionData('G1', 1)).toEqual({ axes: [], currentVariantOptions: [], siblings: [] })
         expect(await api.getVariantSiblings('G1', 1)).toEqual([])
         expect(mocks.readPublicRows).not.toHaveBeenCalled()
+    })
+    it('legacy chips kept (regression vs live e070986a): ONE bounded sibling statement, no spec/series table, no #432 grant needed', async () => {
+        const { api } = await load()
+        expect(await api.getVariantSelectionData('G1', 1)).toEqual({ axes: [], currentVariantOptions: [], siblings: [] })      // no rows -> nothing rendered
+        expect(mocks.readPublicRows).toHaveBeenCalled()
+        const sql = sqlAll()
+        expect(sql).toMatch(/p\.variant_group=\$1 AND p\.id<>\$2/); expect(sql).toMatch(/LIMIT 8/)
+        expect(sql).not.toMatch(/spec_definitions|spec_options|product_spec_values/)
+        expect(await api.getVariantSelectionData('x'.repeat(101), 1)).toMatchObject({ siblings: [] })                               // bad input: no query
     })
     it('explicit PUBLIC_SERIES_VARIANT=on restores the accepted-later behaviour', async () => {
         vi.stubEnv('PUBLIC_SERIES_VARIANT', 'on')

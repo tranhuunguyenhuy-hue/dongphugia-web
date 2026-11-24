@@ -6,7 +6,7 @@ export type {VariantSibling,ListingRuntimeConfig} from '../../../../src/lib/publ
 import {getSnapshotCategories,getSnapshotProducts,getSnapshotProduct,getSnapshotVariantSiblings,getStagingListingIndex,getStagingProductByCategory} from './public-snapshot-catalogue'
 import {usesStagingPublicSnapshot} from './public-snapshot-mode'
 import {publicPostgresEnabled} from './public-db'
-import {getLiveBrandsForListing,getLiveListing,getLiveListingLeaves,getLiveProductByCategory,getLiveSeriesFacet,getLiveVariantLabel} from './live-public-catalogue'
+import {getLiveBrandsForListing,getLiveListing,getLiveListingLeaves,getLiveProductByCategory,getLiveLegacyVariantSiblings,getLiveSeriesFacet,getLiveVariantLabel} from './live-public-catalogue'
 import {parseSeriesParam,normalizeSeriesSelection} from '@/lib/series-facet-contract'; import {seriesVariantEnabled} from '@/lib/canonical-price'
 
 const allProducts=cache(async(category:string,sub?:string)=> {
@@ -121,7 +121,13 @@ export const getVariantSiblings:typeof Original.getVariantSiblings=async(group,i
 // The value on the axis comes ONLY from the SKU's own `variant_label` column (never inferred from name/prefix); a label equal to the SKU code is not a value.
 const axisOption=(label:string|null|undefined,sku:string)=>label&&label.trim()&&label.trim().toUpperCase()!==sku.toUpperCase()?[{axis:'config',label:'Cấu hình',value:label.trim()}]:[]
 export const getVariantSelectionData:typeof Original.getVariantSelectionData=async(group,id)=>{
-if(!seriesVariantEnabled())return {axes:[],currentVariantOptions:[],siblings:[]} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>   // #470: no sibling query while variants are OFF
+if(!seriesVariantEnabled()){   // #470: series/variant OFF -> legacy chips (SKU + the SKU's own variant_label), no series/spec query, no #432 grants needed
+  const empty={axes:[],currentVariantOptions:[],siblings:[]} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
+  if(!publicPostgresEnabled())return empty
+  const legacy=(await getLiveLegacyVariantSiblings(group,id)).map(s=>({...s,original_price:s.original_price??null,list_price:s.list_price??null,sale_price:s.sale_price??null,online_discount_amount:s.online_discount_amount??null,variant_type:s.variant_type??null,variant_label:s.variant_label??null,colors:s.colors??null,variant_options:axisOption(s.variant_label,s.sku)}))
+  const hasLabel=legacy.some(s=>(s.variant_options as unknown[]).length>0)
+  return {axes:hasLabel?[{key:'config',label:'Cấu hình'}]:[],currentVariantOptions:hasLabel?axisOption(await getLiveVariantLabel(id),''):[],siblings:legacy} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
+ }
  const siblings=await getVariantSiblings(group,id)
  if(!publicPostgresEnabled())return {axes:[],currentVariantOptions:[],siblings}
  const current=await getLiveVariantLabel(id)

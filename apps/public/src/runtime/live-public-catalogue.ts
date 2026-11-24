@@ -351,6 +351,22 @@ async function loadVariantSiblings(group:string,currentId:number){
   ' ORDER BY p.sort_order,p.id LIMIT '+VARIANT_SIBLING_CAP,[group,currentId],'variant-siblings')
  return rows.map(mapLiveProduct)
 }
+/**
+ * #470 legacy path (regression guard vs the live baseline e070986a): while the series/variant gate (#432/#433/#440) is OFF the PDP keeps the
+ * variant chips that already exist on live. Same variant group, same brand, same sub-category, public only, quarantined groups excluded,
+ * bounded to the legacy cap of 8. Touches ONLY columns the Production public role already has (no spec_definitions / spec_options / product_spec_values),
+ * so it needs none of the #432 grants and cannot 5xx on them. No series logic, no URL/SEO/filter change.
+ */
+const LEGACY_VARIANT_CAP=8
+export async function getLiveLegacyVariantSiblings(group:string,currentId:number){
+ if(!group||group.length>100||!Number.isSafeInteger(currentId)||QUARANTINED_VARIANT_GROUPS.includes(group))return [] as SnapshotProduct[]
+ const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+FROM+' WHERE '+PUBLIC+
+  ' AND p.variant_group=$1 AND p.id<>$2'+
+  ' AND p.brand_id IS NOT NULL AND p.brand_id=(SELECT cur.brand_id FROM dpg_app.products cur WHERE cur.id=$2)'+
+  ' AND p.subcategory_id=(SELECT cur.subcategory_id FROM dpg_app.products cur WHERE cur.id=$2)'+
+  ' ORDER BY p.sort_order,p.id LIMIT '+LEGACY_VARIANT_CAP,[group,currentId],'variant-siblings')
+ return rows.map(mapLiveProduct)
+}
 /** Label of the CURRENT SKU on the variant axis (DB column only, never inferred from the name). */
 export async function getLiveVariantLabel(currentId:number):Promise<string|null>{
  if(!Number.isSafeInteger(currentId))return null
