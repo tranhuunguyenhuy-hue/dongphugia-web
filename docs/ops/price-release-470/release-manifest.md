@@ -1,5 +1,7 @@
 # #470 — RELEASE MANIFEST (ứng viên kỹ thuật, chưa phê duyệt, chưa merge)
 
+> **Phạm vi phát hành mới (Owner 24/11, TL #470 comment 7128797116):** phát hành MỘT LẦN giá chính thức + luồng đặt hàng/báo giá mới (commerce v1). Xem **`commerce-v1-release.md`** (gói SQL, cờ, rollback, cổng GO, UAT). P470-003 đã được thay thế (không thuộc release); P470-004 giữ nguyên; freshness/Offer-expiry không còn chặn tập giá đã ghim.
+
 **Quyết định Owner 24/11 (vòng cuối) đã đưa vào candidate:** nghiệm thu dữ liệu giá theo bằng chứng hiện có (#443 7127916878) — không còn yêu cầu refresh Hita trực tiếp cho tập đã duyệt; nhận package Codex #485 (head `3ccbafc3`); lane ngoại lệ freshness đóng-theo-pin cho giá lưu trữ và lane baseline INAX 547 (§11).
 
 **Quyết định Owner 24/11 trước đó đã đưa vào candidate:** 1C (order/quote tương thích giá mới **và** khoá mọi đường tạo đơn/báo giá trực tiếp khi commerce OFF — P470-003 + P470-004), 2C (kích hoạt lại SKU luôn được phép; giá cũ quá 7 ngày bị ẩn bằng trạng thái `REVERIFY_REQUIRED`, giữ lịch sử), chấp nhận chip biến thể legacy (SKU, không xem trước giá/ảnh; #432/#433/#440 vẫn OFF), quy tắc giá ứng viên Owner-accepted (§9).
