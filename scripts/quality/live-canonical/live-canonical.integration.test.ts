@@ -18,6 +18,7 @@ const PUB = `dpg_public_catalogue_${tag}`, ADM = `dpg_admin_api_${tag}`, RUN = `
 const roleNames = (text: string) => text.replaceAll('dpg_public_catalogue', PUB).replaceAll('dpg_admin_api', ADM).replaceAll('dpg_runtime', RUN).replaceAll('dpg_operator470', OPR)
 const log: string[] = []
 vi.mock('../../../apps/public/src/runtime/public-db', () => ({
+    publicPostgresEnabled: () => true,
     readPublicRows: async (sql: string, values: readonly unknown[]) => {
         log.push(sql)
         await db.query('begin read only'); await db.query(`set local role ${PUB}`)
