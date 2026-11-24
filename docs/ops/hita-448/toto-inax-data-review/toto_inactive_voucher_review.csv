@@ -1,0 +1,4 @@
+﻿dpg_id,sku,is_active,source_url,source_checked_at_utc,voucher_vnd,pdp_voucher,autocomplete_cashback,voucher_condition,autocomplete_qty,offer_availability,review_status
+35075,L501C#XW,false,https://hita.com.vn/chau-rua-lavabo-duong-vanh-toto-l501c-1820.html,2026-11-23T20:27:43.544Z,50280,50.280đ,50280,"* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",,https://schema.org/InStock,SUPPORTED_HISTORICAL_AMOUNT
+35931,TTUE602DN,false,https://hita.com.vn/van-cam-ung-tieu-nam-am-tuong-dung-pin-toto-ttue602dn-6964.html,2026-11-23T21:01:43.665Z,458000,458.000đ,458000,"* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",,https://schema.org/InStock,SUPPORTED_HISTORICAL_AMOUNT
+36174,DU601N,false,https://hita.com.vn/van-xa-nhan-toto-du601n-3526.html,2026-11-23T21:10:48.768Z,98650,98.650đ,98650,"* Ưu đãi đặc biệt khi đặt Online, chỉ có tại HITA",0,https://schema.org/InStock,SUSPECT_AVAILABILITY_QTY_ZERO

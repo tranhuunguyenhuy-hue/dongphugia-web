@@ -1,0 +1,21 @@
+{
+  "file": "inax_inactive_review.csv",
+  "mode": "import-review",
+  "sha256": "58c1e47afa77b1e9e6218fcefe41dfc15a4d1ad3afc1b065d11b98ff1b5ad6ac",
+  "gate_run_at_utc": "2026-11-24T08:59:25.874Z",
+  "max_age_hours": 24,
+  "inventory_rows": 437,
+  "rows": 437,
+  "file_issues": [],
+  "by_class": {
+    "AMBIGUOUS_UNVERIFIED": 2,
+    "CONTACT_VERIFIED": 1,
+    "PRICE_VERIFIED": 8,
+    "UNRESOLVED": 426
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 0,
+  "price_verified_with_warnings": 0,
+  "fail_by_code": {},
+  "warn_by_code": {}
+}

@@ -1,0 +1,49 @@
+{
+  "input_sha256": {
+    "inax_478": "e425c48958e8119e585fd257648de7adf8a2f04c1d1f9cf3d6c6f7e798009acc",
+    "inax_480": "de09f127a4ad66fe3f031551cd688b024495636f7e948f6f500f9b967588ec46",
+    "inax_463": "aa0a93553ce5cf32c86e84f9e4aa8cfee73f66631500781341e634d25aa17cfd",
+    "toto_481": "858c920029262a1b0a8dba64120bd23d4b35e2e668d814a2acdb6023822a5a95",
+    "inax_inventory": "3e00e01dfbe45ad2e6a5b6630e0e98dda12c36f399296b76f6ff49614932e1bb",
+    "inax_batch": "96bffa9d4d1e4fa72ff8a3095d94ed7e6c7c5d66bace4a694a0bf588bb4c9298",
+    "recovery_evidence": "cb28333770a4da1de2aaa6becc526662e8456a395e4bcdfea85d477593c9c9e7",
+    "toto_gate": "9d25ba5bfa7caed1ae3885d5f9d1f8b4dba6dadf3331a6e442dc807f34a5a38e"
+  },
+  "active": 1653,
+  "status": {
+    "EXACT": 852,
+    "NOT_CRAWLED": 772,
+    "AMBIGUOUS": 10,
+    "NOT_FOUND": 2,
+    "DISCONTINUED": 8,
+    "UNKNOWN": 1,
+    "CONTACT": 8
+  },
+  "priced_by_source": {
+    "HITA_BASELINE_448": 547,
+    "HITA_RECOVERY_477": 305
+  },
+  "candidates": 467,
+  "voucher_count": 358,
+  "max_voucher_pct": "6.72",
+  "refresh_priority": {
+    "2_VOUCHER_OR_PRICE_WARN": 358,
+    "3_RECHECK_PRICE": 494,
+    "1_UNRESOLVED_OR_CANDIDATE": 783,
+    "4_RECHECK_SOURCE_STATUS": 18
+  },
+  "warnings": [
+    "BFV-7145T-3C",
+    "AC-919R+CW-H17VN/BW1"
+  ],
+  "timestamps": {
+    "HITA_BASELINE_448": [
+      "2026-11-24T03:04:35.244Z",
+      "2026-11-24T04:02:34.787Z"
+    ],
+    "HITA_RECOVERY_477": [
+      "2026-11-24T05:40:46.451Z",
+      "2026-11-24T05:47:29.878Z"
+    ]
+  }
+}
