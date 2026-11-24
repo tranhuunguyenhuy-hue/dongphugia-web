@@ -1,0 +1,41 @@
+{
+  "group": "toto-active",
+  "original_csv_sha256": "776086a1174ee7effaa49ff00bd237d38f110e9051ac3aa5984bc043611b3b1a",
+  "candidate_sha256": "be316fa43325a016a2897ba94b5fc2cf0f9691a3714df6d6f464e4c9839b7b92",
+  "approval_sha256": "3357fbb5c1a5d0ec0a86b38ba7747e9e40b7edd6230b6fb35e64c2b36ffee13b",
+  "count": 67,
+  "hold_count": 0,
+  "source_age_hours_at_offline_audit": [
+    13.7,
+    14.31
+  ],
+  "evidence_cut_utc": "2026-11-24T09:51:09.465000+00:00",
+  "business_decision": "OWNER_ACCEPTED_CONDITIONAL",
+  "direct_price_freshness": "NOT_RECONFIRMED",
+  "production_go": false,
+  "refs": {
+    "479": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+    "483": "83fb2b3e600f15fa9f7bbdf398e793fe557e1140",
+    "484": "24afd8341e2231c509376b80a3f27cf9bfd082e7"
+  },
+  "archived_direct_csv_sha256": "796fe50fc5f467740b627163383edd7fbbe292738f7a51a9a859c23770769565",
+  "archived_direct_approval_sha256": "8865e2bf2462c96584dd523895f5c1bead202c85671895a7d30b3e821569eb1e",
+  "release_scope_counts": {
+    "direct_archived": 1543,
+    "voucher_held": 771,
+    "pass_regular_promo": 1543,
+    "CONTACT": 283,
+    "UNRESOLVED": 114,
+    "DISCONTINUED": 49,
+    "NOT_FOUND": 1,
+    "candidate": 67,
+    "pass_regular_only": 67
+  },
+  "candidate_ledger_sha256": "42d392964c284bbb7d1e834e4560747e36b99d2a7fc75e77983f1dcebab2a87f",
+  "archived_direct_ledger_sha256": "04583cbc4524af49569508d18f56d0e85ddd80d44d7220182c9e11f377ddad8c",
+  "source_status_csv": "../../import-handoff/toto-active/status-review.csv",
+  "source_status_csv_sha256": "00d70d7039d462f915d2eda01ff89d0f831356c63d4b108cf98026d999016b53",
+  "direct_offline_contract_pass": 1543,
+  "direct_freshness": "NOT_RECONFIRMED",
+  "technical_preflight_live": "NOT_RUN"
+}

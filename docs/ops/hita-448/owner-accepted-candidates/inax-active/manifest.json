@@ -1,0 +1,46 @@
+{
+  "group": "inax-active",
+  "original_csv_sha256": "54ca380a0cd62967061fe292fd9f2341f9541e024ac9871ce6e7ed937f9f73e1",
+  "candidate_sha256": "0fab79307bd76ebc33c2cf81fbc6cfeb74321cd36d8361048b734426e3884e7a",
+  "approval_sha256": "577a12b29a71282bce591a4674b6ac68e71b91fb52ed5269ab478b6dc0d429c0",
+  "count": 467,
+  "hold_count": 0,
+  "source_age_hours_at_offline_audit": [
+    5.79,
+    6.17
+  ],
+  "evidence_cut_utc": "2026-11-24T09:51:09.465000+00:00",
+  "business_decision": "OWNER_ACCEPTED_CONDITIONAL",
+  "direct_price_freshness": "NOT_RECONFIRMED",
+  "production_go": false,
+  "refs": {
+    "479": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+    "483": "83fb2b3e600f15fa9f7bbdf398e793fe557e1140",
+    "484": "24afd8341e2231c509376b80a3f27cf9bfd082e7"
+  },
+  "archived_direct_csv_sha256": "03af3ba9e63681d23eaad59dfba36bc9b3b6cdd49896e90ba43def67d11b739d",
+  "archived_direct_approval_sha256": "f2f5c40163a4132c004194af11a4a897073f34464845e459fc005a4f875f2504",
+  "release_scope_counts": {
+    "baseline_hold": 547,
+    "voucher_held": 358,
+    "held_regular_promo": 545,
+    "direct_archived": 305,
+    "pass_regular_only": 772,
+    "deep_promo_held": 2,
+    "held_regular_only": 2,
+    "UNRESOLVED": 316,
+    "NOT_FOUND": 2,
+    "DISCONTINUED": 8,
+    "CONTACT": 8,
+    "candidate": 467
+  },
+  "inax_baseline_hold_sha256": "24538be864405485ef09f334cf0ad58da1ea1d9648d70b8d061441b8fba624c1",
+  "inax_baseline_owner_decision_sha256": "3488b3d6dde819e3f881da31a205fe8b33a1072a59f6a941188844c8f1dbc8e4",
+  "candidate_ledger_sha256": "3e411e6893640e7f7af1045def211b3da0ec5ba0c3040b1798a062d681d77348",
+  "archived_direct_ledger_sha256": "ca7544d3c850158f93b508fe95039723457618fcbd94197300b1a4dc462d2d0a",
+  "source_status_csv": "../../import-handoff/inax-active/status-review.csv",
+  "source_status_csv_sha256": "a8861d99fe9612e7ad2cdee62d7bb96de69c820633f3afa83a61c5c6f1046d68",
+  "direct_offline_contract_pass": 305,
+  "direct_freshness": "NOT_RECONFIRMED",
+  "technical_preflight_live": "NOT_RUN"
+}
