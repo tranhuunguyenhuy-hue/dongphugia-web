@@ -194,23 +194,23 @@ export function isForbiddenInternalControlRequest(request: Request) {
 
 export type PublicApiRequestDecision = 'not-api' | 'allow' | 'not-found' | 'method-not-allowed'
 
-/** #446: order intake exists ONLY on the isolated TEST Preview that carries the dedicated ORDER_INTAKE_DB binding.
- * Production (or any environment without the binding/flags) keeps `/api/orders` closed as `not-found`. */
-export function orderIntakeAllowed(environment: Record<string, unknown> | undefined) {
-  return environment?.APP_ENV === 'staging'
-    && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
-    && typeof environment.ORDER_INTAKE_DB === 'object' && environment.ORDER_INTAKE_DB !== null
+/** #470 commerce v1: guest cart/order/quote intake exists only where the explicit flag AND the dedicated intake binding are present
+ * (Production once the Owner turns it on; the isolated TEST Preview). Everywhere else `/api/commerce/*` is `not-found`. */
+export function commerceIntakeAllowed(environment: Record<string, unknown> | undefined) {
+  if (environment?.PUBLIC_COMMERCE !== 'on') return false
+  if (typeof environment.ORDER_INTAKE_DB !== 'object' || environment.ORDER_INTAKE_DB === null) return false
+  return environment.APP_ENV === 'production' || (environment.APP_ENV === 'staging' && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true')
 }
 
 export function classifyPublicApiRequest(request: Request, environment?: Record<string, unknown>): PublicApiRequestDecision {
   const { pathname } = new URL(request.url)
   if (!pathname.startsWith('/api/')) return 'not-api'
 
-  if (pathname === '/api/orders') {
-    const ownsOrders = PUBLIC_ROUTE_OWNERSHIP.some((route) =>
-      route.owner === 'public' && route.path === '/api/orders' && route.purpose === 'guest-order-intake-isolated-test-only',
-    )
-    if (!ownsOrders || !orderIntakeAllowed(environment)) return 'not-found'
+  const commerce = pathname.match(/^\/api\/commerce\/(cart|orders|quotes)$/)
+  if (commerce || pathname === '/api/orders' || pathname.startsWith('/api/commerce')) {
+    const purpose = commerce ? ({ cart: 'commerce-cart-check', orders: 'commerce-order-intake', quotes: 'commerce-quote-intake' } as const)[commerce[1] as 'cart' | 'orders' | 'quotes'] : null
+    const owned = purpose !== null && PUBLIC_ROUTE_OWNERSHIP.some((route) => route.owner === 'public' && route.path === pathname && route.purpose === purpose)
+    if (!owned || !commerceIntakeAllowed(environment)) return 'not-found'
     return request.method === 'POST' ? 'allow' : 'method-not-allowed'
   }
 

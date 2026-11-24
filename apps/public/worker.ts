@@ -104,7 +104,7 @@ export default {
         headers: {
           'Cache-Control': PRIVATE_CACHE_CONTROL,
           ...robotHeaders,
-          ...(publicApiDecision === 'method-not-allowed' ? { Allow: new URL(request.url).pathname === '/api/orders' ? 'POST' : 'GET, HEAD' } : {}),
+          ...(publicApiDecision === 'method-not-allowed' ? { Allow: new URL(request.url).pathname.startsWith('/api/commerce/') ? 'POST' : 'GET, HEAD' } : {}),
           ...sourceIdentityHeader,
         },
       })
@@ -154,7 +154,8 @@ export default {
     const plan = cacheEnabled ? planPageCache(request) : null
     const pricingMode = canonicalPricingMode(environment as CanonicalEnv)
     const pricingVariant = pricingMode === 'production' ? 'production:' + (canonicalProductionBrands(environment as CanonicalEnv).join(',') || 'none') : pricingMode
-    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint(), pricingVariant) : null
+    const commerceVariant = environment.PUBLIC_COMMERCE === 'on' ? ':commerce' : ''   // PDP/cart CTAs differ with the commerce flag: never serve the other state's HTML
+    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint(), pricingVariant + commerceVariant) : null
     const workerCache = cacheKey ? await caches.open('dongphugia-public-v2') : null
     const edgeControl = plan ? `public, max-age=${plan.ttlSeconds}, must-revalidate` : PUBLIC_EDGE_CACHE_CONTROL
     let staleEntry: Response | null = null

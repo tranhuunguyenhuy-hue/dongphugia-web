@@ -176,19 +176,19 @@ describe('Public Worker fail-closed policy', () => {
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/catalogue/listings/thiet-bi-bep/voi-rua-chen', { method: 'POST' }))).toBe('method-not-allowed')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/catalogue/listings/thiet-bi-bep/voi-rua-chen', { method: 'DELETE' }))).toBe('method-not-allowed')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/admin/export'))).toBe('not-found')
-    // #446: /api/orders is closed everywhere except the isolated TEST Preview that carries ORDER_INTAKE_DB.
-    const testPreview = { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: { connectionString: 'postgres://x' } }
-    const post = (url = 'https://preview.invalid/api/orders') => new Request(url, { method: 'POST' })
-    expect(classifyPublicApiRequest(post(), testPreview)).toBe('allow')
-    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/orders'), testPreview)).toBe('method-not-allowed')
-    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/orders', { method: 'PUT' }), testPreview)).toBe('method-not-allowed')
-    expect(classifyPublicApiRequest(post('https://preview.invalid/api/orders/1'), testPreview)).toBe('not-found')
-    expect(classifyPublicApiRequest(post('https://preview.invalid/api/orders/'), testPreview)).toBe('not-found')
+    // #470: guest commerce intake is closed everywhere except where PUBLIC_COMMERCE=on AND the dedicated intake binding exist (Production or the isolated TEST Preview).
+    const binding = { connectionString: 'postgres://x' }
+    const testPreview = { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true', PUBLIC_COMMERCE: 'on', ORDER_INTAKE_DB: binding }
+    const production = { APP_ENV: 'production', PUBLIC_COMMERCE: 'on', ORDER_INTAKE_DB: binding }
+    const post = (path = 'orders') => new Request(`https://preview.invalid/api/commerce/${path}`, { method: 'POST' })
+    for (const env of [testPreview, production]) for (const path of ['cart', 'orders', 'quotes']) expect(classifyPublicApiRequest(post(path), env), `${env.APP_ENV} ${path}`).toBe('allow')
+    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/commerce/orders'), production)).toBe('method-not-allowed')
+    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/commerce/orders', { method: 'PUT' }), production)).toBe('method-not-allowed')
+    for (const path of ['orders/1', 'orders/', 'admin', 'cart/x', '']) expect(classifyPublicApiRequest(post(path), production), path).toBe('not-found')
+    expect(classifyPublicApiRequest(new Request('https://preview.invalid/api/orders', { method: 'POST' }), production), 'the legacy /api/orders route stays closed').toBe('not-found')
     for (const closed of [
-      undefined, {}, { APP_ENV: 'production', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: {} },
-      { APP_ENV: 'preview', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: {} },
-      { APP_ENV: 'staging', ORDER_INTAKE_DB: {} }, { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'false', ORDER_INTAKE_DB: {} },
-      { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true' }, { APP_ENV: 'staging', PREVIEW_TEST_DATABASE_ISOLATED: 'true', ORDER_INTAKE_DB: null },
+      undefined, {}, { ...production, PUBLIC_COMMERCE: undefined }, { ...production, PUBLIC_COMMERCE: 'off' }, { APP_ENV: 'production', ORDER_INTAKE_DB: binding }, { ...production, ORDER_INTAKE_DB: undefined }, { ...production, ORDER_INTAKE_DB: null },
+      { ...testPreview, PREVIEW_TEST_DATABASE_ISOLATED: 'false' }, { ...testPreview, PREVIEW_TEST_DATABASE_ISOLATED: undefined }, { ...testPreview, APP_ENV: 'preview' },
     ]) expect(classifyPublicApiRequest(post(), closed), JSON.stringify(closed)).toBe('not-found')
     expect(classifyPublicApiRequest(new Request('https://preview.invalid/thiet-bi-bep/voi-rua-chen'))).toBe('not-api')
   })
