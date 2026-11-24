@@ -1,0 +1,46 @@
+{
+  "input_sha256": {
+    "baseline": "bda8301a86bc9f3d9c9ca01f7297c3183ee6efdcf82f1851b2757580d63ccf26",
+    "inventory": "a289fba405507c532d7e1ba5566de1aede04b24a4ea946d65fcd43b699db0a13",
+    "batch": "2f02defe8161003676c7bd2982fa581b958c74f4c88c77e3b192451c08d9269b",
+    "checkpoint": "19c44c7921a41dfe0ec104d58a130ee2655d9c9d3172eb6dae44ab419d7c82d4",
+    "gate_467": "9e2e8f9dfe95921b0009719c48eb0f70a619ed223ab00587cbd24e754b708f3b"
+  },
+  "active": 2057,
+  "baseline": {
+    "EXACT": 1543,
+    "CONTACT": 283,
+    "UNKNOWN": 147,
+    "DISCONTINUED": 49,
+    "AMBIGUOUS": 34,
+    "NOT_FOUND": 1
+  },
+  "production_promotions_from_offline": 0,
+  "unresolved_by_reason": {
+    "REGULAR_LABEL_MISSING": 14,
+    "SINGLE_PRICE_MATCH_BRAND_EVIDENCE_NOT_SAVED": 87,
+    "PDP_SKU_MISMATCH": 1,
+    "NO_EXACT_SEARCH_HIT": 33,
+    "INVALID_PDP_URL": 42,
+    "EXACT_OFFER_MISSING": 4
+  },
+  "voucher_evidence": {
+    "SUPPORTED_HISTORICAL_AMOUNT": 26,
+    "SUSPECT_AVAILABILITY_QTY_ZERO": 2
+  },
+  "qty_zero_skus": [
+    "TBW10000V",
+    "TBW10020V"
+  ],
+  "exact_timestamps_utc": [
+    "2026-11-23T18:23:26.415Z",
+    "2026-11-23T20:08:44.379Z"
+  ],
+  "all_timestamps_utc": [
+    "2026-11-23T18:23:26.415Z",
+    "2026-11-23T20:09:20.743Z"
+  ],
+  "offer_valid_until": {
+    "2026-12-01": 1543
+  }
+}
