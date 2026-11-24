@@ -81,4 +81,12 @@ describe('page cache plan',()=>{
     expect(isStorablePage(html(200,{'set-cookie':'a=b'}))).toBe(false)
     expect(isStorablePage(new Response('{}',{status:200,headers:{'content-type':'application/json'}}))).toBe(false)
   })
+  it('#470: the pricing flag/scope is part of the key; OFF keeps the pre-#470 key', () => {
+    const plan=planPageCache(req('/thiet-bi-ve-sinh/chau/a'))!
+    const off=pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null).url
+    expect(pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null,'off').url).toBe(off)
+    const on=pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null,'production:toto').url
+    expect(on).not.toBe(off); expect(pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null,'production:toto,inax').url).not.toBe(on)
+    expect(()=>pageCacheKey(req('/'),planPageCache(req('/'))!,SHA,null,'production:<x>')).toThrow()
+  })
 })

@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { isSafePublicContent } from './public-product-content.mjs'
 import { isRestoredPublicPricing } from './public-restored-pricing.mjs'
+import { isCanonicalPublicPricing } from './public-canonical-pricing.mjs'
 
 const fail=reason=>{throw new Error(`PREVIEW2_CANDIDATE_${reason}`)}
 async function boundedJson(file,max=2_000_000){
@@ -26,7 +27,7 @@ export async function auditPreview2Candidate(buildRoot,{minProducts=5000,expecte
    const priceKeys=['price','original_price','list_price','sale_price','online_discount_amount','final_online_price','price_display','is_promotion','price_provenance']
    const price=Object.fromEntries(priceKeys.map(key=>[key,product[key]]))
    if(!Number.isSafeInteger(product.id)||products.has(product.id)||typeof product.url!=='string'||paths.has(product.url)
-     ||(restored?!isRestoredPublicPricing(price):product.price!==null||product.price_display!=='Liên hệ báo giá'||product.is_promotion!==false)
+     ||(restored?!(isRestoredPublicPricing(price)||isCanonicalPublicPricing(price)):product.price!==null||product.price_display!=='Liên hệ báo giá'||product.is_promotion!==false)
      ||product.stock_status!=='contact'||!Array.isArray(product.variant_options)||product.variant_options.length!==0
      ||!isSafePublicContent(product.publicContent))fail('PRODUCT_UNSAFE')
    products.set(product.id,product);paths.add(product.url)

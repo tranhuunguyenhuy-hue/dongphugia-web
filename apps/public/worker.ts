@@ -3,6 +3,7 @@ import { withPublicReadScope } from './src/runtime/public-read-scope'
 // relative to the Worker entry. A dynamic import moved it into _next/static/ and broke every render in
 // the packaged artifact (#360 P1 readiness, verified in workerd).
 import vinextHandler from 'vinext/server/fetch-handler'
+import { canonicalPricingMode, canonicalProductionBrands, type CanonicalEnv } from '@/lib/canonical-price'
 import {exceptionCategory} from '../../scripts/catalogue-direct/preview-diagnostic-safety.mjs'
 import { publicSnapshotCheckpoint } from './src/runtime/public-snapshot-mode'
 import {servePrerenderedCatalogue} from './src/runtime/prerendered-catalogue'
@@ -151,7 +152,9 @@ export default {
     const cacheEnabled = environment.APP_ENV === 'production'
       || (environment.APP_ENV === 'staging' && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true')
     const plan = cacheEnabled ? planPageCache(request) : null
-    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint()) : null
+    const pricingMode = canonicalPricingMode(environment as CanonicalEnv)
+    const pricingVariant = pricingMode === 'production' ? 'production:' + canonicalProductionBrands(environment as CanonicalEnv).join(',') : pricingMode
+    const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint(), pricingVariant) : null
     const workerCache = cacheKey ? await caches.open('dongphugia-public-v2') : null
     const edgeControl = plan ? `public, max-age=${plan.ttlSeconds}, must-revalidate` : PUBLIC_EDGE_CACHE_CONTROL
     let staleEntry: Response | null = null

@@ -1,6 +1,6 @@
 import { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
-import { Suspense } from "react"
+import { Suspense } from "react"; import { canonicalSortEnabled } from "@/lib/canonical-price"
 import { preload } from "react-dom"
 import { getPublicProducts, getSeriesFacet, getAvailableFiltersBySubcategory, getProductTypeFiltersBySubcategory, getSubcategorySpecFilters, getListingRuntimeConfig, getPublicListingLeaf, getPublicListingLeaves } from "@/lib/public-api-products"
 import { ProductCard } from "@/components/ui/product-card"
@@ -224,7 +224,7 @@ export default async function ThietBiVeSinhSubPage({ params, searchParams }: Pag
                                     runtimeConfig={listingRuntimeConfig}
                                     hideColorFilter={listingRuntimeConfig.hideColorFilter}
                                 />
-                                <CategorySort serverSort={process.env.APP_ENV === 'staging' && process.env.PREVIEW_TEST_DATABASE_ISOLATED === 'true'} />
+                                <CategorySort serverSort={canonicalSortEnabled('thiet-bi-ve-sinh')} />
                             </div>
                         </div>
 

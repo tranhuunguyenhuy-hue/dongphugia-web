@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { formatPrice, cn } from '@/lib/utils';
-import { siteConfig } from '@/config/site';
+import { siteConfig } from '@/config/site'; import { canonicalPriceLabel, isCanonicalPriceProvenance } from '@/lib/canonical-price';
 import { getVariantDisplayColor } from '@/lib/variant-color-display';
 import { DeferredResponsiveMedia } from '@/components/media/deferred-responsive-media'; import { ResponsiveMedia } from '@/components/media/responsive-media'; import { resolveFinalOnlinePrice, resolveProductCommerce } from '@/lib/product-commerce';
 
@@ -70,7 +70,7 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
     }
     const sku = product.sku || product.product_code || product.code || '';
     const isInactive = product.is_active === false;
-    const canonicalPricing = product.price_provenance === 'hita-exact-test';
+    const canonicalPricing = isCanonicalPriceProvenance(product.price_provenance);
     const commerce = resolveProductCommerce({
         listPrice: product.list_price,
         originalPrice: canonicalPricing ? null : product.original_price,
@@ -275,7 +275,7 @@ export function ProductCard({ product, showPrice = true, patternSlug, basePath =
                         </>
                     ) : (
                         <span className="font-semibold text-[14px] text-[#2E7A96] tracking-tight">
-                            {canonicalPricing ? 'Liên hệ báo giá' : product.price_display || siteConfig.ui.status.contact}
+                            {canonicalPricing ? canonicalPriceLabel(product.price_display) : product.price_display || siteConfig.ui.status.contact}
                         </span>
                     )}
                 </div>

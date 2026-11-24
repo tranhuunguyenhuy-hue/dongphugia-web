@@ -8,6 +8,7 @@ import { assertPublicPreviewBudget } from './contract.mjs'
 import type { ProductVisibilityInput } from '../../src/lib/public-product-visibility'
 import type { ProductPathInput, ProductTaxonAssignmentRef } from '../../src/lib/taxonomy-paths'
 import { projectProduct, buildProjection, ROOTS } from './public-projection.mjs'
+import { inCanonicalScope } from './public-canonical-pricing.mjs'
 import {projectPublicContent,publicText,PUBLIC_SPEC_KEYS,PUBLIC_LEGACY_SPEC_PATHS} from './public-product-content.mjs'
 import { isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
 
@@ -56,6 +57,17 @@ function proof() {
   return {checkpoint,m3CodeSha:result.head_sha,m3RunId:runId}
 }
 
+// #470 Architecture A. OFF unless explicitly enabled; when on, it is bound to the exact approved CSV + import plan.
+function canonicalOptions(){
+  if(process.env.PUBLIC_CANONICAL_PRICING!=='on')return undefined
+  const csvSha256=process.env.PUBLIC_CANONICAL_PRICE_CSV_SHA256??'',planSha=process.env.PUBLIC_CANONICAL_PRICE_PLAN_SHA??''
+  if(!/^[a-f0-9]{64}$/.test(csvSha256)||!/^[a-f0-9]{64}$/.test(planSha))throw new Error('PUBLIC_CANONICAL_BINDING_REQUIRED')
+  const brands=(process.env.PUBLIC_CANONICAL_PRICE_BRANDS??'toto').split(',').map(v=>v.trim()).filter(Boolean)
+  if(!brands.length||!brands.every(v=>/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v)))throw new Error('PUBLIC_CANONICAL_SCOPE_INVALID')
+  const hours=Number(process.env.PUBLIC_CANONICAL_PRICE_MAX_AGE_HOURS??'72')
+  if(!Number.isFinite(hours)||hours<1||hours>720)throw new Error('PUBLIC_CANONICAL_SCOPE_INVALID')
+  return {scope:{categories:['thiet-bi-ve-sinh'],brands},now:new Date(),maxAgeMs:hours*3600_000,csvSha256,planSha}
+}
 async function main() {
   if(process.env.GITHUB_ACTIONS!=='true'||process.env.GITHUB_REF!=='refs/heads/main'
     ||process.env.GITHUB_ACTOR!=='tranhuunguyenhuy-hue'||process.env.GITHUB_RUN_ATTEMPT!=='1') throw new Error('PROTECTED_BUILD_REQUIRED')
@@ -71,9 +83,10 @@ async function main() {
   // Explicit selected fields only: no Auth, Storage, orders, customer records,
   // Source URLs and raw rows remain protected in runner memory. Explicitly
   // allowlisted historical prices, public description and documents are emitted.
+  const canonical=canonicalOptions()
   const result=await client.query(`select p.id,p.name,p.display_name,p.slug,p.sku,p.product_type,p.image_main_url,p.is_featured,
     p.price,p.original_price,p.list_price,p.sale_price,p.online_discount_amount,
-    p.price_display,p.price_updated_at,p.price_source,p.price_state,p.price_confidence,p.source_system,p.source_url,
+    p.price_display,p.price_updated_at,p.price_source,p.price_state,p.price_confidence,p.source_system,p.source_url,${canonical?'p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd,p.canonical_price_status,p.canonical_price_checked_at,':''}
     p.variant_group,p.variant_group_id,p.variant_label,p.variant_type,p.is_combo,
     p.sort_order as "rootSortOrder",b.id as "rootBrandId",b.sort_order as "rootBrandSortOrder",
     color.name as "cardColorName",color.hex_code as "cardColorHex",
@@ -155,8 +168,8 @@ async function main() {
     const visibility = resolveProductVisibility(row)
     const primaries = row.product_taxon_assignments.filter(assignment => assignment.is_primary)
     const primaryListing = primaries.length === 0 || (primaries.length === 1 && primaries[0].catalog_taxons?.is_listing_enabled === true)
-    const product=projectProduct(row,{...visibility,listing:visibility.listing && primaryListing},canonical,{restoreCommerce:true})
-    return product?{row,product:{...product,publicContent:projectPublicContent(row,{rich:true})}}:null
+    const product=projectProduct(row,{...visibility,listing:visibility.listing && primaryListing},canonical,{restoreCommerce:true,canonical})
+    return product?{row,product:{...product,publicContent:projectPublicContent(row,{rich:true,noReferencePrice:canonical!==undefined&&inCanonicalScope(row,canonical.scope)})}}:null
   }).filter((pair):pair is NonNullable<typeof pair>=>pair!==null)
   // Legacy groups are never the approved Family model. Only a small, fully
   // public one-axis sibling subset with exact independent PDP targets is used.
@@ -200,7 +213,7 @@ async function main() {
   }
   const projected=projectedPairs.map(({product})=>({...product,...publicVariantById.get(product.id)}))
   projectionPhase='PUBLIC_ASSEMBLY'
-  const {manifest,assets}=buildProjection(projected,evidence,rootMetadata,{restoreCommerce:true})
+  const {manifest,assets}=buildProjection(projected,evidence,rootMetadata,{restoreCommerce:true,canonical})
   if(!manifest.products||!manifest.listingProducts) throw new Error('PUBLIC_PROJECTION_EMPTY_REVIEW_REQUIRED')
   await client.query('commit')
   projectionPhase='ASSET_WRITE'
@@ -219,6 +232,7 @@ async function main() {
   const exceptions=projectedPairs.flatMap(({row,product})=>{
     const reasons:string[]=[]
     if(product.price===null)reasons.push('CONTACT_ONLY_PRICE_UNVERIFIED')
+    else if(product.price_provenance==='hita-exact-v1'){/* canonical exact-SKU price: validated by the DTO contract, no legacy cross-check */}
     else if(row.price_source==='hita'){
       if(product.original_price===null)reasons.push('ORIGINAL_PRICE_UNVERIFIED')
       if(Number(row.sale_price)!==product.price)reasons.push('HISTORICAL_SALE_FIELD_CONFLICT')
@@ -242,11 +256,11 @@ async function main() {
     publicProducts:manifest.products,listingProducts:manifest.listingProducts,excludedInvalidCanonical:rows.length-projected.length,assets:assets.size,bytes,
     historicalReferencePrices:manifest.contentStats.referencePrices,verifiedVariantProducts:publicVariantById.size,
     publicPrices:manifest.contentStats.publicPrices,hitaPrices:manifest.contentStats.hitaPrices,
-    onlineFinalPrices:manifest.contentStats.onlineFinalPrices,priceExceptions:exceptions.length,
+    onlineFinalPrices:manifest.contentStats.onlineFinalPrices,priceExceptions:exceptions.length,canonicalPricing:manifest.canonicalPricing??null,
     inventory:'CONFIRM_WITH_OWNER',privateFieldsExported:false}))
 }
 main().catch(error=>{
- const reasons=new Set(['PUBLIC_PROJECTION_UNSAFE_CONTENT','PUBLIC_PROJECTION_UNSAFE_DTO','PUBLIC_PROJECTION_DUPLICATE_CANONICAL_PATH','PUBLIC_PROJECTION_M3_EVIDENCE_REQUIRED','PUBLIC_PROJECTION_EMPTY_REVIEW_REQUIRED','PUBLIC_ASSET_CAPACITY','PUBLIC_PROJECTION_CAPACITY','M3_RUN_NOT_VERIFIED','M3_EXACT_CHECKPOINT_NOT_VERIFIED'])
+ const reasons=new Set(['PUBLIC_CANONICAL_BINDING_REQUIRED','PUBLIC_CANONICAL_SCOPE_INVALID','PUBLIC_CANONICAL_PRICE_STALE','PUBLIC_CANONICAL_PRICE_INVALID','PUBLIC_PROJECTION_UNSAFE_CONTENT','PUBLIC_PROJECTION_UNSAFE_DTO','PUBLIC_PROJECTION_DUPLICATE_CANONICAL_PATH','PUBLIC_PROJECTION_M3_EVIDENCE_REQUIRED','PUBLIC_PROJECTION_EMPTY_REVIEW_REQUIRED','PUBLIC_ASSET_CAPACITY','PUBLIC_PROJECTION_CAPACITY','M3_RUN_NOT_VERIFIED','M3_EXACT_CHECKPOINT_NOT_VERIFIED'])
  const reason=reasons.has(error?.message)?error.message:'PROTECTED_BUILD_FAILED'
  const sqlCode=['42501','42703','42P01','22023','57014','53200','53300'].includes(error?.code)?error.code:null
  console.error(JSON.stringify({status:'STOP',stage:'M4_PUBLIC_PROJECTION',phase:projectionPhase,reason,sqlCode}));process.exitCode=1

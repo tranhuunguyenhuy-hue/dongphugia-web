@@ -115,7 +115,7 @@ export function projectPublicContent(input,options={}){
   const url=safeImage(value);if(url&&!gallery.includes(url))gallery.push(url)
   if(gallery.length===6)break
  }
- const base={summary,descriptionBlocks,specifications,gallery,referencePrice:historicalPublicReferencePrice(input)}
+ const base={summary,descriptionBlocks,specifications,gallery,referencePrice:options.noReferencePrice?null:historicalPublicReferencePrice(input)}
  return options.rich?{...base,descriptionHtml:publicDescriptionHtml(input.publicDescription),documents:publicDocuments(input.publicDocuments)}:base
 }
 
