@@ -1,0 +1,148 @@
+{
+  "input_sha256": {
+    "docs/ops/hita-448/toto/toto_prices_review.csv": "bda8301a86bc9f3d9c9ca01f7297c3183ee6efdcf82f1851b2757580d63ccf26",
+    "docs/ops/hita-448/inax-recovery/sanitary-merged.csv": "e425c48958e8119e585fd257648de7adf8a2f04c1d1f9cf3d6c6f7e798009acc",
+    "docs/ops/hita-448/toto/release-review/toto_active_review.csv": "858c920029262a1b0a8dba64120bd23d4b35e2e668d814a2acdb6023822a5a95",
+    "docs/ops/hita-448/toto/release-review/toto_historical_candidates.csv": "99de01650e8b3bdc54b98879432a9caa29c79a60c38c47ab4c5a55ac6abcbf19",
+    "docs/ops/hita-448/inax-recovery/offline-review/historical-price-candidates.csv": "de09f127a4ad66fe3f031551cd688b024495636f7e948f6f500f9b967588ec46",
+    "/workspace/scratch/toto448/full-inventory.json": "a289fba405507c532d7e1ba5566de1aede04b24a4ea946d65fcd43b699db0a13",
+    "/workspace/scratch/inax448/full-inventory.json": "3e00e01dfbe45ad2e6a5b6630e0e98dda12c36f399296b76f6ff49614932e1bb",
+    "/workspace/scratch/toto448/batch/prices.json": "2f02defe8161003676c7bd2982fa581b958c74f4c88c77e3b192451c08d9269b",
+    "/workspace/scratch/inax448/batch/prices.json": "96bffa9d4d1e4fa72ff8a3095d94ed7e6c7c5d66bace4a694a0bf588bb4c9298",
+    "/workspace/scratch/toto448/batch/checkpoint.jsonl": "19c44c7921a41dfe0ec104d58a130ee2655d9c9d3172eb6dae44ab419d7c82d4"
+  },
+  "cohorts": {
+    "toto_true": {
+      "rows": 2057,
+      "status": {
+        "EXACT": 1543,
+        "CONTACT": 283,
+        "UNKNOWN": 147,
+        "DISCONTINUED": 49,
+        "AMBIGUOUS": 34,
+        "NOT_FOUND": 1
+      },
+      "price_fields": {
+        "regular_price_vnd": 1543,
+        "promotional_price_vnd": 1543,
+        "online_voucher_amount_vnd": 771
+      },
+      "combinations": {
+        "regular+promo+voucher": 771,
+        "regular+promo": 772
+      },
+      "candidates": 87,
+      "candidate_regular_only": 87,
+      "no_price_or_candidate": 427,
+      "captured_utc": [
+        "2026-11-23T18:23:26.415Z",
+        "2026-11-23T20:08:44.379Z"
+      ],
+      "valid_until": {
+        "2026-12-01": 1543
+      }
+    },
+    "toto_false": {
+      "rows": 2384,
+      "status": {
+        "EXACT": 926,
+        "UNKNOWN": 508,
+        "CONTACT": 677,
+        "DISCONTINUED": 258,
+        "AMBIGUOUS": 14,
+        "NOT_FOUND": 1
+      },
+      "price_fields": {
+        "regular_price_vnd": 926,
+        "promotional_price_vnd": 926,
+        "online_voucher_amount_vnd": 3
+      },
+      "combinations": {
+        "regular+promo": 923,
+        "regular+promo+voucher": 3
+      },
+      "candidates": 393,
+      "candidate_regular_only": 393,
+      "no_price_or_candidate": 1065,
+      "captured_utc": [
+        "2026-11-23T20:09:23.305Z",
+        "2026-11-23T21:40:04.120Z"
+      ],
+      "valid_until": {
+        "2026-12-01": 926
+      }
+    },
+    "inax_true": {
+      "rows": 1653,
+      "status": {
+        "EXACT": 852,
+        "NOT_CRAWLED": 772,
+        "AMBIGUOUS": 10,
+        "NOT_FOUND": 2,
+        "DISCONTINUED": 8,
+        "UNKNOWN": 1,
+        "CONTACT": 8
+      },
+      "price_fields": {
+        "regular_price_vnd": 852,
+        "promotional_price_vnd": 547,
+        "online_voucher_amount_vnd": 358
+      },
+      "combinations": {
+        "regular+promo+voucher": 358,
+        "regular": 305,
+        "regular+promo": 189
+      },
+      "candidates": 467,
+      "candidate_regular_only": 467,
+      "no_price_or_candidate": 334,
+      "captured_utc": [
+        "2026-11-24T03:04:35.244Z",
+        "2026-11-24T05:47:29.878Z"
+      ],
+      "valid_until": {
+        "2026-12-01": 852
+      }
+    },
+    "inax_false": {
+      "rows": 437,
+      "status": {
+        "NOT_CRAWLED": 423,
+        "EXACT": 8,
+        "AMBIGUOUS": 2,
+        "CONTACT": 1,
+        "UNKNOWN": 3
+      },
+      "price_fields": {
+        "regular_price_vnd": 8,
+        "promotional_price_vnd": 0,
+        "online_voucher_amount_vnd": 0
+      },
+      "combinations": {
+        "regular": 8
+      },
+      "candidates": 392,
+      "candidate_regular_only": 392,
+      "no_price_or_candidate": 37,
+      "captured_utc": [
+        "2026-11-24T05:42:25.093Z",
+        "2026-11-24T05:42:32.433Z"
+      ],
+      "valid_until": {
+        "2026-12-01": 8
+      }
+    }
+  },
+  "new_toto_inactive": 393,
+  "toto_inactive_exceptions": {
+    "HISTORICAL_SINGLE_PRICE_CANDIDATE": 393,
+    "FULL_MODEL_OR_CONFIGURATION_NOT_CORROBORATED": 61,
+    "INVALID_PDP_URL": 17,
+    "SOURCE_CONTACT": 677,
+    "SOURCE_DISCONTINUED": 258,
+    "REGULAR_LABEL_MISSING": 35,
+    "NO_EXACT_SEARCH_HIT": 15,
+    "EXACT_OFFER_MISSING": 1,
+    "SKU_OR_PDP_COLLISION": 1
+  }
+}

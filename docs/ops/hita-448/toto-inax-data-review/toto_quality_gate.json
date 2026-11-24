@@ -1,0 +1,25 @@
+{
+  "file": "toto_review.csv",
+  "mode": "import-review",
+  "sha256": "755426b6bb9364abb70a8e0465f97dbaf193eb052392b8a6c6e9b0730ed75b67",
+  "gate_run_at_utc": "2026-11-24T08:56:00.438Z",
+  "max_age_hours": 24,
+  "inventory_rows": 4441,
+  "rows": 4441,
+  "file_issues": [],
+  "by_class": {
+    "AMBIGUOUS_UNVERIFIED": 48,
+    "CONTACT_VERIFIED": 960,
+    "DISCONTINUED_REVIEW": 307,
+    "NOT_FOUND_CANDIDATE_DELETE": 2,
+    "PRICE_VERIFIED": 2469,
+    "UNRESOLVED": 655
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 28,
+  "price_verified_with_warnings": 28,
+  "fail_by_code": {},
+  "warn_by_code": {
+    "LARGE_VOUCHER_REVIEW": 28
+  }
+}
