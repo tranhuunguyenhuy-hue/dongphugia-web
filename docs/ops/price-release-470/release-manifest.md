@@ -1,5 +1,7 @@
 # #470 — RELEASE MANIFEST (ứng viên kỹ thuật, chưa phê duyệt, chưa merge)
 
+**Phạm vi đã duyệt (TL/Owner):** toàn bộ **6.531 SKU thiết bị vệ sinh TOTO + INAX**, gồm active và inactive — nhưng phát hành theo **từng hãng × từng trạng thái** (bảng §1b), mỗi đơn vị có gate/plan/ledger/rollback riêng và có thể phát hành độc lập.
+
 **Trạng thái:** candidate = PR #479 (Draft). Chưa merge, chưa có GO hosted nào. Mọi thao tác hosted chỉ được làm sau **GO riêng của Owner nêu đúng giá trị bên dưới, TRƯỚC khi hành động**. "Release binding" in ra từ script chỉ là định danh, không thay quyền Owner.
 
 Quy ước tên: SQL của #470 gọi là **P470-001/002/003** (tên file `001/002/003_*` trong `supabase/prod-prep/470/`). Chúng KHÁC migration M4 cũ `supabase/m4-production/001/002` (đã áp dụng trên Production từ trước: Admin function v2 đang chạy, `production_writes_allowed=true`).
@@ -15,6 +17,21 @@ Quy ước tên: SQL của #470 gọi là **P470-001/002/003** (tên file `001/0
 | Lane backup | `.github/workflows/m4-production-backup.yml` (đã chạy hằng ngày 02:41 VN; lần gần nhất thành công 24/11 04:26 UTC, run 45326372117) |
 | CSV | hiện `docs/ops/hita-448/toto/toto_prices_review.csv` @ `a361612a` sha256 `bda8301a86bc9f3d9c9ca01f7297c3183ee6efdcf82f1851b2757580d63ccf26` — **phải thay bằng CSV crawl lại gần cutover** (hạn 2026-12-01 đồng loạt) + Quality Gate `import-review` |
 | Plan | chỉ tạo được SAU P470-001/002 (cần snapshot đọc-only có cột mới); basis gồm version + checked_at nên plan SHA đổi khi DB đổi |
+
+## 1b. Phạm vi 6.531 SKU và đơn vị phát hành (đọc-only Production 24/11; ID hãng bất biến, planner ghim cả id lẫn slug)
+| Hãng (brand_id) | Active | Inactive | Tổng | Dữ liệu giá sẵn sàng import? |
+|---|---|---|---|---|
+| TOTO (1) | 2.057 | 2.384 | 4.441 | active: CSV #463 `a361612a` có (phải crawl lại gần cutover); inactive: **UNKNOWN/chưa có CSV đạt Gate** |
+| INAX (2) | 1.653 | 437 | 2.090 | **KHÔNG import-ready** (ứng viên lịch sử chưa qua Quality Gate `import-review`) |
+| Cộng | 3.710 | 2.821 | **6.531** | |
+
+Mỗi (hãng × trạng thái) là **một plan riêng** (`prod-import.mts --brand toto|inax --state active|inactive`): CSV sha riêng, plan SHA riêng, ledger/checksum/rollback riêng, SQL ghim `brand_id`+`slug`, `category_id`, `is_active = <trạng thái>` và `sku`. Bộ planner **không bao giờ ghi `is_active`**: SKU đổi trạng thái giữa lúc lập plan và apply làm batch abort nguyên khối (test local). Giữ nguyên guard "chỉ active" toàn cục — plan inactive là tập được duyệt rõ ràng, không phải nới guard.
+
+**Nhìn từ Public:** Public luôn chỉ đọc `is_active=true` → giá của SKU inactive (đã import) **không lộ** ở listing/search/PDP/SEO/sitemap (test PG pha 4c). Import inactive chỉ chuẩn bị dữ liệu; hiển thị chỉ xảy ra khi Admin bật lại SKU. Admin: bật lại SKU có giá canonical cần `canonical_price_checked_at` còn trong **7 ngày** (hằng `CANONICAL_REACTIVATION_MAX_AGE_MS`, *chính sách do Owner xác nhận*) hoặc phải xác minh lại giá; Admin không tự kích hoạt SKU nào.
+
+**Có thể phát hành từng phần:** (1) TOTO active trước (`canonical_brands=toto`, mặc định); (2) thêm INAX khi dữ liệu đạt Gate (`canonical_brands=toto,inax`, chạy lại lane — cùng SHA); (3) các plan inactive độc lập, không ảnh hưởng Public. Không hãng nào bị kéo theo hãng kia.
+
+**Cờ theo hãng (mặc định TẮT):** allowlist cứng TOTO/INAX ở 4 nơi, test khẳng định bằng nhau — lane M4 (`canonical_brands` ∈ `toto` | `inax` | `toto,inax`, mặc định `toto`), runtime Public (`canonicalProductionBrands()` = allowlist ∩ `PUBLIC_CANONICAL_PRICE_BRANDS`, thiếu biến → chỉ `toto`), khoá cache (chứa danh sách hãng), Admin SPA/Edge Function (`inCanonicalAdminScope`). Hãng ngoài allowlist/ngành khác: giữ hành vi legacy (Admin vẫn quản lý giá như hiện tại; trường canonical chỉ hiện cho vệ sinh × TOTO/INAX).
 
 ## 2. SQL + rollback (sha256, bất biến từ `465ba5b`)
 | File | sha256 |
@@ -33,8 +50,8 @@ Quy ước tên: SQL của #470 gọi là **P470-001/002/003** (tên file `001/0
 | **A. Merge** | TL review xong → Owner cấp quyền merge (chưa cấp) | merge #479 vào `main` → SHA `S` + CI xanh | S |
 | **B. Backup/export** | Owner, sau A | chạy `m4-production-backup` `operation=backup` ngay trước thay đổi + export đọc-only giá legacy sanitary (checksum, xoá 7 ngày sau cutover ổn định) | S, nơi lưu, retention |
 | **C. Schema** | Owner, sau B | P470-001 rồi P470-002 (operator `postgres`) | S, sha256 §2, rollback sha, headroom đo lại |
-| **D. Import** | Owner, sau C | snapshot **đọc-only** → planner dry-run (CSV mới + Gate) → *plan SHA + sha256 batch/rollback ghi vào GO trước khi apply* → apply từng batch | CSV sha, plan SHA, sha256 batch, headroom, danh sách 28 WARN đã xem, 181 SKU chưa xác minh được chấp nhận ẩn giá |
-| **E. Phát hành** | Owner, sau D | function deploy → Worker `verify` → `publish canonical_pricing=off` → `publish canonical_pricing=on` | S, `rollback_version_id` Worker đang chạy, cửa sổ + người giám sát |
+| **D. Import** (một GO cho mỗi plan: hãng × trạng thái) | Owner, sau C | snapshot **đọc-only** → planner dry-run (CSV mới + Gate) → *plan SHA + sha256 batch/rollback ghi vào GO trước khi apply* → apply từng batch | CSV sha, plan SHA, sha256 batch, headroom, danh sách 28 WARN đã xem, 181 SKU chưa xác minh được chấp nhận ẩn giá |
+| **E. Phát hành** (có thể làm 2 lần: `canonical_brands=toto`, sau đó `toto,inax`) | Owner, sau D của hãng tương ứng | function deploy → Worker `verify` → `publish canonical_pricing=off` → `publish canonical_pricing=on` | S, `canonical_brands`, `rollback_version_id` Worker đang chạy, cửa sổ + người giám sát |
 
 Gate tại dòng workflow: cả hai lane chạy trên `main` + actor Owner + `approved_source_sha == github.sha`; nên không thể phát hành trước A.
 
@@ -53,23 +70,28 @@ Gate tại dòng workflow: cả hai lane chạy trên `main` + actor Owner + `ap
 | Edge Function | **không xoá** (`functions delete` làm Admin ngừng) và không thể deploy SHA cũ (lane chỉ cho `main` HEAD). Đưa về hành vi cũ bằng **P470-002 rollback**: function tự thôi thấy cột trong ≤ 60 s | độc lập với Worker |
 | Quyền cột | P470-002 rollback | Public/Admin tự fail-safe (đã test) |
 | Schema | P470-001 rollback (chỉ khi đã xoá hết giá trị) | |
+Hai hãng: rollback batch/plan của INAX chỉ khôi phục đúng dòng INAX của plan đó (test local: INAX-active rollback giữ nguyên TOTO-inactive); `canonical_brands=toto` đưa INAX về legacy tức thì mà không đụng dữ liệu. Admin cũ (function v2) không biết cột canonical nên không bao giờ ghi chúng; chỉnh sửa Admin sau snapshot bị planner/batch bỏ qua (basis version + checked_at), và đổi `is_active` giữa plan và apply làm batch abort — đều có test local.
 Thứ tự gợi ý khi lỗi hiển thị: cờ off → (nếu cần) batch rollback → P470-002 rollback → P470-001 rollback.
 
+## 5b. Dung lượng cho 6.531 SKU (đo thật, đọc-only 24/11)
+DB `293.328.563 B` (≈ 279,7 MiB) · trần trigger `367.001.600 B` (350 MiB) · headroom `73.673.037 B` ≈ **70,26 MiB**. Chi phí ước tính **2.115 B/dòng đổi** (bảo thủ, đã tính index/TOAST) → toàn bộ 6.531 dòng ≈ **13,17 MiB** (active 3.710 ≈ 7,48 MiB; inactive 2.821 ≈ 5,69 MiB; TOTO 4.441 ≈ 8,96 MiB; INAX 2.090 ≈ 4,22 MiB) → còn ≈ **57,1 MiB**; planner dừng nếu headroom < 8 MiB sau batch. **Không cần DROP INDEX, không phát sinh chi phí.** Thêm cột chỉ là metadata. Đo lại ngay trước mỗi GO-D (headroom là số sống; rollback batch cũng ghi thêm version). UNKNOWN: kích thước thực của dòng khi crawl mới có voucher/khuyến mãi dài hơn — đã bù bằng biên 8 MiB.
+
 ## 6. P470-003 (hàm order/quote) — HOÃN
-Không chứng minh được cần cho đợt giá-only: Production hiện có **0 đơn, 0 báo giá, 0 người dùng `auth.users`**; không Edge Function thương mại nào được deploy (chỉ `admin-api`); `/api/orders` và `/gio-hang` đóng ở Production (test `worker-api-policy`, `gio-hang/page.test`); chỉ role `authenticated` có EXECUTE `runtime_order_create` và chưa có tài khoản nào. **UNKNOWN:** trạng thái đăng ký Supabase Auth (không đọc được qua SQL). Rủi ro còn lại nếu hoãn: người tự đăng ký được tài khoản có thể gọi RPC và nhận giá legacy; không có consumer hợp lệ. File giữ làm draft; không nằm trong cổng C. Đề xuất TL xác nhận Auth signup đang tắt (đọc-only) thay vì đưa 003 vào release.
+Không chứng minh được cần cho đợt giá-only: Production hiện có **0 đơn, 0 báo giá, 0 người dùng `auth.users`**; không Edge Function thương mại nào được deploy (chỉ `admin-api`); `/api/orders` và `/gio-hang` đóng ở Production (test `worker-api-policy`, `gio-hang/page.test`); chỉ role `authenticated` có EXECUTE `runtime_order_create`.
+**Đã kiểm đọc-only (24/11): đăng ký Supabase Auth đang BẬT** (email, cần xác nhận email); chưa có tài khoản nào. Rủi ro khi hoãn 003: một người tự đăng ký + xác nhận email có thể gọi RPC `runtime_order_create` trực tiếp bằng khoá publishable và nhận giá legacy thay cho giá canonical. Hiện không có consumer hợp lệ, không có đơn. Tôi **không** đổi cấu hình Auth (ngoài quyền). **Quyết định của Owner/TL còn lại:** (a) giữ hoãn 003 và chấp nhận rủi ro thấp này, hoặc (b) tắt đăng ký tự do trong Supabase Auth (hành động của Owner, không thuộc candidate), hoặc (c) đưa 003 vào release. File 003 giữ làm draft; không nằm trong cổng C.
 
 ## 7. Audit runtime ngoài giá: candidate vs live `e070986a` (110 file; chỉ các phần có tác động runtime)
 | Khu vực (nguồn) | Hành vi Production trên candidate | Gate / bằng chứng |
 |---|---|---|
 | Giá canonical live-read (#470) | **OFF** mặc định | `PUBLIC_CANONICAL_PRICING` chỉ ghi qua lane M4 (`canonical_pricing`); test cờ OFF = câu lệnh không đổi |
-| Series filter + bộ chọn biến thể (#432/#433/#440) | **OFF**: không query sibling/series, `?dong=`/`series_slugs` bị bỏ qua, listing không chạm bảng spec, UI không có gì để render | gate `seriesVariantEnabled()` (`APP_ENV!==production` hoặc `PUBLIC_SERIES_VARIANT=on`); test `series-variant-gate.test.ts` + PG ACL **có và không có** quyền series. **Khác live:** chip biến thể legacy trên PDP không còn (live từng hiển thị) |
+| Series filter + bộ chọn biến thể (#432/#433/#440) | **OFF**: không query sibling/series, `?dong=`/`series_slugs` bị bỏ qua, listing không chạm bảng spec, UI không có gì để render | gate `seriesVariantEnabled()` (`APP_ENV!==production` hoặc `PUBLIC_SERIES_VARIANT=on`); test `series-variant-gate.test.ts` + PG ACL **có và không có** quyền series. **Chip biến thể legacy trên PDP vẫn còn** như live (đường legacy: cùng `variant_group` + cùng hãng + cùng sub-category, public, tối đa 8, chỉ cột Public đã có quyền; KHÔNG bảng spec/series, không cần grant #432). Khác live đúng 1 điểm: chip hiển thị bằng `VerifiedVariantSelector` (SKU + `variant_label` của chính SKU, không suy từ tên) thay vì `VariantSelector` cũ (không có xem trước giá/ảnh biến thể trên PDP); loại thêm nhóm bị quarantine #431 |
 | Giỏ hàng / checkout / order Public (#446) | **Đóng**: `/gio-hang` 404, `POST /api/orders` `not-found`, không có binding `ORDER_INTAKE_DB` trong config Production | `worker-api-policy.test`, `worker-policy.test`, `gio-hang/page.test` |
 | Sort giá + control (#447) | chỉ khi giá canonical ON và chỉ danh mục vệ sinh; còn lại như live | `listing-query` + PG test |
-| Admin giá canonical (#446/#473) | **Hoạt động sau P470-002** (trước đó fail-safe như live): form sản phẩm vệ sinh dùng 3 trường canonical (mọi hãng; chỉ TOTO hiển thị Public), trường giá legacy bị ẩn cho danh mục này | `externalGrant` + probe 60 s; test Admin API thật trên PG |
+| Admin giá canonical (#446/#473) | **Hoạt động sau P470-002** (trước đó fail-safe như live): form dùng 3 trường canonical **chỉ cho vệ sinh × TOTO/INAX**; hãng/ngành khác vẫn quản lý giá legacy như live (không đổi); ghi ngoài phạm vi bị `PRICE_SCOPE_INVALID`; bật lại SKU có giá canonical cũ bị `PRICE_REVERIFY_REQUIRED` | `externalGrant` + probe 60 s; test Admin API thật trên PG |
 | Khoá cache HTML | thêm biến thể giá khi cờ ON; OFF = khoá cũ | `page-cache.test` |
 | Nhãn truy vấn `public-db` | chỉ thêm nhãn | — |
 | Công cụ Hita/CSV/crawl, docs, retire workflow, identity allowlist | không chạy trong Worker | không ảnh hưởng runtime |
 Không thay đổi: SKU/URL, ngành/hãng ngoài phạm vi, Blog, media, auth Admin, SEO ngoài `Offer` canonical (JSON-LD chỉ khi có giá).
 
 ## 8. Bằng chứng (local/CI; không phải PASS Production)
-Xem bình luận báo cáo trong #470: lint, typecheck, vitest toàn repo, `run-local.sh` + `import-local.sh`, tích hợp PG 10 pha với ACL/RLS thật (gồm gate series OFF khi quyền series tồn tại), build combined Public+Admin off/on + `wrangler deploy --dry-run`, CI trên đúng head #479. **UNKNOWN:** Worker local (`wrangler dev --remote`) cho cache/Hyperdrive thật, hành vi trên Production thật, đăng ký Supabase Auth.
+Xem bình luận báo cáo trong #470: lint, typecheck, vitest toàn repo, `run-local.sh` + `import-local.sh`, tích hợp PG 12 pha với ACL/RLS thật (gồm gate series OFF khi quyền series tồn tại, tổ hợp cờ hãng TOTO/INAX, SKU inactive có giá không lộ, chip biến thể legacy), `import-local.sh` hai hãng × hai trạng thái (cô lập chéo hãng, `is_active` đồng thời, rollback từng plan), build combined Public+Admin off/on + `wrangler deploy --dry-run`, CI trên đúng head #479. **UNKNOWN:** Worker local (`wrangler dev --remote`) cho cache/Hyperdrive thật, hành vi trên Production thật, đăng ký Supabase Auth.

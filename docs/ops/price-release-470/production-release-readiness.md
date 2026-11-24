@@ -2,7 +2,10 @@
 
 **Trạng thái: CHUẨN BỊ, CHƯA THỰC THI.** Không có ghi Production/TEST/Staging, DDL, DML, DROP INDEX, import hay deploy nào đã xảy ra. Mọi bước dưới đây cần **Owner GO riêng** nêu đúng SHA + SQL + rollback. Cập nhật: 2026-11-24 (UTC).
 
-## 1. Phạm vi đề xuất cho đợt đầu (để TL/Owner xem xét — tôi KHÔNG quyết phạm vi/ngưỡng)
+## 0. Phạm vi đã duyệt (cập nhật 24/11)
+**6.531 SKU thiết bị vệ sinh TOTO + INAX, active (3.710) và inactive (2.821)** — số liệu, đơn vị phát hành theo hãng × trạng thái, cờ theo hãng, dung lượng 13,17 MiB / headroom 70,26 MiB và ca phát hành từng phần: xem `release-manifest.md` §1b, §5b. Mục 1 dưới đây là chi tiết lô đầu (TOTO active) và vẫn đúng.
+
+## 1. Lô đầu — TOTO active (chi tiết; TL/Owner xem xét)
 **TOTO active — 2.057 SKU** (CSV checkpoint PR #463 `a361612a`):
 
 | Kết quả Hita | Số SKU active | Ghi vào DB (`canonical_price_status`) |
@@ -37,7 +40,7 @@ Còn lại 3 nhóm ngành khác + thương hiệu sanitary khác giữ nguyên l
 Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cutover chi tiết ở mục 7 (cần quyết định kiến trúc).
 
 ## 4. Dung lượng
-Đo 24/11: DB 279,74 MiB, trần trigger 350 MiB, headroom 70,26 MiB. Import 1.910 dòng ≈ **+3,85 MiB** (2.115 B/dòng, bảo thủ; planner chặn nếu < 8 MiB còn lại) → headroom sau ≈ **66–69 MiB**. Thêm cột = chỉ metadata (không rewrite bảng). Không cần DROP INDEX cho đợt này; kế hoạch index (PR #469) giữ nguyên là phương án dự phòng, chưa thực thi. VACUUM FULL `products` không an toàn trong headroom.
+Đo 24/11: DB 279,74 MiB, trần trigger 350 MiB, headroom 70,26 MiB. **Toàn bộ 6.531 SKU ≈ +13,17 MiB (còn ≈ 57,1 MiB; manifest §5b).** Lô TOTO active 1.910 dòng ≈ **+3,85 MiB** (2.115 B/dòng, bảo thủ; planner chặn nếu < 8 MiB còn lại) → headroom sau ≈ **66–69 MiB**. Thêm cột = chỉ metadata (không rewrite bảng). Không cần DROP INDEX cho đợt này; kế hoạch index (PR #469) giữ nguyên là phương án dự phòng, chưa thực thi. VACUUM FULL `products` không an toàn trong headroom.
 
 ## 5. Sao lưu
 1. **Bản sao giá legacy offline (1 bản)**: xuất đọc-only `id, sku, price, original_price, list_price, sale_price, online_discount_amount, price_display, price_state, price_source, price_confidence, price_updated_at` của 16.447 SKU sanitary (~0,35 MiB) + sha256; **giữ 7 ngày sau khi cutover ổn định được xác nhận**, chỉ để rollback, xoá sau đó (Owner #466). Chưa tạo — cần Owner GO vì chứa dữ liệu giá.
@@ -84,7 +87,10 @@ Rollback độc lập từng thành phần (Worker/cờ, dữ liệu, quyền c�
 | Snapshot projection + PDP/PLP/search/JSON-LD canonical (#475; đường rollback/Preview) | PASS (local), mặc định TẮT |
 | Đường live PostgreSQL (Production thật), ACL/RLS thật, 7 pha tích hợp + 23 unit (#476) | PASS (local/CI) — chưa chạy trên DB/Worker thật (UNKNOWN) |
 | Benchmark local: 1 câu lệnh/trang, cùng plan; PLP +~2 ms (ORDER BY CASE) | PASS (chỉ hình dạng plan, không phải latency live) |
-| Variant siblings dưới ACL thật | FAIL trên `main` (5xx) → #476 degrade; grant #432 chưa quyết |
+| Variant siblings dưới ACL thật | FAIL trên `main` (5xx) → series/variant OFF ở Production; chip legacy giữ qua đường không cần grant #432 (PASS, PG ACL thật) |
+| Phạm vi hãng TOTO/INAX × active/inactive (lane, runtime, Admin, planner) | PASS (local/CI) |
+| Dữ liệu INAX + TOTO inactive sẵn sàng import | FAIL/UNKNOWN — chưa có CSV đạt Quality Gate (Codex lane); không chặn phát hành TOTO active |
+| Đăng ký Supabase Auth (đọc-only) | ĐANG BẬT, 0 tài khoản → quyết định hoãn 003 còn lại cho Owner (manifest §6) |
 | `price_valid_until` thật của Hita / 28 WARN voucher lớn | UNKNOWN — cần crawl lại + Owner nhìn |
 | 181 SKU active chưa xác minh | Codex tiếp tục; không chặn nếu Owner chấp nhận ẩn giá |
 | Sao lưu (5.1, 5.2) | CHƯA TẠO |
