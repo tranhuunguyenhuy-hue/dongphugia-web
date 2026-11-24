@@ -1,0 +1,19 @@
+{
+  "rows": 100,
+  "before_tp": 12,
+  "after_tp": 65,
+  "correct_accepted": 65,
+  "before_correct_accepted": 12,
+  "before_correct_regular_price_vnd": 12,
+  "before_correct_promotional_price_vnd": 12,
+  "before_correct_online_voucher_amount_vnd": 12,
+  "correct_regular_price_vnd": 65,
+  "correct_promotional_price_vnd": 65,
+  "correct_online_voucher_amount_vnd": 65,
+  "before_fn": 54,
+  "recoverable": 54,
+  "recovered": 53,
+  "after_fn": 1,
+  "before_tn": 34,
+  "after_tn": 34
+}

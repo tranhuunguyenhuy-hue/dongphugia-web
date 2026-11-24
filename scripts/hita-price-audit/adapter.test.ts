@@ -105,3 +105,22 @@ describe('INAX single price recovery', () => {
     expect(parsePdp(page.replace(offer, `[${offer},${offer}]`), code, hit, 'INAX').exception).toBe('MULTIPLE_EXACT_OFFERS')
   })
 })
+
+describe('regression against Hita product evidence', () => {
+  it('does not use a sibling Offer to price INAX P-CWS15VN-8-2', () => {
+    const code = 'P-CWS15VN-8-2'
+    const page = fixture({ displayed: code, regular: '', selling: '132.000đ', voucher: '' })
+      .replaceAll(sku, 'A-CWS15VN-8')
+      .concat('<table><tr><td id="brand-product">INAX</td></tr></table>')
+    const hit = { product_code: code, product_price: { sku: code, priceOld: '132000.00', priceNew: '132000.00' } }
+    expect(parsePdp(page, code, hit, 'INAX')).toMatchObject({ status: 'UNKNOWN', exception: 'EXACT_OFFER_MISSING', regular_price_vnd: null })
+  })
+
+  it('preserves the TOTO LT533R#XW promotion and independent online voucher from the #448 capture', () => {
+    const code = 'LT533R#XW'
+    const page = fixture({ displayed: code, regular: '2.572.000đ', selling: '2.109.040đ', offer: 2_109_040, voucher: '154.320đ' }).replaceAll(sku, code)
+    const hit = { product_code: code, product_price: { sku: code, priceOld: '2572000.00', priceNew: '2109040.00', cashback: 154_320 } }
+    expect(parsePdp(page, code, hit)).toMatchObject({ status: 'EXACT', regular_price_vnd: 2_572_000,
+      promotional_price_vnd: 2_109_040, online_voucher_amount_vnd: 154_320 })
+  })
+})
