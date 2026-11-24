@@ -307,6 +307,17 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
       } else setError(errorText(err, labels))
     } finally { setBusy(false) }
   }
+  // #470 2C: re-verifying sends the three prices explicitly (even when unchanged) so the server stamps PRICE_VERIFIED + a fresh check time.
+  const verifyPrice = async () => {
+    setError('')
+    const issue = validateCanonicalPricing(form)
+    if (issue) { setError(PRICE_ERROR_TEXT[issue]); return }
+    const body: Row = {}
+    for (const name of CANONICAL_PRICE_FIELDS) body[name] = form[name] === '' || form[name] === null || form[name] === undefined ? null : Number(form[name])
+    setBusy(true)
+    try { const row = await api.update(meta.key, id, version, body); setOriginal(row); setForm(row); toast.success('Đã xác minh giá.') }
+    catch (err) { setError(errorText(err, labels)) } finally { setBusy(false) }
+  }
   const title = creating ? `Thêm: ${meta.label}` : String(original?.name ?? original?.title ?? original?.label ?? `${meta.label} #${id}`)
   return (
     <form className="grid grid-cols-[minmax(0,1fr)] gap-4 pb-20" onSubmit={submit} noValidate={false}>
@@ -328,6 +339,14 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
                   {t.id === 'pricing' && usesCanonicalPrices && <p className="text-sm text-muted-foreground">
                     Để trống cả ba ô nếu sản phẩm cần báo giá. Voucher tính theo từng sản phẩm trong giỏ hàng.
                   </p>}
+                  {t.id === 'pricing' && usesCanonicalPrices && !creating && form.canonical_price_status === 'REVERIFY_REQUIRED' && (
+                    <div role="status" className="grid gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                      <p><strong>Giá đang ẩn trên website.</strong> Sản phẩm được bật lại khi giá đã kiểm
+                        {original?.canonical_price_checked_at ? ` lần cuối ${new Date(String(original.canonical_price_checked_at)).toLocaleDateString('vi-VN')}` : ' chưa rõ thời điểm'}
+                        {' '}(quá 7 ngày), nên khách thấy “Cần liên hệ xác nhận giá”. Các ô dưới là giá cũ được giữ lại để đối chiếu.</p>
+                      <p>Kiểm tra lại giá trên nguồn, sửa nếu cần rồi bấm “Xác minh giá” để hiển thị lại.</p>
+                      {meta.canUpdate && <div><Button type="button" size="sm" disabled={busy} onClick={verifyPrice}>Xác minh giá</Button></div>}
+                    </div>)}
                   {t.id === 'pricing' && !canResolvePricing && <p className="text-sm text-muted-foreground">
                     {form.category_id ? 'Chưa xác định được danh mục để hiển thị các trường giá.' : 'Chọn danh mục để hiển thị các trường giá.'}
                   </p>}

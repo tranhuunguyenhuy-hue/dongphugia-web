@@ -14,6 +14,11 @@ select pg_temp.rejects($$update dpg_app.products set canonical_price_status='PRI
 select pg_temp.rejects($$update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=100, online_voucher_amount_vnd=100 where sku='VS-OK'$$,'voucher >= regular');
 select pg_temp.rejects($$update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=0 where sku='VS-OK'$$,'regular 0');
 select pg_temp.rejects($$update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=10000000000000 where sku='VS-OK'$$,'regular too large');
+-- #470 2C: REVERIFY_REQUIRED keeps the historical prices (re-activated stale price), still obeys the price relations, and carries none when empty
+update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=100, promotional_price_vnd=90, online_voucher_amount_vnd=10 where sku='VS-OK';
+update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null where sku='VS-OK';
+select pg_temp.rejects($$update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=100, promotional_price_vnd=100 where sku='VS-OK'$$,'REVERIFY promo >= regular');
+select pg_temp.rejects($$update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', promotional_price_vnd=5 where sku='VS-OK'$$,'REVERIFY promo without regular');
 update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=100, promotional_price_vnd=90, online_voucher_amount_vnd=10 where sku='VS-OK';
 select pg_temp.rejects($$update dpg_app.products set canonical_price_status='CONTACT_VERIFIED' where sku='VS-OK'$$,'status change keeping prices');
 update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null where sku='VS-OK';

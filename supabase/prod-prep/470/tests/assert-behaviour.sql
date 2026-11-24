@@ -56,3 +56,10 @@ select pg_temp.assert((select list_price_snapshot=1500000 and sale_price_snapsho
 select pg_temp.assert((select list_price_snapshot=700000 and sale_price_snapshot=650000 from dpg_app.quote_items where product_id=8),'q8 other brand legacy snapshot');
 select pg_temp.assert((select list_price_snapshot is null and sale_price_snapshot is null and commerce_mode_snapshot='CONTACT_FOR_QUOTE' from dpg_app.quote_items where product_id=10),'q10 INAX unresolved: no legacy snapshot');
 select pg_temp.fails_with($$select public.runtime_quote_create(jsonb_build_object('name','T','phone','0900000001','products','[{"product_id":9}]'::jsonb),'key-q-000003',null)$$,'PRODUCT_UNAVAILABLE');
+-- i) 2C: a SKU re-activated with a stale price (REVERIFY_REQUIRED, historical price kept) is never priced by an order or quote
+reset role;
+update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=1500000, promotional_price_vnd=1400000, online_voucher_amount_vnd=50000 where sku='VS-INAX';
+set role authenticated;
+select pg_temp.fails_with($$select pg_temp.order_('[{"productId":7,"quantity":1}]','key-i-000001')$$,'PRODUCT_REQUIRES_QUOTE');
+select pg_temp.quote_('[{"product_id":7}]','key-q-000004');
+select pg_temp.assert((select list_price_snapshot is null and sale_price_snapshot is null and commerce_mode_snapshot='CONTACT_FOR_QUOTE' from dpg_app.quote_items where product_id=7 order by id desc limit 1),'q7 REVERIFY: historical price not snapshotted');

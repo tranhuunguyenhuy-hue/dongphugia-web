@@ -133,3 +133,27 @@ describe('Admin product pricing', () => {
     expect(screen.queryByLabelText(regularLabel)).not.toBeInTheDocument()
   })
 })
+
+describe('Admin product pricing — REVERIFY_REQUIRED (#470 2C)', () => {
+  const reverify = { ...sanitary, canonical_price_status: 'REVERIFY_REQUIRED', canonical_price_checked_at: '2026-10-01T00:00:00.000Z' }
+  it('tells the Admin why the price is hidden, keeps the historical values visible, and verifies by sending the three prices', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(reverify)
+    const request = mockPatch(Response.json({ data: { ...reverify, canonical_price_status: 'PRICE_VERIFIED' } }))
+    await openPricing()
+    expect(await screen.findByText(/Giá đang ẩn trên website/)).toBeInTheDocument()
+    expect(screen.getByText(/Cần liên hệ xác nhận giá/)).toBeInTheDocument()
+    expect(screen.getByLabelText(regularLabel)).toHaveValue(1_000_000)
+    fireEvent.click(screen.getByRole('button', { name: 'Xác minh giá' }))
+    await waitFor(() => expect(request).toHaveBeenCalledOnce())
+    const [url, init] = request.mock.calls[0]
+    expect(String(url)).toBe(productPath)
+    expect(JSON.parse(String(init?.body))).toMatchObject({ input: { regular_price_vnd: 1_000_000, promotional_price_vnd: 900_000, online_voucher_amount_vnd: 50_000 } })
+  })
+  it('shows no notice for a normally verified price', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...sanitary, canonical_price_status: 'PRICE_VERIFIED' })
+    await openPricing()
+    await screen.findByLabelText(regularLabel)
+    expect(screen.queryByText(/Giá đang ẩn trên website/)).not.toBeInTheDocument()
+  })
+})
+

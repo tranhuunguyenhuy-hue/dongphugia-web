@@ -787,21 +787,33 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(ok.status).toBe(200)
         const row = (await owner.query('select canonical_price_status, canonical_price_checked_at is not null as stamped, version from dpg_app.products where id=$1', [id])).rows[0]
         expect(row).toEqual({ canonical_price_status: 'PRICE_VERIFIED', stamped: true, version: 2 })
-        // reactivation of a SKU whose verified price is stale needs a fresh price in the same request (policy constant, Owner to confirm)
+        // #470 2C: re-activation is ALWAYS allowed. A verified price older than the threshold is kept (history) but stops being PRICE_VERIFIED in the SAME write:
+        // status REVERIFY_REQUIRED, prices untouched, canonical_price_checked_at NOT raised. Public/orders then treat it as unverified.
         await owner.query("update dpg_app.products set canonical_price_checked_at = now() - interval '30 days', image_main_url = $2 where id=$1", [id, `${MEDIA}/products/a.webp`])
-        expect(code(await patch({ is_active: true }, 2))).toBe('PRICE_REVERIFY_REQUIRED')
-        await owner.query('update dpg_app.products set canonical_price_checked_at = now() where id=$1', [id])
-        expect((await patch({ is_active: true }, 2)).status).toBe(200)
-        expect((await patch({ is_active: false }, 3)).status).toBe(200)
+        const reactivated = await patch({ is_active: true }, 2)
+        expect(reactivated.status).toBe(200)
+        const stale = (await owner.query("select is_active, canonical_price_status, regular_price_vnd, promotional_price_vnd, extract(epoch from now() - canonical_price_checked_at) / 86400 as age_days, version from dpg_app.products where id=$1", [id])).rows[0]
+        expect({ is_active: stale.is_active, status: stale.canonical_price_status, regular: stale.regular_price_vnd, promo: stale.promotional_price_vnd, version: stale.version }).toEqual({ is_active: true, status: 'REVERIFY_REQUIRED', regular: '1000000', promo: '900000', version: 3 })
+        expect(Number(stale.age_days)).toBeGreaterThan(29)                                   // checked-at never raised
+        // the Admin sees the reason + the historical price in the same row, and verifies again by saving the prices
+        const row3 = (await call('GET', `/r/products/${id}`, undefined, { token: t })).json.data
+        expect(row3).toMatchObject({ canonical_price_status: 'REVERIFY_REQUIRED', regular_price_vnd: '1000000' })
+        expect((await patch({ regular_price_vnd: 1000000, promotional_price_vnd: 900000 }, 3)).status).toBe(200)
+        expect((await owner.query('select canonical_price_status, extract(epoch from now() - canonical_price_checked_at) < 60 as fresh from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: 'PRICE_VERIFIED', fresh: true })
+        expect((await patch({ is_active: false }, 4)).status).toBe(200)
+        // a fresh verified price re-activates untouched (no status change)
+        expect((await patch({ is_active: true }, 5)).status).toBe(200)
+        expect((await owner.query('select canonical_price_status from dpg_app.products where id=$1', [id])).rows[0].canonical_price_status).toBe('PRICE_VERIFIED')
+        expect((await patch({ is_active: false }, 6)).status).toBe(200)
         // clearing every canonical price hides the price again (status NULL), the CHECK never fires
-        expect((await patch({ regular_price_vnd: null, promotional_price_vnd: null }, 4)).status).toBe(200)
-        expect((await owner.query('select canonical_price_status, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, version: 5 })
+        expect((await patch({ regular_price_vnd: null, promotional_price_vnd: null }, 7)).status).toBe(200)
+        expect((await owner.query('select canonical_price_status, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, version: 8 })
         // another sanitary brand cannot receive canonical prices (legacy price management untouched)
         await owner.query('update dpg_app.products set brand_id=$2 where id=$1', [id, await brandId('american-standard')])
-        expect(code(await patch({ regular_price_vnd: 1000000 }, 5))).toBe('PRICE_SCOPE_INVALID')
-        expect((await patch({ price: 1000, stock_status: 'in_stock' }, 5)).status).toBe(200)
+        expect(code(await patch({ regular_price_vnd: 1000000 }, 8))).toBe('PRICE_SCOPE_INVALID')
+        expect((await patch({ price: 1000, stock_status: 'in_stock' }, 8)).status).toBe(200)
         const audit = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows.map(r => r.action)
-        expect(audit).toEqual(['products.create', 'products.update', 'products.update', 'products.update', 'products.update', 'products.update'])
+        expect(audit).toEqual(['products.create', ...Array(8).fill('products.update')])
       } finally {
         await owner.query("update dpg_app.categories set slug='cat' where id=1; delete from dpg_app.products where sku='C470-1'; delete from dpg_app.brands where slug in ('toto','american-standard')")
         await owner.query(`revoke select, insert, update (canonical_price_status, canonical_price_checked_at) on dpg_app.products from ${apiRole}`)

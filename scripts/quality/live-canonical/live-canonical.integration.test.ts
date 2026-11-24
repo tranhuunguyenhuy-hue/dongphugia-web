@@ -231,6 +231,30 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         await sql("delete from dpg_app.products where sku in ('T-INACTIVE','I-INACTIVE'); update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, canonical_price_checked_at=null where sku='I-INAX'")
     })
 
+    it('PHASE 4d (2C): REVERIFY_REQUIRED — historical price kept in the row, but listing/search/PDP/sort/offer never show it; Admin verification restores it', async () => {
+        await sql(`update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=6100000, canonical_price_checked_at=now() - interval '30 days' where sku='T-CONTACT';
+                   update dpg_app.products set canonical_price_status='REVERIFY_REQUIRED', regular_price_vnd=6200000, promotional_price_vnd=6000000, canonical_price_checked_at=now() - interval '30 days' where sku='I-INAX'`)
+        for (const brands of ['toto', 'toto,inax']) {
+            vi.unstubAllEnvs(); production(); vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', brands)
+            const m = await load()
+            const list = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, {})).products
+            const sorted = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'desc' })).products
+            const pdp = await m.getLiveProductByCategory('thiet-bi-ve-sinh', 't-contact')
+            const search = (await m.searchLiveProducts('T-CONTACT', 1, 24)).results
+            const hidden = [list.find(p => p.sku === 'T-CONTACT'), pdp, search[0]]
+            for (const p of hidden) expect(p).toMatchObject({ price: null, price_display: 'Cần liên hệ xác nhận giá' })
+            expect(JSON.stringify([list, sorted, pdp, search])).not.toMatch(/6100000|6200000|6000000/)
+            expect(sorted.slice(0, 2).map(p => p.sku)).toEqual(['T-PROMO', 'T-VERIFIED'])           // REVERIFY rows are not in the verified-price sort
+        }
+        // the Admin verifies again (price saved => PRICE_VERIFIED + fresh checked-at): the price is shown
+        await db.query('begin'); await db.query(`set local role ${ADM}`)
+        await db.query("update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=6100000, canonical_price_checked_at=now(), version=version+1 where sku='T-CONTACT'")
+        await db.query('commit')
+        vi.unstubAllEnvs(); production(); const m = await load()
+        expect((await m.getLiveProductByCategory('thiet-bi-ve-sinh', 't-contact'))?.price).toBe(6100000)
+        await sql("update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, canonical_price_checked_at=null where sku in ('T-CONTACT','I-INAX')")
+    })
+
     it('PHASE 5 (rollback): 002 rollback -> flag ON stays up (fail-safe); flag OFF unaffected; 001 rollback restores the old schema', async () => {
         await sql(`update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null, canonical_price_checked_at=null`)
         await sql(await sqlOf(prod('002_canonical_price_grants_rollback.sql')))

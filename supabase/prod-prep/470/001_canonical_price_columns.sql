@@ -64,9 +64,11 @@ alter table dpg_app.products
   drop constraint if exists products_canonical_price_check,
   add constraint products_canonical_price_check check (
     (canonical_price_status is null or canonical_price_status in
-      ('PRICE_VERIFIED','CONTACT_VERIFIED','UNRESOLVED','NOT_FOUND','DISCONTINUED'))
-    -- prices exist only for a verified price; every other state (and NULL = never crawled) carries no price
-    and (coalesce(canonical_price_status, '') = 'PRICE_VERIFIED'
+      ('PRICE_VERIFIED','CONTACT_VERIFIED','UNRESOLVED','NOT_FOUND','DISCONTINUED','REVERIFY_REQUIRED'))
+    -- prices exist only for a verified price, or for REVERIFY_REQUIRED (Admin re-activated a SKU whose verified price is older than 7 days:
+    -- the historical price and its checked-at are KEPT but the status is no longer PRICE_VERIFIED, so Public/orders never use it until it is
+    -- verified again). Every other state (and NULL = never crawled) carries no price.
+    and (coalesce(canonical_price_status, '') in ('PRICE_VERIFIED','REVERIFY_REQUIRED')
          or (regular_price_vnd is null and promotional_price_vnd is null and online_voucher_amount_vnd is null))
     and (regular_price_vnd is null or regular_price_vnd between 1 and 9999999999999)
     and (promotional_price_vnd is null or (

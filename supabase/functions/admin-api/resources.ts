@@ -210,23 +210,31 @@ const productHook: WriteHook = async ({ tx, mode, existing, input }) => {
     const priceInRequest = CANONICAL_PRICE_FIELDS.some((field) => field in input)
     // Canonical prices are only for approved brands: any other sanitary brand keeps the legacy price management untouched.
     if (hasPrice && priceInRequest && !(await inCanonicalAdminScope(tx, final))) throw new ApiError(400, 'PRICE_SCOPE_INVALID', ['brand_id'])
-    // Re-activating a SKU whose verified price is stale (or has no check time) needs a fresh price in the same request.
+    // #470 2C: re-activating a SKU is ALWAYS allowed (Admin decision; nothing is activated automatically). If its verified canonical price is older than
+    // the threshold (or has no check time) and the request brings no new price, the SKU is activated with status REVERIFY_REQUIRED in the SAME
+    // transaction: Public/PDP/listing/search/JSON-LD/sort/orders see a non-verified status ("Cần liên hệ xác nhận giá"), while the historical prices and
+    // canonical_price_checked_at stay untouched (never raised, never lost) until an Admin verifies/edits the price. No expiry is applied to rows that stay active.
     const activating = input.is_active === true && existing?.is_active !== true
+    let staleOnActivation = false
     if (activating && !priceInRequest && final.canonical_price_status === 'PRICE_VERIFIED' && await inCanonicalAdminScope(tx, final)) {
       const checked = Date.parse(String(final.canonical_price_checked_at ?? ''))
-      if (!Number.isFinite(checked) || Date.now() - checked > CANONICAL_REACTIVATION_MAX_AGE_MS) throw new ApiError(400, 'PRICE_REVERIFY_REQUIRED', ['regular_price_vnd'])
+      staleOnActivation = !Number.isFinite(checked) || Date.now() - checked > CANONICAL_REACTIVATION_MAX_AGE_MS
     }
     const requested = input.canonical_price_status as string | null | undefined
     if (hasPrice && requested !== undefined && requested !== null && requested !== 'PRICE_VERIFIED') throw new ApiError(400, 'PRICE_STATUS_INVALID', ['canonical_price_status'])
     if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) {
-      const next = hasPrice ? 'PRICE_VERIFIED' : (final.canonical_price_status === 'PRICE_VERIFIED' ? null : (final.canonical_price_status ?? null))
+      const next = hasPrice ? 'PRICE_VERIFIED' : (['PRICE_VERIFIED', 'REVERIFY_REQUIRED'].includes(String(final.canonical_price_status)) ? null : (final.canonical_price_status ?? null))
       statusSet = { canonical_price_status: next, canonical_price_checked_at: RAW_NOW }
+    } else if (staleOnActivation) {
+      statusSet = { canonical_price_status: 'REVERIFY_REQUIRED' }   // prices and canonical_price_checked_at deliberately NOT written
     }
   }
   const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
   if (sale !== null && (list === null || sale >= list)) throw new ApiError(400, 'SALE_PRICE_INVALID', ['sale_price', 'list_price'])
   if (final.is_active === true && (mode === 'create' || PRICE_FIELDS.some((field) => field in input))) {
-    if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
+    // #470 2C (Owner): a TOTO/INAX sanitary SKU can be activated without a price — it then shows "Cần liên hệ xác nhận giá"; no price is demanded.
+    const canonicalScope = externalColumns.has('canonical_price_status') && await inCanonicalAdminScope(tx, final)
+    if (!canonicalScope && final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
     if (typeof final.image_main_url !== 'string' || final.image_main_url.trim() === '') throw new ApiError(400, 'IMAGE_REQUIRED', ['image_main_url'])
   }
   return statusSet ? { set: statusSet } : undefined
@@ -528,7 +536,7 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'promotional_price_vnd', label: 'Giá khuyến mãi (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'online_voucher_amount_vnd', label: 'Voucher online (VNĐ/sản phẩm)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'canonical_price_checked_at', label: 'Giá kiểm lúc', kind: 'datetime', nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
-      { name: 'canonical_price_status', label: 'Trạng thái giá (Hita)', kind: 'enum', options: ['PRICE_VERIFIED', 'CONTACT_VERIFIED', 'UNRESOLVED', 'NOT_FOUND', 'DISCONTINUED'], nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'canonical_price_status', label: 'Trạng thái giá (Hita)', kind: 'enum', options: ['PRICE_VERIFIED', 'CONTACT_VERIFIED', 'UNRESOLVED', 'NOT_FOUND', 'DISCONTINUED', 'REVERIFY_REQUIRED'], nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
       { name: 'stock_status', label: 'Tồn kho', kind: 'enum', options: ['in_stock', 'out_of_stock', 'discontinued', 'pre_order', 'contact'], initial: 'in_stock' },
       { name: 'warranty_months', label: 'Bảo hành (tháng)', kind: 'int', min: 1, max: 600, nullable: true },
       { name: 'image_main_url', label: 'Ảnh chính', kind: 'media', max: 1000, upload: { folder: 'products', profile: 'product' } },
