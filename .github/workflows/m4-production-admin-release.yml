@@ -39,6 +39,12 @@ on:
         type: choice
         options: [toto, inax, 'toto,inax']
         default: toto
+      commerce:
+        description: '#470 commerce v1 (guest cart, orders, quotes). off = closed (404). on ONLY with the Owner release GO: needs vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID (intake login role, caching disabled) and the dpg_commerce schema applied.'
+        required: true
+        type: choice
+        options: [off, on]
+        default: 'off'
 
 permissions:
   contents: read
@@ -99,6 +105,7 @@ jobs:
         shell: bash
         env:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
+          V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
           test "$V1_PUBLIC_HYPERDRIVE_ID" = '905f5791e9d84cf285f7533b92d03f49'
@@ -106,6 +113,8 @@ jobs:
           node scripts/app-foundation/configure-v1-m1-worker-source.mjs apps/public/wrangler.jsonc "$PUBLIC_CATALOGUE_SOURCE" "$V1_PUBLIC_HYPERDRIVE_ID"
           # #470: the pricing flag is part of the reviewed artifact (default off); it is never edited on the Worker directly.
           node scripts/m4/configure-canonical-pricing.mjs apps/public/wrangler.jsonc '${{ inputs.canonical_pricing }}' '${{ inputs.canonical_brands }}'
+          # #470 commerce v1: flag + separate intake Hyperdrive binding are part of the reviewed artifact (default off).
+          node scripts/m4/configure-commerce.mjs apps/public/wrangler.jsonc '${{ inputs.commerce }}' "$V1_PUBLIC_COMMERCE_HYPERDRIVE_ID" "$V1_PUBLIC_HYPERDRIVE_ID"
           npm run build:public-worker
           npm run app:assemble-public-worker -- --repository-root . --server-dir apps/public/dist/server --assets-dir apps/public/dist/client --output "$RUNNER_TEMP/v1-release" --source-sha "$GITHUB_SHA"
       - name: Add the Admin (SPA, dispatch, upload, Images binding) to the release
@@ -118,6 +127,8 @@ jobs:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
           CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
           CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
+          COMMERCE: ${{ inputs.commerce }}
+          V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
           node - "$RUNNER_TEMP/v1-release/wrangler.json" <<'NODE'
@@ -134,7 +145,11 @@ jobs:
           if (v.ADMIN_API_URL !== 'https://bonxyxluzlxfkdetryoo.supabase.co/functions/v1/admin-api') fail('function-url');
           if (v.BUNNY_CDN_HOSTNAME !== 'dpg-products.b-cdn.net') fail('cdn');
           if (Object.keys(v).some((n) => /(SECRET|PASSWORD|TOKEN|PRIVATE_KEY|CREDENTIAL|DATABASE_URL|API_KEY|_KEY$)/i.test(n))) fail('secret-like-var');
-          if (x.hyperdrive?.length !== 1 || x.hyperdrive[0].binding !== 'PUBLIC_DB' || x.hyperdrive[0].id !== process.env.V1_PUBLIC_HYPERDRIVE_ID) fail('hyperdrive');
+          const commerce = process.env.COMMERCE, hd = x.hyperdrive ?? [];
+          const publicDb = hd.filter((h) => h.binding === 'PUBLIC_DB'), intake = hd.filter((h) => h.binding === 'ORDER_INTAKE_DB');
+          if (publicDb.length !== 1 || publicDb[0].id !== process.env.V1_PUBLIC_HYPERDRIVE_ID) fail('hyperdrive');
+          if (commerce === 'off' ? (v.PUBLIC_COMMERCE !== undefined || intake.length !== 0 || hd.length !== 1)
+            : (commerce !== 'on' || v.PUBLIC_COMMERCE !== 'on' || hd.length !== 2 || intake.length !== 1 || intake[0].id !== process.env.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID || intake[0].id === publicDb[0].id)) fail('commerce');
           if (x.images?.binding !== 'IMAGES') fail('images');
           if (x.preview_urls !== true) fail('preview_urls');
           console.log('M4_WORKER_IDENTITY_PASS');
@@ -269,6 +284,8 @@ jobs:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
           CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
           CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
+          COMMERCE: ${{ inputs.commerce }}
+          V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
           wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
@@ -280,7 +297,11 @@ jobs:
           const raw = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
           const b = (raw.version ?? raw.result ?? raw).resources?.bindings ?? [];
           const has = (name, type) => b.some((x) => x.name === name && (!type || x.type === type));
-          const ok = b.filter((x) => x.name === 'PUBLIC_DB' && x.type === 'hyperdrive').length === 1
+          const intake = b.filter((x) => x.name === 'ORDER_INTAKE_DB' && x.type === 'hyperdrive');
+          const commerceOk = process.env.COMMERCE === 'on'
+            ? intake.length === 1 && (intake[0].id ?? intake[0].hyperdrive_id) === process.env.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID && b.some((x) => x.name === 'PUBLIC_COMMERCE' && x.text === 'on')
+            : intake.length === 0 && !b.some((x) => x.name === 'PUBLIC_COMMERCE');
+          const ok = commerceOk && b.filter((x) => x.name === 'PUBLIC_DB' && x.type === 'hyperdrive').length === 1
             && (b.find((x) => x.name === 'PUBLIC_DB').id ?? b.find((x) => x.name === 'PUBLIC_DB').hyperdrive_id) === process.argv[3]
             && has('IMAGES') && has('ADMIN_API_HMAC_SECRET', 'secret_text') && has('ASSETS')
             && b.some((x) => x.name === 'APP_ENV' && x.text === 'production') && b.some((x) => x.name === 'ADMIN_API_URL')
@@ -300,6 +321,7 @@ jobs:
             echo "### M4 Production Admin release (${{ inputs.operation }})"
             echo "- Source SHA: $GITHUB_SHA"
             echo "- Canonical pricing (#470): ${{ inputs.canonical_pricing }} brands=${{ inputs.canonical_brands }}"
+            echo "- Commerce v1 (#470): ${{ inputs.commerce }}"
             echo "- Packaged verification: ${{ steps.packaged.outcome }}"
             echo "- Media target verified (unique test object, removed): ${{ steps.media.outputs.verified }}"
             echo "- Publish: ${{ steps.deploy.outcome }}"

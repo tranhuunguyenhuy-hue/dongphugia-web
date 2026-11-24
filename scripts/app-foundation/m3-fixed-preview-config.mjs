@@ -88,6 +88,8 @@ export function createM3FixedPreviewConfig({
     ADMIN_TEST_DB_ROLE: 'dpg_admin_m3_test',
     PREVIEW_MEDIA_TARGET_ISOLATED: 'true',
     PREVIEW_TEST_DATABASE_ISOLATED: 'true',
+    // #470 commerce v1: the TEST Preview takes guest carts/orders/quotes only when the dedicated intake binding is configured.
+    ...(orderIntakeHyperdriveId !== undefined ? { PUBLIC_COMMERCE: 'on' } : {}),
     ADMIN_API_URL: APPROVED_ADMIN_API_URL,
     BUNNY_STORAGE_ZONE_NAME: mediaTarget.storageZoneName,
     BUNNY_STORAGE_HOSTNAME: storageHostname,

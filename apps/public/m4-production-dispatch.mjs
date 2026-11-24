@@ -13,7 +13,9 @@ const PRODUCTION_FUNCTION_URL = /^https:\/\/bonxyxluzlxfkdetryoo\.supabase\.co\/
 const PRODUCTION_MEDIA_CDN_HOST = 'dpg-products.b-cdn.net'
 const ADMIN_BASE_PATH = '/admin'
 const PRODUCTION_SESSION_COOKIE = 'dpg-admin-session'
-const PUBLIC_ENV_KEYS = ['APP_ENV', 'APP_BUILD_TARGET', 'APP_ORIGIN', 'PUBLIC_CATALOGUE_SOURCE', 'PUBLIC_DB', 'PUBLIC_DB_DIAGNOSTICS', 'ASSETS']
+const PUBLIC_ENV_KEYS = ['APP_ENV', 'APP_BUILD_TARGET', 'APP_ORIGIN', 'PUBLIC_CATALOGUE_SOURCE', 'PUBLIC_DB', 'PUBLIC_DB_DIAGNOSTICS', 'ASSETS',
+  // #470: reviewed release flags/binding (written only by the protected lane). The Public Worker keys its HTML cache and the commerce API on them.
+  'PUBLIC_CANONICAL_PRICING', 'PUBLIC_CANONICAL_PRICE_BRANDS', 'PUBLIC_COMMERCE', 'ORDER_INTAKE_DB']
 
 const isLegacyAdminUiPath = (pathname) => pathname === ADMIN_BASE_PATH || pathname.startsWith(`${ADMIN_BASE_PATH}/`)
 
