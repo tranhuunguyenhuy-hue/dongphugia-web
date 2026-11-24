@@ -47,13 +47,21 @@ function integerVnd(value: unknown) {
 }
 
 type Offer = { price?: unknown; priceCurrency?: string; availability?: string; priceValidUntil?: string }
-type Product = { '@type'?: string; sku?: string; offers?: Offer; '@graph'?: Product[] }
+type Product = { '@type'?: string; sku?: string; brand?: string | { name?: string }; offers?: Offer | Offer[]; '@graph'?: Product[] }
 
-export function parsePdp(html: string, sku: string, hit?: Hit) {
+export const parserVersion = 'hita-pdp-477.1'
+
+const isMissingPrice = (value: unknown) => value === undefined || value === null ||
+  typeof value === 'string' && /^(?:0+(?:\.00)?)?$/.test(value.trim()) || value === 0
+
+export function parsePdp(html: string, sku: string, hit?: Hit, expectedBrand?: string) {
   const $ = load(html)
   const section = $('#main-price-product')
+  const codes = $('.product-detail .product-column-right .product-code-location')
+  const brandLabels = $('#brand-product')
   const raw = {
-    sku: $('.product-detail .product-column-right .product-code-location').text().trim(),
+    sku: codes.text().trim(),
+    brand: brandLabels.text().trim(),
     regular: section.find('.product-old-price-land').text().trim(),
     regular_label: section.find('.label-price-old').text().trim(),
     selling: section.find('.product-new-price-land').text().trim(),
@@ -70,9 +78,10 @@ export function parsePdp(html: string, sku: string, hit?: Hit) {
     regular_price_vnd: number | null; promotional_price_vnd: number | null; online_voucher_amount_vnd: number | null
   } = empty) => ({ ...prices, status, exception, hita_exact_sku: skuKey(raw.sku) === skuKey(sku) ? raw.sku : null, evidence: raw })
 
-  if (skuKey(raw.sku) !== skuKey(sku)) return result(raw.sku ? 'AMBIGUOUS' : 'UNKNOWN', 'PDP_SKU_MISMATCH')
+  if (codes.length !== 1 || skuKey(raw.sku) !== skuKey(sku)) return result(raw.sku ? 'AMBIGUOUS' : 'UNKNOWN', 'PDP_SKU_MISMATCH')
   if (raw.autocomplete?.sku && skuKey(raw.autocomplete.sku) !== skuKey(sku)) return result('AMBIGUOUS', 'SEARCH_PRICE_SKU_MISMATCH')
   const detail = $('.product-detail .product-column-right').first()
+  if (expectedBrand && (brandLabels.length !== 1 || skuKey(raw.brand) !== skuKey(expectedBrand))) return result('AMBIGUOUS', 'PDP_BRAND_NOT_PROVEN')
   if (/ngừng kinh doanh/i.test(detail.text()) && hit?.product_status === 0) return result('DISCONTINUED', 'SOURCE_DISCONTINUED')
   if (/giá liên hệ|liên hệ báo giá/i.test(raw.selling)) return result('CONTACT', 'SOURCE_CONTACT')
 
@@ -85,31 +94,45 @@ export function parsePdp(html: string, sku: string, hit?: Hit) {
       // An invalid unrelated JSON-LD block must not replace product evidence.
     }
   })
-  const offers = products.filter(p => p?.['@type'] === 'Product' && skuKey(p.sku ?? '') === skuKey(sku))
-    .map(p => p.offers).filter((offer): offer is Offer => Boolean(offer))
-  if (offers.length === 1) {
-    const { price, priceCurrency, availability, priceValidUntil } = offers[0]
+  const exactProducts = products.filter(p => p?.['@type'] === 'Product' && typeof p.sku === 'string' && skuKey(p.sku) === skuKey(sku))
+  if (expectedBrand && exactProducts.some(p => {
+    const name = typeof p.brand === 'string' ? p.brand : p.brand?.name
+    return typeof name === 'string' && skuKey(name) !== skuKey(expectedBrand)
+  })) return result('AMBIGUOUS', 'OFFER_BRAND_CONFLICT')
+  const offers = exactProducts.flatMap(p => p.offers ?? [])
+  if (offers.length > 1) return result('UNKNOWN', 'MULTIPLE_EXACT_OFFERS')
+  const offer = offers[0]
+  if (offer && typeof offer === 'object') {
+    const { price, priceCurrency, availability, priceValidUntil } = offer
     raw.offer = {
       price: typeof price === 'number' || typeof price === 'string' ? price : null,
       priceCurrency, availability, priceValidUntil,
     }
   }
+
+  if (section.length !== 1 || section.find('.product-new-price-land').length !== 1 ||
+      section.find('.product-old-price-land').length > 1) return result('UNKNOWN', 'PDP_PRICE_MARKUP_AMBIGUOUS')
   const selling = integerVnd(raw.selling)
   const regular = integerVnd(raw.regular)
-  if (section.length !== 1 || section.find('.product-new-price-land').length !== 1 ||
-      section.find('.product-old-price-land').length > 1 ||
-      !selling || raw.offer?.priceCurrency !== 'VND' || integerVnd(raw.offer.price) !== selling ||
-      (raw.autocomplete && integerVnd(raw.autocomplete.priceNew) !== selling) ||
-      (raw.autocomplete && integerVnd(raw.autocomplete.priceOld) !== regular) ||
-      (raw.regular && (!regular || !/^giá gốc\s*:?$/i.test(raw.regular_label))) ||
-      (regular !== null && regular < selling)) {
-    return result('UNKNOWN', 'PRICE_EVIDENCE_MISSING_OR_CONFLICTING')
+  if (!selling) return result('UNKNOWN', 'PDP_SELLING_PRICE_INVALID')
+  if (raw.regular && (!regular || !/^giá gốc\s*:?$/i.test(raw.regular_label))) return result('UNKNOWN', 'PDP_REGULAR_PRICE_INVALID')
+  if (regular !== null && regular < selling) return result('UNKNOWN', 'PDP_PRICE_ORDER_CONFLICT')
+  if (!raw.offer) return result('UNKNOWN', 'EXACT_OFFER_MISSING')
+  if (raw.offer.priceCurrency !== 'VND' || integerVnd(raw.offer.price) !== selling) return result('UNKNOWN', 'PDP_OFFER_PRICE_CONFLICT')
+
+  // When there is one visible price, Hita can put that amount in both search fields.
+  // An empty comparison on the PDP does not contradict a duplicate of the selling price.
+  const searchSelling = raw.autocomplete?.priceNew
+  const searchRegular = raw.autocomplete?.priceOld
+  if ((!isMissingPrice(searchSelling) && integerVnd(searchSelling) !== selling) ||
+      (!isMissingPrice(searchRegular) && integerVnd(searchRegular) !== (regular ?? selling))) {
+    return result('UNKNOWN', 'SEARCH_PRICE_CONFLICT')
   }
 
   const voucher = integerVnd(raw.voucher)
   const onlineVoucher = voucher && voucher < selling && section.find('.cashback-box .gift-cashback').length === 1 &&
     /^giảm thêm\s*:?$/i.test(raw.voucher_label) && /(?:đặt|mua)\s+online/i.test(raw.voucher_condition) &&
-    (!raw.autocomplete || integerVnd(raw.autocomplete.cashback) === voucher) ? voucher : null
+    (raw.autocomplete?.cashback == null || integerVnd(raw.autocomplete?.cashback) === voucher) ? voucher : null
   return result('EXACT', !onlineVoucher && (raw.voucher || raw.autocomplete?.cashback) ? 'ONLINE_VOUCHER_UNVERIFIED' : null, {
     regular_price_vnd: regular ?? selling,
     promotional_price_vnd: regular && regular > selling ? selling : null,

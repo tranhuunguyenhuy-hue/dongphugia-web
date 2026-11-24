@@ -1,0 +1,25 @@
+{
+  "file": "sanitary-merged.csv",
+  "mode": "import-review",
+  "sha256": "e425c48958e8119e585fd257648de7adf8a2f04c1d1f9cf3d6c6f7e798009acc",
+  "gate_run_at_utc": "2026-11-24T05:48:43.712Z",
+  "max_age_hours": 24,
+  "inventory_rows": 2090,
+  "rows": 2090,
+  "file_issues": [],
+  "by_class": {
+    "AMBIGUOUS_UNVERIFIED": 12,
+    "CONTACT_VERIFIED": 9,
+    "DISCONTINUED_REVIEW": 8,
+    "NOT_FOUND_CANDIDATE_DELETE": 2,
+    "PRICE_VERIFIED": 313,
+    "UNRESOLVED": 1746
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 2,
+  "price_verified_with_warnings": 0,
+  "fail_by_code": {},
+  "warn_by_code": {
+    "DEEP_DISCOUNT_REVIEW": 2
+  }
+}

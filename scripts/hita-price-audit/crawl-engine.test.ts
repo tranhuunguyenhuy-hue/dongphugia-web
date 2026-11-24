@@ -91,3 +91,26 @@ describe('#448 robots gate', () => {
     expect(await checkRobots(async () => { throw new Blocked('HTTP_403_OR_CHALLENGE') })).toBe('HTTP_403_OR_CHALLENGE')
   })
 })
+
+describe('#477 recovery', () => {
+  it('reuses a verified single-price PDP in one request and ignores a previous parser checkpoint', async () => {
+    const onePrice = pdp.replace('1.000.000đ', '').replace('</script>', '</script><table><tr><td id="brand-product">INAX</td></tr></table>')
+    const row = { id: 11, sku, is_active: true, brand: 'INAX', pdp_url: 'https://hita.com.vn/chau-rua-123.html' }
+    const fetchText = vi.fn(async () => onePrice)
+    const first = await runBatch({ rows: [row], fetchText, now: () => T0 })
+    expect(first.results[0]).toMatchObject({ status: 'EXACT', regular_price_vnd: 900_000, promotional_price_vnd: null })
+    expect(fetchText).toHaveBeenCalledTimes(1)
+    const previous = new Map([[row.id, { ...first.results[0], parser_version: 'old' }]])
+    expect((await runBatch({ rows: [row], fetchText, previous, now: () => T0 })).crawled).toBe(1)
+    expect((await runBatch({ rows: [row], fetchText, previous: new Map([[row.id, first.results[0]]]), now: () => T0 })).reused).toBe(1)
+    expect(fetchText).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops at the request budget before making an additional request', async () => {
+    const fetchImpl = vi.fn(async () => new Response('User-agent: *', { headers: { 'content-type': 'text/plain' } }))
+    const fetchText = politeFetch({ requestBudget: 1, fetchImpl: fetchImpl as unknown as typeof fetch })
+    expect(await checkRobots(fetchText)).toBeNull()
+    await expect(fetchText(new URL('https://hita.com.vn/robots.txt'), 'text/plain')).rejects.toThrow('REQUEST_BUDGET_REACHED')
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+})

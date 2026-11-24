@@ -1,5 +1,5 @@
 import { setTimeout as sleepFor } from 'node:timers/promises'
-import { findProduct, parsePdp, pdpUrl, searchUrl } from './adapter.mts'
+import { findProduct, parserVersion, parsePdp, pdpUrl, searchUrl } from './adapter.mts'
 import type { InventoryRow } from './batch-plan.mts'
 
 // #448 batch crawl engine. Network access is injected (`fetchText`) so checkpoint/resume/stop rules are testable offline.
@@ -13,17 +13,43 @@ export type CrawlResult = {
   status: string; exception: string | null; source_url: string; retrieved_at_utc: string | null
   regular_price_vnd: number | null; promotional_price_vnd: number | null; online_voucher_amount_vnd: number | null
   hita_exact_sku: string | null; online_voucher_condition: string | null; search_candidates: string[]
-  evidence: unknown
+  evidence: unknown; parser_version?: string; expected_brand?: string
 }
 export const TERMINAL = new Set(['EXACT', 'CONTACT', 'DISCONTINUED', 'NOT_FOUND', 'AMBIGUOUS'])
 
 export async function crawlOne(row: InventoryRow, fetchText: FetchText, now: () => Date = () => new Date()): Promise<CrawlResult> {
-  const base = { dpg_id: row.id, dpg_sku: row.sku, category: 'thiet-bi-ve-sinh' as const, is_active: row.is_active }
+  const base = { dpg_id: row.id, dpg_sku: row.sku, category: 'thiet-bi-ve-sinh' as const, is_active: row.is_active, parser_version: parserVersion, expected_brand: row.brand }
   const empty = { regular_price_vnd: null, promotional_price_vnd: null, online_voucher_amount_vnd: null, hita_exact_sku: null, evidence: null as unknown }
   let source = searchUrl(row.sku).href, candidates: string[] = [], touched = false
+  let preferredPage: { url: string; html: string } | undefined
   try {
     touched = true
-    const found = findProduct(JSON.parse(await fetchText(searchUrl(row.sku), 'application/json')), row.sku)
+    if (row.pdp_url && row.brand) {
+      try {
+        const url = pdpUrl(row.pdp_url)
+        preferredPage = { url: url.href, html: await fetchText(url, 'text/html') }
+        const parsed = parsePdp(preferredPage.html, row.sku, undefined, row.brand)
+        // Only reuse a known PDP for a clear single-price result, independently corroborated by its exact offer.
+        // Search still corroborates promotions, stock outcomes and anything unresolved.
+        if (parsed.status === 'EXACT' && parsed.promotional_price_vnd === null &&
+            parsed.online_voucher_amount_vnd === null && !parsed.exception) {
+          return { ...base, ...parsed, source_url: url.href, retrieved_at_utc: now().toISOString(),
+            online_voucher_condition: null, search_candidates: [] }
+        }
+      } catch (error) {
+        if (error instanceof Blocked) throw error
+      }
+    }
+    const discover = async (query: string) => findProduct(JSON.parse(await fetchText(searchUrl(query), 'application/json')), row.sku)
+    let found = await discover(row.sku)
+    if (row.brand && found.hits.length === 0) {
+      // Adjust presentation only for discovery. Both the search result and the PDP must still match the original SKU.
+      const alternate = row.sku.replace(/\s*([/+])\s*/g, ' $1 ').replace(/\s+/g, ' ').trim()
+      if (alternate !== row.sku) {
+        const fallback = await discover(alternate)
+        found = { hits: fallback.hits, candidates: [...new Set([...found.candidates, ...fallback.candidates])] }
+      }
+    }
     candidates = found.candidates
     const hit = found.hits[0]
     if (found.hits.length > 1) return { ...base, ...empty, status: 'AMBIGUOUS', exception: 'DUPLICATE_EXACT_SEARCH_HITS', source_url: source, retrieved_at_utc: now().toISOString(), online_voucher_condition: null, search_candidates: candidates }
@@ -31,7 +57,8 @@ export async function crawlOne(row: InventoryRow, fetchText: FetchText, now: () 
     if (!hit.product_url) throw new Error('MISSING_PDP_URL')
     const url = pdpUrl(hit.product_url)
     source = url.href
-    const parsed = parsePdp(await fetchText(url, 'text/html'), row.sku, hit)
+    const html = preferredPage?.url === url.href ? preferredPage.html : await fetchText(url, 'text/html')
+    const parsed = parsePdp(html, row.sku, hit, row.brand)
     return { ...base, ...parsed, source_url: source, retrieved_at_utc: now().toISOString(), online_voucher_condition: parsed.evidence?.voucher_condition || null, search_candidates: candidates }
   } catch (error) {
     if (error instanceof Blocked) throw error
@@ -67,7 +94,8 @@ export async function runBatch(options: BatchOptions) {
   let crawled = 0, reused = 0, haltReason: string | null = null
   for (const row of rows) {
     const old = previous.get(row.id)
-    if (old && old.dpg_sku === row.sku && reusable(old, ttlMs, now())) { results.push(old); reused++; await onResult?.(old, true); continue }
+    if (old && old.dpg_sku === row.sku && old.is_active === row.is_active &&
+        (!row.brand || old.parser_version === parserVersion && old.expected_brand === row.brand) && reusable(old, ttlMs, now())) { results.push(old); reused++; await onResult?.(old, true); continue }
     if (crawled >= limit) { haltReason = 'LIMIT_REACHED'; break }
     try {
       const result = await crawlOne(row, fetchText, now)
@@ -82,13 +110,16 @@ export async function runBatch(options: BatchOptions) {
 }
 
 // Polite network layer: >= minIntervalMs between requests, bounded size/time, 2 attempts only for 5xx/timeouts.
-export function politeFetch({ minIntervalMs = 1000, userAgent = 'DongPhuGia-price-audit/1.0', fetchImpl = fetch as typeof fetch, log = (entry: { url: string; status: number | null; ms: number }) => { void entry } } = {}): FetchText {
+export function politeFetch({ minIntervalMs = 1000, requestBudget = Infinity, userAgent = 'DongPhuGia-price-audit/1.0', fetchImpl = fetch as typeof fetch, log = (entry: { url: string; status: number | null; ms: number }) => { void entry } } = {}): FetchText {
   let last = 0
+  let requests = 0
   return async (url, accept) => {
     for (let attempt = 0; attempt < 2; attempt++) {
+      if (requests >= requestBudget) throw new Blocked('REQUEST_BUDGET_REACHED')
       const wait = last + (attempt ? 2000 : minIntervalMs) - Date.now()
       if (wait > 0) await sleepFor(wait)
       last = Date.now()
+      requests++
       const start = performance.now()
       let status: number | null = null
       try {

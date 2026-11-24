@@ -9,7 +9,7 @@ import { desiredPrices } from './pricing-policy.mts'
 //   npx tsx scripts/hita-price-audit/batch.mts --inventory <inventory.json> --output <dir> [--limit N] [--ttl-hours 6]
 const { values } = parseArgs({ options: {
   inventory: { type: 'string' }, output: { type: 'string', default: 'hita-batch-output' },
-  limit: { type: 'string', default: '1000' }, offset: { type: 'string', default: '0' }, reverse: { type: 'boolean', default: false }, 'ttl-hours': { type: 'string', default: '6' }, 'min-interval-ms': { type: 'string', default: '1000' },
+  limit: { type: 'string', default: '1000' }, offset: { type: 'string', default: '0' }, reverse: { type: 'boolean', default: false }, 'ttl-hours': { type: 'string', default: '6' }, 'min-interval-ms': { type: 'string', default: '1000' }, 'request-budget': { type: 'string' },
 } })
 if (!values.inventory) throw new Error('--inventory is required')
 const scope = planScope(validateInventory(JSON.parse(await readFile(values.inventory, 'utf8'))))
@@ -23,7 +23,11 @@ const ordered = values.reverse ? [...scope.toCrawl].reverse() : scope.toCrawl
 const slice = ordered.slice(Number(values.offset), Number(values.offset) + Number(values.limit))
 const requestLog: unknown[] = []  // sanitized: path, status, duration only
 const startedAt = new Date().toISOString()
-const fetchText = politeFetch({ minIntervalMs: Number(values['min-interval-ms']), log: entry => requestLog.push(entry) })
+const minIntervalMs = Number(values['min-interval-ms'])
+const requestBudget = values['request-budget'] === undefined ? Infinity : Number(values['request-budget'])
+if (!Number.isFinite(minIntervalMs) || minIntervalMs < 1000) throw new Error('MIN_INTERVAL_BELOW_1S')
+if (requestBudget !== Infinity && (!Number.isSafeInteger(requestBudget) || requestBudget < 1)) throw new Error('INVALID_REQUEST_BUDGET')
+const fetchText = politeFetch({ minIntervalMs, requestBudget, log: entry => requestLog.push(entry) })
 const robotsStop = await checkRobots(fetchText)
 const run = robotsStop ? { results: [] as CrawlResult[], crawled: 0, reused: 0, haltReason: robotsStop, remaining: slice.length } : await runBatch({
   rows: slice, previous, ttlMs: Number(values['ttl-hours']) * 3600_000,

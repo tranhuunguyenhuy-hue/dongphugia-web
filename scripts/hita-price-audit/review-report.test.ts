@@ -50,3 +50,8 @@ describe('#448 review pack', () => {
     expect(md).toContain('BLOCKED ≠ "Hita không có giá"')
   })
 })
+
+it('keeps a verified single price in the export and leaves promotion and voucher blank', () => {
+  const [row] = buildReviewRows(inv.slice(0, 1), new Map([[1, exact(1, 'A-1', 3_640_000, null, null)]]), new Map(), opts)
+  expect(toCsv(REVIEW_COLUMNS, [row])).toContain('"3640000","","","VND"')
+})
