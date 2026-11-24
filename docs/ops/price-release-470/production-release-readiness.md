@@ -50,14 +50,27 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 - Worker rollback tách riêng và **không** hoàn tác SQL; ngược lại cũng vậy.
 - Stop rule: dừng ngay nếu lệch row-count, lệch plan SHA, headroom < 8 MiB, hoặc lỗi guard — không tự retry.
 
-## 7. KIẾN TRÚC GIÁ PUBLIC — Owner chọn A (24/11) nhưng có SỰ THẬT MỚI cần xác nhận lại
-**Đính chính báo cáo trước:** câu "Public Production cứng `price: null`" chỉ đúng với builder M2 (`m2-public-snapshot.mts`, dùng cho Preview). Pipeline snapshot thật (`scripts/catalogue-direct/`) vốn đã hiển thị **giá legacy khôi phục** (quyết định PM 03/11, `public-restored-pricing.mjs`).
+## 7. KIẾN TRÚC GIÁ PUBLIC — Owner chọn PHƯƠNG ÁN 1: Live PostgreSQL qua Hyperdrive (thay thế A)
+**Thực tế đã xác minh (đọc-only, 24/11):** Worker `dongphugia-v1-public-production` chạy `PUBLIC_CATALOGUE_SOURCE=postgresql` + Hyperdrive `PUBLIC_DB` (role `dpg_public_catalogue`). Giữ nguyên; **không** thêm Worker/binding/kết nối/chi phí, **không** chuyển sang snapshot. Snapshot giữ vai trò rollback/Preview. Hiện Public Production không hiển thị giá nào (role không đọc cột legacy).
 
-**Đọc-only Cloudflare (24/11, Worker `dongphugia-v1-public-production`):** Production **đang chạy `PUBLIC_CATALOGUE_SOURCE=postgresql` với binding Hyperdrive `PUBLIC_DB`** (đọc DB sống bằng role `dpg_public_catalogue`, không phải snapshot tĩnh); `v1-worker-release.yml` chỉ cho phép xuất bản bản PostgreSQL, snapshot là chế độ rollback. Vì role này không đọc được bất kỳ cột giá legacy, **hiện nay Public Production không hiển thị giá nào** (mapper `live-public-catalogue.ts` chỉ nạp giá khi `APP_ENV=staging` + TEST). Tiền đề "đọc snapshot tĩnh" của quyết định A do đó **chưa đúng với thực tế deploy**.
+**Code (PR #476, base #475 → #471):** cùng một DTO `hita-exact-v1` (`public-canonical-pricing.mjs`, #475) dùng cho snapshot lẫn live; `live-public-catalogue.ts` đọc đúng 4 cột đã grant ở 002 trong **cùng câu SELECT** (1 truy vấn/trang, không N+1); phạm vi `thiet-bi-ve-sinh` × brand `toto`; cờ **`PUBLIC_CANONICAL_PRICING=on`** (mặc định TẮT, chỉ có hiệu lực khi `APP_ENV=production`). Cache HTML Worker: PDP/PLP/home/category TTL **45 s**, không phục vụ quá TTL (`page-cache.ts`); trang tĩnh 3600 s không có giá; `?sort=` không đi qua cache HTML. Không có cơ chế invalidation chủ động ⇒ giá Admin sửa hiện trên Public trong ≤ ~45 s (+ cache trình duyệt theo `PUBLIC_BROWSER_CACHE_CONTROL`).
 
-Đã làm theo A (đúng cho đường snapshot/rollback và Preview): PR **#475** — `public-canonical-pricing.mjs` + projection (scope sanitary × brand `toto`, mặc định TẮT, buộc CSV/plan SHA vào manifest, build dừng nếu `canonical_price_checked_at` quá hạn), hợp đồng listing, PDP/PLP/search, JSON-LD (Offer chỉ khi có giá, không khai availability), CTA giỏ hàng tắt (`cartEnabled=false`). Đường **live PostgreSQL** (đang là Production thật) chưa được đụng: cần mở rộng `live-public-catalogue.ts` (SELECT thêm 4 cột + `canonical_price_status`, cùng DTO `hita-exact-v1`) và đã có sẵn grants ở 002. Không làm trước khi Owner/TL xác nhận lại hướng.
+**Fail-safe (đã kiểm với ACL thật):** thiếu cột/quyền (42703/42501/42P01) ⇒ chạy lại cùng câu không có cột canonical, SKU trong phạm vi hiện "Cần liên hệ xác nhận giá", không 5xx, không legacy; dữ liệu không nhất quán ⇒ cùng nhãn. Cờ TẮT ⇒ câu lệnh/DTO không đổi.
 
-**Thứ tự cutover (áp dụng cho cả hai đường):** 1 preflight + sao lưu (mục 5) + đo headroom → 2 001 → 002 → (kiểm CHECK/ACL) → 3 crawl lại + Gate + plan SHA mới → 4 import 10 batch + đối soát theo status → 5 003 (hàm order/quote) → 6 build artifact từ **đúng** candidate SHA + CSV sha + plan SHA (snapshot: `PUBLIC_CANONICAL_PRICING=on` + hai SHA bắt buộc, manifest ghi lại; live: cờ tương đương) → 7 kiểm file/preview cô lập (`preview2-candidate-audit`, smoke contract) → 8 publish bằng Owner GO riêng → 9 smoke + giám sát 24h → rollback. Rollback phải **đồng bộ**: chỉ rollback Worker hoặc chỉ rollback SQL đều không đủ — nếu Worker cũ chạy trên DB đã import thì giá canonical vô hại (cột bị bỏ qua) nhưng nếu SQL bị rollback khi Worker mới còn chạy thì mọi SKU in-scope thành "Cần liên hệ xác nhận giá"; vì vậy thứ tự rollback là Worker trước, SQL sau.
+**Tương thích rollback (hai rollback KHÁC NHAU, không đánh đồng):**
+| Trạng thái | Kết quả |
+|---|---|
+| Worker mới, cờ TẮT, DB cũ (chưa 001) | OK — giống hiện tại |
+| Worker mới, cờ BẬT, DB cũ/chưa có quyền | OK — fail-safe, mọi SKU in-scope "Cần liên hệ xác nhận giá" |
+| Worker mới, cờ BẬT, DB đã 001+002+import | Giá canonical hiển thị |
+| Worker CŨ (rollback Worker), DB đã import | OK — Worker cũ bỏ qua cột mới; Public quay lại không có giá |
+| SQL 002 rollback khi Worker mới còn chạy, cờ BẬT | OK — fail-safe (đã test); nên tắt cờ trước |
+| SQL 001 rollback | Chỉ khi đã xoá hết giá trị (`batch-*-rollback.sql`); sau đó Worker mới cờ TẮT/BẬT đều chạy (đã test) |
+Thứ tự rollback khuyến nghị: **tắt cờ → (nếu cần) rollback Worker → rollback dữ liệu batch → 003 → 002 → 001**. Rollback Worker không hoàn tác SQL và ngược lại.
+
+**Thứ tự cutover:** 1 preflight + backup/rollback đã duyệt + đo headroom → 2 `001`, `002` (kiểm CHECK/ACL) → 3 CSV mới crawl + Quality Gate + planner (plan SHA) → 4 import 10 batch + đối soát status/đếm → 5 `003` (hàm order/quote; cart vẫn tắt) → 6 build candidate live-read từ đúng candidate SHA (cờ **TẮT**), kiểm thử/smoke không giá → 7 **Owner GO riêng** → 8 publish qua lane `v1-worker-release.yml` (postgresql) → 9 bật `PUBLIC_CANONICAL_PRICING=on` (đổi biến Worker, không đổi mã) → 10 smoke + giám sát 24 h → rollback nếu cần (tắt cờ trước).
+
+**Phát hiện độc lập (cần quyết định riêng):** với ACL thật của `dpg_public_catalogue` (thiếu `spec_definitions.key`, `spec_options.slug`) truy vấn sibling của `main` (#432) báo `permission denied` ⇒ PDP có `variant_group` sẽ 5xx nếu phát hành từ `main`. #476 làm "không có sibling" khi gặp 42501; muốn có bộ chọn biến thể thì cần grant #432 (Owner đã dặn không phát hành kèm #432). Đồng thời lọc khoảng giá (`price_min/max`) trên PLP vẫn trả rỗng như hiện nay.
 
 ## 7b. PASS / FAIL / UNKNOWN
 | Hạng mục | Kết quả |
@@ -68,8 +81,10 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 | Admin API giữ status nhất quán (37/37 tích hợp + 5 unit) | PASS (local) |
 | Admin API trên DB có cột status thật (sau 001) | UNKNOWN |
 | CI `quality` #471/#472/#473/#474 | PASS (xanh trên đầu nhánh); #475 chưa kiểm |
-| Snapshot projection + PDP/PLP/search/JSON-LD canonical (PR #475; vitest 125 + 46 + 2 pass, tsc sạch) | PASS (local), mặc định TẮT |
-| Đường live PostgreSQL (Production thật) dùng giá canonical | **CHƯA LÀM — chờ xác nhận hướng (mục 7)** |
+| Snapshot projection + PDP/PLP/search/JSON-LD canonical (#475; đường rollback/Preview) | PASS (local), mặc định TẮT |
+| Đường live PostgreSQL (Production thật), ACL/RLS thật, 7 pha tích hợp + 23 unit (#476) | PASS (local/CI) — chưa chạy trên DB/Worker thật (UNKNOWN) |
+| Benchmark local: 1 câu lệnh/trang, cùng plan; PLP +~2 ms (ORDER BY CASE) | PASS (chỉ hình dạng plan, không phải latency live) |
+| Variant siblings dưới ACL thật | FAIL trên `main` (5xx) → #476 degrade; grant #432 chưa quyết |
 | `price_valid_until` thật của Hita / 28 WARN voucher lớn | UNKNOWN — cần crawl lại + Owner nhìn |
 | 181 SKU active chưa xác minh | Codex tiếp tục; không chặn nếu Owner chấp nhận ẩn giá |
 | Sao lưu (5.1, 5.2) | CHƯA TẠO |
