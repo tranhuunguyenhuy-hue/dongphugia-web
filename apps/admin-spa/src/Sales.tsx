@@ -93,8 +93,8 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
       <PageHeader title={<>{label.one} {row.code} <Badge variant={tone(row.status)} className="ml-2 align-middle">{SALES_STATUS[row.status]}</Badge></>} description={`Gửi lúc ${dateText(row.created_at)} · cập nhật ${dateText(row.updated_at)}`}
         actions={<Button variant="outline" onClick={() => go(`/${label.nav}`)}>Danh sách</Button>} />
       {error && <Alert>{error}</Alert>}
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="grid content-start gap-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid min-w-0 content-start gap-4">
           <Card><CardHeader><CardTitle>Sản phẩm ({row.lines.length})</CardTitle></CardHeader><CardContent className="px-0">
             <Table>
               <TableHeader><TableRow><TableHead>SKU</TableHead><TableHead>Tên</TableHead><TableHead className="text-right">SL</TableHead>{isOrder ? <><TableHead className="text-right">Đơn giá</TableHead><TableHead className="text-right">Voucher</TableHead><TableHead className="text-right">Thành tiền</TableHead></> : <><TableHead>Lý do báo giá</TableHead><TableHead className="text-right">Giá tham chiếu</TableHead></>}</TableRow></TableHeader>
