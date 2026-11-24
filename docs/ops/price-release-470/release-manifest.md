@@ -124,7 +124,7 @@ Kết quả chạy offline trên gói thật (chưa có file duyệt ⇒ nhập 
 - **Chính sách 7 ngày** dùng chung cho kích hoạt lại và độ mới ứng viên (hằng `CANONICAL_REACTIVATION_MAX_AGE_MS`, `CANDIDATE_MAX_AGE_HOURS`).
 
 ## 11. Package #485 (Codex) và các lane import — số thật, offline
-Package `docs/ops/hita-448/owner-accepted-candidates/` + `docs/ops/hita-448/import-handoff/`, PR #485 head `3ccbafc3d30ea45020a5b477ba178bd6d57012c1` (đã `merge` vào nhánh #479 để kiểm; **SHA merge #485 vào `main` sẽ được pin vào GO-A/GO-D khi CI #485 PASS**; checksum toàn gói `SHA256SUMS` = `de9bfd66…`). Nguồn quyết định: Owner #443 7127916878, TL 7128033322. Không truy cập Hita, không DB.
+Package `docs/ops/hita-448/owner-accepted-candidates/` + `docs/ops/hita-448/import-handoff/`, PR #485 head `3ccbafc3d30ea45020a5b477ba178bd6d57012c1` (đã merge vào `main` tại **`cb1f636`** = merge #485, đã đồng bộ vào nhánh #479; checksum toàn gói `SHA256SUMS` = `de9bfd66…`). Nguồn quyết định: Owner #443 7127916878, TL 7128033322. Không truy cập Hita, không DB.
 
 | Lane (một plan = hãng × trạng thái × lane; plan/ledger/checksum/rollback riêng) | TOTO active | TOTO inactive | INAX active | INAX inactive | Tổng |
 |---|---:|---:|---:|---:|---:|
