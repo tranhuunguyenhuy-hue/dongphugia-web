@@ -79,10 +79,14 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
     return keys.length === expected.length && keys.every((key) => expected.includes(key))
 }
 
+const CANONICAL_PRICE_PROVENANCE='hita-exact-v1'
 const RESTORED_PRICE_KEYS=['original_price','list_price','sale_price','online_discount_amount','final_online_price','price_provenance'] as const
 function validMoney(value:unknown){return Number.isSafeInteger(value)&&typeof value==='number'&&value>0&&value<=1_000_000_000}
 function isSafeRestoredPrice(value:Record<string,unknown>){
     if(!RESTORED_PRICE_KEYS.every(key=>Object.hasOwn(value,key)))return value.price===null&&value.price_display==='Liên hệ báo giá'&&value.is_promotion===false
+    // #470: canonical (exact-SKU) rows carry provenance and one of two distinct unpriced labels; legacy rows keep the single label.
+    if(value.price===null&&value.price_provenance===CANONICAL_PRICE_PROVENANCE)return RESTORED_PRICE_KEYS.every(key=>key==='price_provenance'||value[key]===null)
+        &&['Liên hệ báo giá','Cần liên hệ xác nhận giá'].includes(String(value.price_display))&&value.is_promotion===false
     if(value.price===null)return RESTORED_PRICE_KEYS.every(key=>value[key]===null)
         &&value.price_display==='Liên hệ báo giá'&&value.is_promotion===false
     if(!validMoney(value.price)||!validMoney(value.list_price)
@@ -91,7 +95,7 @@ function isSafeRestoredPrice(value:Record<string,unknown>){
         ||value.sale_price!==((value.price as number)<(value.list_price as number)?value.price:null)
         ||value.is_promotion!==((value.price as number)<(value.list_price as number))
         ||value.price_display!==null
-        ||!['legacy-manual-2026-07-02','legacy-hita-pm-approved-2026-11-03'].includes(String(value.price_provenance)))return false
+        ||!['legacy-manual-2026-07-02','legacy-hita-pm-approved-2026-11-03',CANONICAL_PRICE_PROVENANCE].includes(String(value.price_provenance)))return false
     if(value.online_discount_amount===null)return value.final_online_price===null
     return validMoney(value.online_discount_amount)
         &&(value.online_discount_amount as number)<(value.price as number)

@@ -63,6 +63,8 @@ type ProductSchemaInput = {
   list_price?: number | null
   sale_price?: number | null
   price_display?: string | null
+  /** #470: 'hita-exact-v1' = exact-SKU canonical price (Production snapshot). */
+  price_provenance?: string | null
   stock_status: string
   brands?: { name: string } | null
   slug: string
@@ -76,6 +78,7 @@ type ProductSchemaInput = {
  * Enables Google to show price, availability, and brand in search results.
  */
 export function buildProductSchema(product: ProductSchemaInput) {
+  if (product.price_provenance === "hita-exact-v1") return buildCanonicalProductSchema(product)
   const commerce = resolveProductCommerce({
     listPrice: product.list_price,
     originalPrice: product.original_price,
@@ -119,6 +122,38 @@ export function buildProductSchema(product: ProductSchemaInput) {
         name: "Đông Phú Gia",
       },
     },
+  }
+}
+
+/**
+ * #470 canonical Production snapshot: an Offer exists ONLY when the exact-SKU verified price is valid; unpriced rows
+ * (CONTACT_VERIFIED / UNRESOLVED / NULL ...) get a Product without offers. Availability is omitted on purpose: stock is not verified.
+ * The online voucher is a separate promotion and is never part of the Offer price.
+ */
+function buildCanonicalProductSchema(product: ProductSchemaInput) {
+  const productUrl = product.urlPath
+    ? publicCanonicalUrl(product.urlPath)
+    : publicCanonicalUrl(`/${product.categorySlug}/${product.subcategorySlug ?? "_"}/${product.slug}`)
+  const price = product.price
+  const priced = typeof price === "number" && Number.isSafeInteger(price) && price > 0
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description?.slice(0, 500) || undefined,
+    sku: product.sku,
+    image: product.image_main_url ? [product.image_main_url] : undefined,
+    brand: product.brands ? { "@type": "Brand", name: product.brands.name } : undefined,
+    url: productUrl,
+    ...(priced ? {
+      offers: {
+        "@type": "Offer",
+        priceCurrency: "VND",
+        price,
+        url: productUrl,
+        seller: { "@type": "Organization", name: "Đông Phú Gia" },
+      },
+    } : {}),
   }
 }
 

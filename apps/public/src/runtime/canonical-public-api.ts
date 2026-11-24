@@ -146,6 +146,8 @@ export const getPdpDescriptionBlocks:typeof Original.getPdpDescriptionBlocks=(pr
 }
 export const getPdpHistoricalReferencePrice:typeof Original.getPdpHistoricalReferencePrice=(product)=>{
  if((product as {price?:number|null}).price!==null&&(product as {price?:number|null}).price!==undefined)return null
+ // #470: canonical-governed rows never show the legacy historical reference price, even when unpriced.
+ if((product as {price_provenance?:string|null}).price_provenance==='hita-exact-v1')return null
  const value=(product as {publicContent?:{referencePrice?:unknown}})?.publicContent?.referencePrice
  return value&&typeof value==='object'&&Object.keys(value).length===3
   &&(value as {provenance?:unknown}).provenance==='legacy-manual-public-display'

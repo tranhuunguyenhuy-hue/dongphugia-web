@@ -15,6 +15,7 @@ import { RecentlyViewedProducts } from "@/components/product/recently-viewed"
 import { BrandBadge } from "@/components/ui/brand-badge"
 import { JsonLd } from "@/components/seo/json-ld"
 import { buildProductSchema, buildBreadcrumbSchema } from "@/lib/seo/schema"
+import { canonicalCartEnabled, isCanonicalPriceProvenance } from "@/lib/canonical-price"
 import { buildProductMetadata, toNullableNumber } from "@/lib/seo/product-seo"
 import { getCanonicalProductPath } from "@/lib/taxonomy-paths"
 
@@ -153,6 +154,7 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
                 original_price: currentOriginalPrice,
                 list_price: toNullableNumber(product.list_price),
                 sale_price: toNullableNumber(product.sale_price),
+                price_provenance: 'price_provenance' in product ? (product.price_provenance as string | null) : null,
                 stock_status: product.stock_status,
                 brands: product.brands,
                 slug: product.slug,
@@ -238,7 +240,8 @@ export default async function ThietBiVeSinhDetailPage({ params }: PageProps) {
 
                     <ProductPurchasePanel
                         product={purchaseProduct}
-                        canonicalPricing={'price_provenance' in product && product.price_provenance === 'hita-exact-test'}
+                        canonicalPricing={'price_provenance' in product && isCanonicalPriceProvenance(product.price_provenance)}
+                        cartEnabled={!('price_provenance' in product) || canonicalCartEnabled(product.price_provenance)}
                         historicalReferencePrice={getPdpHistoricalReferencePrice(product)}
                         verifiedVariantOptions={variantOptions}
                         categorySlug={canonicalCategorySlug}

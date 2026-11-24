@@ -2,6 +2,7 @@ import {safeImage} from './public-image-policy.mjs'
 export {safeImage} from './public-image-policy.mjs'
 import {isSafePublicContent,publicText} from './public-product-content.mjs'
 import {restoredPublicPricing,isRestoredPublicPricing} from './public-restored-pricing.mjs'
+import {canonicalPublicPricing,isCanonicalPublicPricing,inCanonicalScope,CANONICAL_PROVENANCE} from './public-canonical-pricing.mjs'
 import { createHash } from 'node:crypto'
 
 export const PROJECTION_CONTRACT = 'dpg:public-catalogue-snapshot:v1'
@@ -18,7 +19,11 @@ export function projectProduct(input, visibility, canonical, options = {}) {
     || ![canonical.categorySlug, canonical.subcategorySlug, input.slug].every(s => SLUG.test(s))) return null
   const image = safeImage(input.image_main_url)
   const path = `/${canonical.categorySlug}/${canonical.subcategorySlug}/${input.slug}`
-  const commerce = options.restoreCommerce ? restoredPublicPricing(input) : {
+  // #470 Architecture A: rows inside the approved canonical scope are priced ONLY from the canonical columns (no legacy fallback);
+  // every other row keeps the exact existing behaviour.
+  const commerce = options.restoreCommerce && options.canonical && inCanonicalScope(input, options.canonical.scope)
+    ? canonicalPublicPricing(input, { now: options.canonical.now, maxAgeMs: options.canonical.maxAgeMs })
+    : options.restoreCommerce ? restoredPublicPricing(input) : {
     price: null, price_display: 'Liên hệ báo giá', is_promotion: false,
   }
   const cardFeatures=options.restoreCommerce?Array.from(new Set((Array.isArray(input.cardFeatures)?input.cardFeatures:[])
@@ -77,7 +82,7 @@ export function buildProjection(products, evidence, rootMetadata = [], options =
     const price=Object.fromEntries(priceKeys.map(key=>[key,product[key]]))
     if (Object.keys(product).some(key => !keys.includes(key) && !(options.restoreCommerce && (priceKeys.includes(key)||['searchEligible','product_feature_values','colors'].includes(key))))
       || typeof product.sitemapEligible !== 'boolean' || product.stock_status !== 'contact'
-      || (options.restoreCommerce ? !isRestoredPublicPricing(price) : product.price !== null)) throw new Error('PUBLIC_PROJECTION_UNSAFE_DTO')
+      || (options.restoreCommerce ? !(isRestoredPublicPricing(price) || (options.canonical && isCanonicalPublicPricing(price))) : product.price !== null)) throw new Error('PUBLIC_PROJECTION_UNSAFE_DTO')
     if(options.restoreCommerce&&(!Array.isArray(product.product_feature_values)||product.product_feature_values.length>3
       ||product.product_feature_values.some(item=>!item?.product_features?.name||publicText(item.product_features.name,80)!==item.product_features.name)
       ||(product.colors!==null&&(!product.colors?.name||publicText(product.colors.name,50)!==product.colors.name
@@ -111,6 +116,7 @@ export function buildProjection(products, evidence, rootMetadata = [], options =
       category_slug:product.categories.slug,subcategory_slug:product.subcategories.slug,
       brand_name:product.brands?.name??null,
       product_feature_values:product.product_feature_values,colors:product.colors,
+      ...(options.canonical?{price_provenance:product.price_provenance??null}:{}),
     })
     const bucket = productBucket(product.url)
     if (!buckets.has(bucket)) buckets.set(bucket, [])
@@ -186,7 +192,13 @@ export function buildProjection(products, evidence, rootMetadata = [], options =
     richDescriptions:products.filter(p=>p.publicContent?.descriptionHtml).length,
     productsWithDocuments:products.filter(p=>p.publicContent?.documents?.length).length,
   }:{})}
-  const manifest = { contentPolicy:options.restoreCommerce?'canonical-public-content-v4':'canonical-public-content-v3',contentStats,variantGroups:Object.fromEntries([...variantGroups].sort(([a],[b])=>a.localeCompare(b))),contract:PROJECTION_CONTRACT,...evidence,notice:NOTICE,productBuckets:[...buckets.keys()].sort(),sitemapProductIds:sitemapProductIds.sort((a,b)=>a-b),...(options.restoreCommerce?{searchShards:searchShards.map((_,i)=>String(i)),searchProducts:searchShards.reduce((n,shard)=>n+shard.length,0)}:{}),categories:[...categories.values()],products:products.length,listingProducts:[...pages.values()].reduce((n,p)=>n+p.length,0) }
+  const manifest = { contentPolicy:options.restoreCommerce?'canonical-public-content-v4':'canonical-public-content-v3',contentStats,variantGroups:Object.fromEntries([...variantGroups].sort(([a],[b])=>a.localeCompare(b))),contract:PROJECTION_CONTRACT,...evidence,notice:NOTICE,productBuckets:[...buckets.keys()].sort(),sitemapProductIds:sitemapProductIds.sort((a,b)=>a-b),...(options.restoreCommerce?{searchShards:searchShards.map((_,i)=>String(i)),searchProducts:searchShards.reduce((n,shard)=>n+shard.length,0)}:{}),categories:[...categories.values()],products:products.length,listingProducts:[...pages.values()].reduce((n,p)=>n+p.length,0),
+    // #470: binds the snapshot to the exact approved CSV / import plan so price data of different moments can never be mixed.
+    ...(options.canonical?{canonicalPricing:{provenance:CANONICAL_PROVENANCE,scope:options.canonical.scope,maxAgeHours:Math.round(options.canonical.maxAgeMs/3600000),
+      csvSha256:options.canonical.csvSha256,planSha:options.canonical.planSha,
+      priced:products.filter(p=>p.price_provenance===CANONICAL_PROVENANCE&&p.price!==null).length,
+      contactVerified:products.filter(p=>p.price_provenance===CANONICAL_PROVENANCE&&p.price===null&&p.price_display==='Liên hệ báo giá').length,
+      unverified:products.filter(p=>p.price_provenance===CANONICAL_PROVENANCE&&p.price===null&&p.price_display!=='Liên hệ báo giá').length}}:{}) }
   assets.set('manifest.json', manifest)
   for (const [bucket, values] of buckets) assets.set(`products/${bucket}.json`,{contract:PROJECTION_CONTRACT,checkpoint:evidence.checkpoint,products:values})
   if(options.restoreCommerce)for(let i=0;i<searchShards.length;i++)assets.set(`search/${i}.json`,{contract:PROJECTION_CONTRACT,checkpoint:evidence.checkpoint,products:searchShards[i]})

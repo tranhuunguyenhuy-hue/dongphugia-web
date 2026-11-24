@@ -6,6 +6,7 @@ import { CanonicalProductCTA } from '@/components/product/canonical-product-cta'
 import { ProductCTA } from '@/components/product/product-cta'
 import { ProductPrice } from '@/components/product/product-price'
 import { HistoricalReferencePriceNotice } from '@/components/product/historical-reference-price'
+import { canonicalPriceLabel } from '@/lib/canonical-price'
 import { VariantPreview, VariantSelector } from '@/components/product/variant-selector'; import { resolveProductCommerce } from '@/lib/product-commerce'
 
 import { VerifiedVariantSelector, type VerifiedVariantOption } from './verified-variant-selector'
@@ -23,6 +24,8 @@ interface ProductPurchasePanelProps {
         brands: {name:string}|null;
     }
     canonicalPricing?: boolean
+    /** #470: Production keeps cart/checkout OFF; only the TEST pilot passes true. Defaults to true to preserve the pilot behaviour. */
+    cartEnabled?: boolean
     historicalReferencePrice?: {amountVnd:number;recordedUpdateDate:string;provenance:string}|null
     variantSiblings?: VariantSibling[]
     verifiedVariantOptions?: readonly VerifiedVariantOption[]
@@ -38,6 +41,7 @@ const toClientMoney = (value: unknown) =>
 export function ProductPurchasePanel({
     product,
     canonicalPricing = false,
+    cartEnabled = true,
     historicalReferencePrice,
     variantSiblings = [],
     verifiedVariantOptions,
@@ -91,7 +95,7 @@ export function ProductPurchasePanel({
         salePrice: displaySalePrice,
         stockStatus: displayProduct.stock_status,
     })
-    const canOrder = displayProduct.is_active
+    const canOrder = cartEnabled && displayProduct.is_active
         && !['not_sellable', 'discontinued'].includes(displayProduct.sale_status ?? '')
         && displayCommerce.availability !== 'Discontinued'
         && displayCommerce.availability !== null
@@ -130,7 +134,7 @@ export function ProductPurchasePanel({
                 originalPrice={toClientMoney(displayOriginalPrice)}
                 listPrice={toClientMoney(displayProduct.list_price)}
                 salePrice={toClientMoney(displaySalePrice)}
-                priceDisplay={canonicalPricing ? 'Liên hệ báo giá' : displayProduct.price_display}
+                priceDisplay={canonicalPricing ? canonicalPriceLabel(displayProduct.price_display) : displayProduct.price_display}
                 displayVoucherOnly={canonicalPricing}
                 onlineDiscountAmount={displayVoucher}
                 stockStatus={displayProduct.stock_status}
