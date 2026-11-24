@@ -30,7 +30,8 @@ for (const row of inventory) {
   assert(original && original.sku === row.sku && original.is_active === String(row.is_active) && original.category === row.category)
 }
 
-const batches = await Promise.all(inputs.map(async path => JSON.parse(await readFile(path, 'utf8')) as { summary: unknown; rows: CrawlResult[] }))
+const batches = await Promise.all(inputs.map(async path => JSON.parse(await readFile(path, 'utf8')) as { summary: { halt_reason?: string | null }; rows: CrawlResult[] }))
+const haltReason = batches.at(-1)?.summary.halt_reason
 const newById = new Map<number, CrawlResult>()
 for (const batch of batches) {
   for (const r of batch.rows) {
@@ -55,7 +56,7 @@ const recoveryRows = recovery.map(original => {
   const [row] = buildReviewRows([inv], fresh, new Map(), { pilotLabel: '', blockedReason: null, blockedAtUtc: null })
   if (!latest) {
     row.status = 'NOT_CRAWLED'
-    row.reason = 'PENDING'
+    row.reason = haltReason ? `PENDING_${haltReason}` : 'PENDING'
     row.review_status = 'NOT_CRAWLED_PENDING'
   } else if (row.status === 'UNKNOWN') row.review_status = 'UNKNOWN_TECHNICAL'
   return { ...original, ...row, brand: 'INAX',

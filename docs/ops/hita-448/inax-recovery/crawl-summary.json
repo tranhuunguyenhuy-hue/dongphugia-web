@@ -1,0 +1,99 @@
+{
+  "baselineSha": "9e4733bc55ec87cd52642482a4a1904c8aace04b",
+  "baselineChecksum": "aa0a93553ce5cf32c86e84f9e4aa8cfee73f66631500781341e634d25aa17cfd",
+  "outOfScope": 291,
+  "excludedOutOfScopeExceptions": 244,
+  "inventoryRows": 2090,
+  "active": 1653,
+  "baselinePrices": 547,
+  "inventoryMismatchToBaseline": 0,
+  "targets": 1543,
+  "checked": 348,
+  "priced": 313,
+  "pricedActive": 305,
+  "pricedInactive": 8,
+  "priceFields": {
+    "1": 313
+  },
+  "voucher": 0,
+  "status": {
+    "AMBIGUOUS": 12,
+    "CONTACT": 9,
+    "DISCONTINUED": 8,
+    "EXACT": 313,
+    "NOT_CRAWLED": 1195,
+    "NOT_FOUND": 2,
+    "UNKNOWN": 4
+  },
+  "exceptions": {
+    "EXACT_OFFER_MISSING": 1,
+    "INVALID_PDP_URL": 3,
+    "NO_EXACT_SEARCH_HIT": 14,
+    "PENDING_HTTP_403_OR_CHALLENGE": 1195,
+    "SOURCE_CONTACT": 9,
+    "SOURCE_DISCONTINUED": 8
+  },
+  "batches": [
+    {
+      "started_at_utc": "2026-11-24T05:40:14.122Z",
+      "completed_at_utc": "2026-11-24T05:42:39.680Z",
+      "inventory_total": 100,
+      "synthetic_skipped": 0,
+      "crawl_scope": 100,
+      "crawled_now": 100,
+      "reused_from_checkpoint": 0,
+      "remaining": 0,
+      "halt_reason": null,
+      "by_status": {
+        "EXACT": 65,
+        "CONTACT": 9,
+        "DISCONTINUED": 8,
+        "NOT_FOUND": 2,
+        "AMBIGUOUS": 12,
+        "BLOCKED": 0,
+        "UNKNOWN": 4
+      },
+      "exact_with_three_prices": 8,
+      "exact_with_regular_and_promotional": 12,
+      "exact_with_regular_only": 53,
+      "exact_with_voucher": 8,
+      "quarantined": 0,
+      "requests": 133,
+      "requests_non_2xx": 0
+    },
+    {
+      "started_at_utc": "2026-11-24T05:42:40.770Z",
+      "completed_at_utc": "2026-11-24T05:47:32.073Z",
+      "inventory_total": 1455,
+      "synthetic_skipped": 0,
+      "crawl_scope": 1455,
+      "crawled_now": 260,
+      "reused_from_checkpoint": 0,
+      "remaining": 1195,
+      "halt_reason": "HTTP_403_OR_CHALLENGE",
+      "by_status": {
+        "EXACT": 260,
+        "CONTACT": 0,
+        "DISCONTINUED": 0,
+        "NOT_FOUND": 0,
+        "AMBIGUOUS": 0,
+        "BLOCKED": 0,
+        "UNKNOWN": 0
+      },
+      "exact_with_three_prices": 0,
+      "exact_with_regular_and_promotional": 0,
+      "exact_with_regular_only": 260,
+      "exact_with_voucher": 0,
+      "quarantined": 0,
+      "requests": 282,
+      "requests_non_2xx": 11
+    }
+  ],
+  "checksums": {
+    "recovery.csv": "189355bb90f6d73f699114fdcfa8cbdfe979bb7ad0756d56a5c77b0b5e14a96b",
+    "sanitary-merged.csv": "e425c48958e8119e585fd257648de7adf8a2f04c1d1f9cf3d6c6f7e798009acc",
+    "exceptions.csv": "ab11b301293528de396e0660b16a0ac2cc3dfcaa3ab1751a3793d6965df6cf1b",
+    "ambiguous-aliases.csv": "732ce49d060d4f32253c543b8b0d370ddfe4ec69e08bb452f2ebed11ab6b6ced",
+    "evidence.jsonl": "cb28333770a4da1de2aaa6becc526662e8456a395e4bcdfea85d477593c9c9e7"
+  }
+}
