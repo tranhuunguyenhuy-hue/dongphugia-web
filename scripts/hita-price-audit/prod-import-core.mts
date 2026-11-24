@@ -26,7 +26,7 @@ export const PRODUCTION_TARGET = { projectName: 'dongphugia-runtime', region: 'a
 export const BRANDS = { toto: { id: 1, slug: 'toto' }, inax: { id: 2, slug: 'inax' } } as const
 export type BrandKey = keyof typeof BRANDS
 export type PlanState = 'active' | 'inactive'
-export type PlanSource = 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE' | 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION' | 'OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE'
+export type PlanSource = 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE' | 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION' | 'OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE' | 'DPG_VOUCHER_FROM_STORED_EVIDENCE'
 /** Owner decision that lets rows of ONE pinned CSV be planned although their source time is older than the 24 h gate and their Hita Offer date has passed (no re-crawl, no price tracking: the pinned prices are DPG's own).
  * Never a blanket switch: the CSV sha256 and the exact id set are pinned (set equality, both directions), vouchers must be empty, timestamps are never touched. Rows outside a pin still stop when stale/expired. */
 export type FreshnessException = { approved_by: 'Owner'; approval_ref: string; rule_ref: string; csv_sha256: string; approved_ids: number[]; approved_basis: 'ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION' }

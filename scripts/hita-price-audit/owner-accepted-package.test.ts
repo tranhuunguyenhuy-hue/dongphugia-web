@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { applySql, buildPlan, ledgerJsonl, rollbackSql, sha256, type DbRow, type FreshnessException, type Plan } from './prod-import-core.mts'
 import { buildCandidatePlan, type CandidateApproval } from './prod-import-candidates.mts'
 import { buildBaselinePlan, type BaselineDecision } from './prod-import-baseline.mts'
+import { buildVoucherPlan, type VoucherApproval } from './prod-import-voucher.mts'
 import { parseCsv } from './quality-gate-core.mts'
 
 // #470 (TL 7128033322): offline acceptance of the Codex package #485 (docs/ops/hita-448/owner-accepted-candidates) through the REAL planners.
@@ -147,6 +148,48 @@ describe('status lane (CONTACT / DISCONTINUED rows of import-handoff) — no pri
     const p = buildPlan({ csvText: csv, expectedCsvSha256: sha256(csv), candidateSha: SHA, inventory, db: snapshot(brandId, state === 'active'), dbSizeBytes: DB_SIZE, now: NOW, brand, state })
     expect(p.stopReasons).toEqual([]); expect(p.rows).toHaveLength(n)
     expect(p.rows.every(r => r.after.regular === null && r.after.promo === null && r.after.voucher === null && ['CONTACT_VERIFIED', 'DISCONTINUED'].includes(String(r.after.status)))).toBe(true)
+  })
+})
+
+describe('voucher lane (Owner 24/11): DPG accepts the Hita exact-SKU voucher amount for pinned SKUs, after the price lanes', () => {
+  const vdir = path.resolve(__dirname, '../../docs/ops/price-release-470/voucher-lane')
+  const vcsv = readFileSync(path.join(vdir, 'voucher-approved.csv'), 'utf8'), vapproval = JSON.parse(readFileSync(path.join(vdir, 'voucher-approval.json'), 'utf8')) as VoucherApproval
+  // DB state AFTER lanes A+B+C were applied (prices present, voucher NULL, check time = source time)
+  const priced = (brandId: number, active: boolean): DbRow[] => {
+    const after = new Map<number, { regular: number | null; promo: number | null; checked: string }>()
+    for (const [cohort, brand, state, bid] of COHORTS) for (const p of [direct(cohort, brand, state, bid), cand(cohort, brand, state, bid)]) for (const r of p.rows) after.set(r.id, { regular: r.after.regular, promo: r.after.promo, checked: r.checkedAt })
+    for (const r of baseline().rows) after.set(r.id, { regular: r.after.regular, promo: r.after.promo, checked: r.checkedAt })
+    return snapshot(brandId, active).map(r => { const a = after.get(r.id); return a ? { ...r, canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: a.regular, promotional_price_vnd: a.promo, canonical_price_checked_at: a.checked } : r })
+  }
+  const vplan = (brand: 'toto' | 'inax', state: 'active' | 'inactive', brandId: number, over: Partial<{ csv: string; approval: VoucherApproval | null; db: DbRow[] }> = {}): Plan => {
+    const csv = over.csv ?? vcsv
+    return buildVoucherPlan({ csvText: csv, expectedCsvSha256: sha256(csv), approval: over.approval === undefined ? vapproval : over.approval, candidateSha: SHA, db: over.db ?? priced(brandId, state === 'active'), dbSizeBytes: DB_SIZE, brand, state })
+  }
+  it('the committed package matches the evidence: 1.101 approved (745 TOTO + 356 INAX); the 29 Owner-NULL TOTO and the 2 promotion-held INAX rows stay NULL', () => {
+    expect(vapproval.approved_ids).toHaveLength(1101); expect(vapproval.hold_null_ids).toHaveLength(31); expect(vapproval.csv_sha256).toBe(sha256(vcsv))
+    expect(vapproval.hold_null_ids).toEqual(expect.arrayContaining([559, 7679])); expect(vapproval.approved_ids.some(i => vapproval.hold_null_ids.includes(i))).toBe(false)
+    expect(vcsv).not.toMatch(/Ưu đãi|online|HITA_ONLY/i)                                                   // no advertising text is copied
+  })
+  it('plans exactly the pinned vouchers per brand x state; the voucher is below the selling price; price, promotion and check time untouched', () => {
+    let total = 0, toto = 0, inax = 0
+    for (const [, brand, state, brandId] of COHORTS) {
+      const p = vplan(brand, state, brandId); expect(p.stopReasons).toEqual([]); total += p.rows.length; if (brand === 'toto') toto += p.rows.length; else inax += p.rows.length
+      for (const r of p.rows) { expect(r.after.voucher).toBeGreaterThan(0); expect(r.after.voucher!).toBeLessThan(r.before.promo ?? r.before.regular!); expect({ ...r.after, voucher: null }).toEqual(r.before); expect(r.checkedAt).toBe(r.beforeCheckedAt) }
+    }
+    expect([total, toto, inax]).toEqual([1101, 745, 356])
+  })
+  it('fails closed: no approval / different CSV / extra or missing id / held id / price lane not applied / amount >= selling / existing different voucher', () => {
+    expect(vplan('toto', 'active', 1, { approval: null }).stopReasons).toContain('OWNER_APPROVAL_MISSING')
+    expect(vplan('toto', 'active', 1, { approval: { ...vapproval, csv_sha256: 'a'.repeat(64) } }).stopReasons).toContain('OWNER_APPROVAL_FOR_A_DIFFERENT_CSV')
+    expect(vplan('toto', 'active', 1, { approval: { ...vapproval, approved_ids: vapproval.approved_ids.slice(1) } }).stopReasons).toContain('OWNER_APPROVAL_SCOPE_MISMATCH')
+    expect(vplan('toto', 'active', 1, { approval: { ...vapproval, hold_null_ids: [...vapproval.hold_null_ids, vapproval.approved_ids[0]] } }).stopReasons).toContain('VOUCHER_ID_IS_HELD_NULL')
+    expect(vplan('toto', 'active', 1, { db: snapshot(1, true) }).stopReasons.join()).toContain('VOUCHER_ROW_NOT_PRICED_YET')
+    const first = vapproval.approved_ids.find(i => scope.find(s => s.id === i)?.brand === 'TOTO' && scope.find(s => s.id === i)?.active)!
+    const db = priced(1, true)
+    expect(vplan('toto', 'active', 1, { db: db.map(r => (r.id === first ? { ...r, regular_price_vnd: 1, promotional_price_vnd: null } : r)) }).stopReasons.join()).toContain('VOUCHER_NOT_BELOW_SELLING_PRICE')
+    const over = vplan('toto', 'active', 1, { db: db.map(r => (r.id === first ? { ...r, online_voucher_amount_vnd: 1 } : r)) }); expect(over.rows.map(r => r.id)).not.toContain(first); expect(over.summary.skipped_by_reason).toMatchObject({ VOUCHER_DOES_NOT_OVERRIDE_EXISTING: 1 })
+    const edited = vcsv.replace(/^((?:[^\n]*\n)"[^"]*","[^"]*","[^"]*","[^"]*",)"\d+"/, '$1"1"'); expect(edited).not.toBe(vcsv); expect(vplan('toto', 'active', 1, { csv: edited }).stopReasons.join()).toMatch(/OWNER_APPROVAL_FOR_A_DIFFERENT_CSV/)
+    expect(vplan('toto', 'active', 1, { db: db.map(r => (r.id === first ? { ...r, brand_id: 2 } : r)) }).stopReasons.join()).toContain('IDENTITY_MISMATCH')
   })
 })
 

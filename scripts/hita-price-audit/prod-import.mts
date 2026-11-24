@@ -5,6 +5,7 @@ import { applySql, BRANDS, buildPlan, releaseBindingMatches, type FreshnessExcep
 import type { InvRow } from './quality-gate-core.mts'
 import { buildCandidatePlan, type CandidateApproval } from './prod-import-candidates.mts'
 import { buildBaselinePlan, type BaselineDecision } from './prod-import-baseline.mts'
+import { buildVoucherPlan, type VoucherApproval } from './prod-import-voucher.mts'
 
 // #470 Step 3b. DRY-RUN BY DEFAULT and WRITE-INCAPABLE: this tool never opens a database connection.
 //   npx tsx scripts/hita-price-audit/prod-import.mts <prices.csv> --csv-sha256 <hex64> --candidate-sha <git sha40> \
@@ -13,20 +14,24 @@ import { buildBaselinePlan, type BaselineDecision } from './prod-import-baseline
 //     [--owner-candidates approval.json]   (CANDIDATE mode: <prices.csv> is a historical-candidates file; imports ONLY the ids the Owner approval lists; --inventory not needed)
 //     [--archived-direct-approval approval.json]   (review-format CSV that is older than the 24 h gate: allowed ONLY for the exact CSV sha + id set the Owner exception pins)
 //     [--inax-baseline-decision inax-baseline-owner-decision.json]   (BASELINE mode: the pinned 547-row INAX active baseline CSV; only with --brand inax --state active)
+//     [--voucher-approval voucher-approval.json]   (VOUCHER mode: <prices.csv> is voucher-approved.csv; run AFTER the price lanes; only fills the voucher of already-priced pinned rows)
 //     [--out dir]   (writes apply/rollback SQL batches, ledger.jsonl and manifest.json; nothing is executed)
 //     [--go-token candidate:csv:plan]   (only checks that the text quoted in the Owner GO identifies this plan; executes nothing)
 // snapshot.json = { "db_size_bytes": number, "rows": [DbRow...] } produced read-only with the SNAPSHOT_SQL printed by --print-snapshot-sql.
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'csv-sha256': { type: 'string' }, 'candidate-sha': { type: 'string' }, inventory: { type: 'string', multiple: true, default: [] }, 'db-snapshot': { type: 'string' },
-  now: { type: 'string' }, 'owner-candidates': { type: 'string' }, 'archived-direct-approval': { type: 'string' }, 'inax-baseline-decision': { type: 'string' }, 'batch-size': { type: 'string' }, brand: { type: 'string' }, state: { type: 'string' }, out: { type: 'string' }, 'go-token': { type: 'string' }, 'print-snapshot-sql': { type: 'boolean', default: false },
+  now: { type: 'string' }, 'owner-candidates': { type: 'string' }, 'archived-direct-approval': { type: 'string' }, 'inax-baseline-decision': { type: 'string' }, 'voucher-approval': { type: 'string' }, 'batch-size': { type: 'string' }, brand: { type: 'string' }, state: { type: 'string' }, out: { type: 'string' }, 'go-token': { type: 'string' }, 'print-snapshot-sql': { type: 'boolean', default: false },
 } })
 if (values['print-snapshot-sql']) { console.log(SNAPSHOT_SQL.replaceAll(':brand_id', String(BRANDS[(values.brand ?? 'toto') as BrandKey]?.id ?? 'NaN'))); process.exit(0) }
-const candidateMode = values['owner-candidates'] !== undefined, baselineMode = values['inax-baseline-decision'] !== undefined
-if (positionals.length !== 1 || !values['db-snapshot'] || (!candidateMode && !baselineMode && !values.inventory.length) || !values.brand || !values.state) { console.error('usage: prod-import.mts <prices.csv> --csv-sha256 H --candidate-sha S --inventory inv.json --db-snapshot snap.json --brand toto|inax --state active|inactive [--out dir]'); process.exit(2) }
+const candidateMode = values['owner-candidates'] !== undefined, baselineMode = values['inax-baseline-decision'] !== undefined, voucherMode = values['voucher-approval'] !== undefined
+if (positionals.length !== 1 || !values['db-snapshot'] || (!candidateMode && !baselineMode && !voucherMode && !values.inventory.length) || !values.brand || !values.state) { console.error('usage: prod-import.mts <prices.csv> --csv-sha256 H --candidate-sha S --inventory inv.json --db-snapshot snap.json --brand toto|inax --state active|inactive [--out dir]'); process.exit(2) }
 const csvText = await readFile(positionals[0], 'utf8')
 const inventory: InvRow[] = (await Promise.all(values.inventory.map(async f => JSON.parse(await readFile(f, 'utf8')) as InvRow[]))).flat()
 const snap = JSON.parse(await readFile(values['db-snapshot'], 'utf8')) as { db_size_bytes: number; rows: DbRow[] }
-const plan = baselineMode ? buildBaselinePlan({
+const plan = voucherMode ? buildVoucherPlan({
+  csvText, expectedCsvSha256: values['csv-sha256'] ?? '', approval: JSON.parse(await readFile(values['voucher-approval']!, 'utf8')) as VoucherApproval, candidateSha: values['candidate-sha'] ?? '',
+  db: snap.rows, dbSizeBytes: snap.db_size_bytes, brand: values.brand as BrandKey, state: values.state as PlanState, batchSize: values['batch-size'] ? Number(values['batch-size']) : undefined,
+}) : baselineMode ? buildBaselinePlan({
   csvText, expectedCsvSha256: values['csv-sha256'] ?? '', decision: JSON.parse(await readFile(values['inax-baseline-decision']!, 'utf8')) as BaselineDecision, candidateSha: values['candidate-sha'] ?? '',
   db: snap.rows, dbSizeBytes: snap.db_size_bytes, now: values.now ? new Date(values.now) : new Date(), batchSize: values['batch-size'] ? Number(values['batch-size']) : undefined, brand: values.brand, state: values.state,
 }) : candidateMode ? buildCandidatePlan({

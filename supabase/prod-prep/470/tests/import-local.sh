@@ -210,6 +210,34 @@ snap4; if base4 $T4/decision.json --out $T4/again > $T4/again.out 2>&1; then :; 
 "${B4[@]}" -v approved_sha=$PB -f $T4/bplan/batch-0001-rollback.sql >/dev/null
 [ "$("${S[@]}" -c "select count(*) from dpg_app.products where sku in ('IN-1','IN-2') and (canonical_price_status is not null or regular_price_vnd is not null or canonical_price_checked_at is not null)")" = "0" ]
 echo "PASS baseline never overwrites a stored price (re-plan skips both); rollback restores the exact prior state"
+# ---------- PHASE 5: voucher lane (after the price lane): only pinned, already-priced rows; amount below the selling price; price check time kept ----------
+T5=$T/p5; mkdir -p $T5
+node -e '
+const [dir,id1,id2]=process.argv.slice(1); const fs=require("fs");
+const cols=["brand","dpg_id","sku","is_active","voucher_vnd","source_checked_at_utc","source_url"]; const q=v=>`"${v}"`;
+const rows=[["INAX",id1,"IN-1","true","100000","2026-11-23T19:00:00.000Z","https://hita.com.vn/p-1-1.html"],["INAX",id2,"IN-2","true","2500000","2026-11-23T19:00:00.000Z","https://hita.com.vn/p-2-2.html"]];
+fs.writeFileSync(dir+"/v.csv",cols.map(q).join(",")+"\r\n"+rows.map(r=>r.map(q).join(",")).join("\r\n")+"\r\n");' $T5 $IN1 $IN2
+VS=$(sha256sum $T5/v.csv | cut -d' ' -f1)
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local\",\"rule_ref\":\"x\",\"csv_sha256\":\"$VS\",\"approved_ids\":[$IN1,$IN2],\"hold_null_ids\":[]}" > $T5/approval.json
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local\",\"rule_ref\":\"x\",\"csv_sha256\":\"$VS\",\"approved_ids\":[$IN1],\"hold_null_ids\":[]}" > $T5/approval1.json
+snap5() { "${S[@]}" -c "select json_build_object('db_size_bytes', pg_database_size(current_database()), 'rows', (select json_agg(t) from (select id, sku, category_id, brand_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_checked_at from dpg_app.products where category_id=1 and brand_id=2 order by id) t))" > $T5/snap.json; }
+vchr() { npx tsx scripts/hita-price-audit/prod-import.mts $T5/v.csv --csv-sha256 "$VS" --candidate-sha "$CAND" --db-snapshot $T5/snap.json --brand inax --state active --voucher-approval "$1" "${@:2}"; }
+snap5; if vchr $T5/approval.json --out $T5/early > $T5/early.out 2>&1; then echo "FAIL: voucher planned before the price lane"; exit 1; fi; grep -q VOUCHER_ROW_NOT_PRICED_YET $T5/early.out; [ ! -e $T5/early ]
+# price lane first (Phase-4 exception plan), then vouchers
+snap4; direct4 --archived-direct-approval $T4/exc.json --out $T4/dp > $T4/dp.json; PDP=$(node -p "require('$T4/dp.json').plan_sha"); "${B4[@]}" -v approved_sha=$PDP -f $T4/dp/batch-0001-apply.sql >/dev/null
+snap5; if vchr $T5/approval.json --out $T5/big > $T5/big.out 2>&1; then echo "FAIL: voucher >= selling price planned"; exit 1; fi; grep -q VOUCHER_NOT_BELOW_SELLING_PRICE $T5/big.out
+if vchr $T5/approval1.json --out $T5/short > $T5/short.out 2>&1; then echo "FAIL: voucher approval with a missing id accepted"; exit 1; fi; grep -q OWNER_APPROVAL_SCOPE_MISMATCH $T5/short.out
+echo "PASS voucher lane stops before the price lane, on an amount >= the selling price, and on an approval whose id set differs"
+sed -i 's/"2500000"/"100000"/' $T5/v.csv; VS=$(sha256sum $T5/v.csv | cut -d' ' -f1)
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local\",\"rule_ref\":\"x\",\"csv_sha256\":\"$VS\",\"approved_ids\":[$IN1,$IN2],\"hold_null_ids\":[]}" > $T5/approval.json
+vchr $T5/approval.json --out $T5/vplan > $T5/vplan.json; PV=$(node -p "require('$T5/vplan.json').plan_sha")
+"${B4[@]}" -v approved_sha=$PV -f $T5/vplan/batch-0001-apply.sql >/dev/null
+[ "$("${S[@]}" -c "select string_agg(sku||':'||regular_price_vnd||':'||online_voucher_amount_vnd||':'||to_char(canonical_price_checked_at at time zone 'utc','YYYY-MM-DD\"T\"HH24:MI'), ' ' order by sku) from dpg_app.products where sku in ('IN-1','IN-2')")" = "IN-1:1500000:100000:2026-11-23T19:00 IN-2:2500000:100000:2026-11-23T19:00" ] || { echo "FAIL voucher state"; exit 1; }
+"${B4[@]}" -v approved_sha=$PV -f $T5/vplan/batch-0001-rollback.sql >/dev/null
+[ "$("${S[@]}" -c "select count(*) from dpg_app.products where sku in ('IN-1','IN-2') and online_voucher_amount_vnd is not null")" = "0" ]
+# rollback ordering safety: the voucher batch moved the row version, so the OLDER price-lane rollback refuses (it never overwrites a newer state); roll back in reverse order with a fresh plan
+if "${B4[@]}" -v approved_sha=$PDP -f $T4/dp/batch-0001-rollback.sql >/dev/null 2>&1; then echo "FAIL: stale price-lane rollback ran over a newer version"; exit 1; fi
+echo "PASS voucher applied after the price lane (price + check time untouched) and rolled back; the older price-lane rollback refuses over the newer version"
 # stop rule: headroom
 node -e 'const s=require(process.argv[1]); s.db_size_bytes=360*1024*1024; require("fs").writeFileSync(process.argv[1],JSON.stringify(s))' $T/snap.json
 if run > $T/stop.json 2>&1; then echo "FAIL: planner did not stop on headroom"; exit 1; fi; grep -q DB_HEADROOM_INSUFFICIENT $T/stop.json
