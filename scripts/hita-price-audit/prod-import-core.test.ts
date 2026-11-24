@@ -1,0 +1,83 @@
+import { describe, expect, it } from 'vitest'
+import { applySql, buildPlan, DB_CEILING_BYTES, goTokenMatches, ledgerJsonl, rollbackSql, sha256, type DbRow, type PlanInput } from './prod-import-core.mts'
+import { REQUIRED_COLUMNS } from './quality-gate-core.mts'
+
+const NOW = new Date('2026-11-24T01:00:00Z'), CAND = 'a'.repeat(40)
+const COLS = [...REQUIRED_COLUMNS, 'product_name', 'reason', 'category']
+const base: Record<string, string> = { dpg_id: '1', sku: 'A-1', is_active: 'true', category: 'thiet-bi-ve-sinh', hita_exact_sku: 'A-1', hita_url: 'https://hita.com.vn/a-1-100.html', regular_price_vnd: '1000000',
+  promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000', currency: 'VND', source_checked_at_utc: '2026-11-23T18:00:00.000Z', price_valid_until: '2026-12-01', voucher_condition: 'Online',
+  status: 'EXACT', review_status: 'FRESH_CRAWL_PENDING_OWNER_REVIEW', product_name: 'A', reason: '' }
+const csv = (rows: Array<Record<string, string>>) => [COLS.join(','), ...rows.map(r => COLS.map(c => `"${(({ ...base, ...r })[c] ?? '').replaceAll('"', '""')}"`).join(','))].join('\r\n') + '\r\n'
+const row = (id: number, o: Record<string, string> = {}) => ({ dpg_id: String(id), sku: `S-${id}`, hita_exact_sku: `S-${id}`, hita_url: `https://hita.com.vn/s-${id}-${id}.html`, ...o })
+const dbRow = (id: number, o: Partial<DbRow> = {}): DbRow => ({ id, sku: `S-${id}`, category_id: 1, is_active: true, version: 3, canonical_price_status: null, ...o })
+function input(rows: Array<Record<string, string>>, over: Partial<PlanInput> = {}, db?: DbRow[]): PlanInput {
+  const text = csv(rows)
+  return { csvText: text, expectedCsvSha256: sha256(text), candidateSha: CAND, inventory: rows.map(r => ({ id: Number(r.dpg_id), sku: r.sku, is_active: (r.is_active ?? 'true') === 'true' })),
+    db: db ?? rows.map(r => dbRow(Number(r.dpg_id), { sku: r.sku, is_active: (r.is_active ?? 'true') === 'true' })), dbSizeBytes: 280 * 1024 * 1024, now: NOW, ...over }
+}
+const R = [row(1), row(2, { status: 'CONTACT', regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', voucher_condition: '' }), row(3, { status: 'NOT_FOUND', hita_exact_sku: '', regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', voucher_condition: '', hita_url: '' }),
+  row(4, { status: 'DISCONTINUED', regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', voucher_condition: '' }), row(5, { status: 'BLOCKED', regular_price_vnd: '', promotional_price_vnd: '', online_voucher_amount_vnd: '', voucher_condition: '', review_status: 'BLOCKED_NOT_NO_PRICE' })]
+
+describe('#470 prod import planner', () => {
+  it('maps each Hita outcome to its own stored status and never writes an unverified row', () => {
+    const p = buildPlan(input(R))
+    expect(p.stopReasons).toEqual([])
+    const by = Object.fromEntries(p.rows.map(r => [r.id, r.after]))
+    expect(by[1]).toEqual({ status: 'PRICE_VERIFIED', regular: 1000000, promo: 900000, voucher: 50000 })
+    expect(by[2]).toEqual({ status: 'CONTACT_VERIFIED', regular: null, promo: null, voucher: null })
+    expect(by[3].status).toBe('NOT_FOUND'); expect(by[4].status).toBe('DISCONTINUED')
+    expect(by[5]).toBeUndefined()                       // BLOCKED: untouched, can never become CONTACT_VERIFIED
+    expect(p.summary.skipped_unverified).toBe(1)
+  })
+  it('is idempotent: a DB already at the target state plans zero changes', () => {
+    const first = buildPlan(input(R)); const db = R.map(r => { const t = first.rows.find(x => x.id === Number(r.dpg_id))
+      return dbRow(Number(r.dpg_id), t ? { canonical_price_status: t.after.status, regular_price_vnd: t.after.regular, promotional_price_vnd: t.after.promo, online_voucher_amount_vnd: t.after.voucher } : {}) })
+    const again = buildPlan(input(R, {}, db)); expect(again.rows).toHaveLength(0); expect(again.summary.unchanged).toBe(4)
+  })
+  it('stops on a CSV checksum mismatch / missing expected checksum / bad candidate sha', () => {
+    expect(buildPlan(input(R, { expectedCsvSha256: 'b'.repeat(64) })).stopReasons.join()).toMatch(/CSV_SHA256_MISMATCH/)
+    expect(buildPlan(input(R, { expectedCsvSha256: '' })).stopReasons).toContain('EXPECTED_CSV_SHA256_MISSING_OR_MALFORMED')
+    expect(buildPlan(input(R, { candidateSha: 'abc' })).stopReasons).toContain('CANDIDATE_SHA_MISSING_OR_MALFORMED')
+  })
+  it('stops when id+SKU+category+is_active disagree with the live row', () => {
+    for (const bad of [dbRow(1, { sku: 'OTHER' }), dbRow(1, { category_id: 2 }), dbRow(1, { is_active: false })]) {
+      const p = buildPlan(input([R[0]], {}, [bad])); expect(p.stopReasons.join()).toMatch(/IDENTITY_MISMATCH id=1/)
+    }
+    expect(buildPlan(input([R[0]], {}, [])).stopReasons.join()).toMatch(/IDENTITY_MISMATCH/)
+  })
+  it('stops on a quality-gate FAIL (voucher >= selling price)', () => {
+    const p = buildPlan(input([row(1, { online_voucher_amount_vnd: '900000' })])); expect(p.stopReasons.join()).toMatch(/QUALITY_GATE_FAIL/)
+  })
+  it('active-only by default; inactive only with an explicit flag', () => {
+    const rows = [row(1), row(2, { is_active: 'false' })]
+    expect(buildPlan(input(rows)).rows.map(r => r.id)).toEqual([1])
+    expect(buildPlan(input(rows, { activeOnly: false })).rows.map(r => r.id)).toEqual([1, 2])
+  })
+  it('size guard: stops before any write when projected size leaves < 8 MiB under the 350 MiB trigger', () => {
+    const p = buildPlan(input(R, { dbSizeBytes: DB_CEILING_BYTES - 8 * 1024 * 1024 - 100 })); expect(p.stopReasons.join()).toMatch(/DB_HEADROOM_INSUFFICIENT/)
+    expect(buildPlan(input(R, { dbSizeBytes: 280 * 1024 * 1024 })).stopReasons).toEqual([])
+  })
+  it('splits into batches and binds every SQL file to the plan sha, with row-count and optimistic-basis checks', () => {
+    const rows = Array.from({ length: 5 }, (_, i) => row(i + 1)); const p = buildPlan(input(rows, { batchSize: 2 }))
+    expect(p.batches.map(b => b.length)).toEqual([2, 2, 1])
+    const sql = applySql(p, 0)
+    expect(sql).toContain(p.planSha); expect(sql).toContain("'PRICE_VERIFIED'::text"); expect(sql).toContain('PRICE_IMPORT_ROWCOUNT_MISMATCH'); expect(sql).toContain('PRICE_IMPORT_PLAN_SHA_MISMATCH')
+    expect(sql).toContain('PRICE_IMPORT_HEADROOM_STOP'); expect(sql).toContain('is not distinct from v.from_regular'); expect(sql).toContain('p.category_id = 1'); expect(sql).toMatch(/begin;[\s\S]*commit;/)
+    expect(sql).toContain('n <> 2')
+  })
+  it('rollback SQL swaps before/after and clears the checked-at stamp; ledger has one line per row', () => {
+    const p = buildPlan(input(R)); const rb = rollbackSql(p, 0)
+    // rollback: the basis (from_*) is the imported state and the target (to_*) is the previous state with the stamp cleared
+    expect(rb).toContain("(1, 'S-1', true, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, null::text, null::bigint, null::bigint, null::bigint, null::timestamptz)")
+    expect(applySql(p, 0)).toContain("(1, 'S-1', true, null::text, null::bigint, null::bigint, null::bigint, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, '2026-11-23T18:00:00.000Z'::timestamptz)")
+    expect(ledgerJsonl(p).trim().split('\n')).toHaveLength(p.rows.length)
+  })
+  it('the Owner GO token must quote candidate:csv:plan exactly and the plan must be free of stop reasons', () => {
+    const p = buildPlan(input(R)); expect(goTokenMatches(p, p.goToken)).toBe(true)
+    expect(goTokenMatches(p, undefined)).toBe(false); expect(goTokenMatches(p, `${CAND}:${p.csvSha256}:${'0'.repeat(64)}`)).toBe(false)
+    const bad = buildPlan(input(R, { candidateSha: 'x' })); expect(goTokenMatches(bad, bad.goToken)).toBe(false)
+  })
+  it('refuses SKUs that are not safe SQL literals', () => {
+    const p = buildPlan(input([row(1, { sku: "A'; drop", hita_exact_sku: "A'; drop" })])); expect(p.stopReasons.join()).toMatch(/IDENTITY_MISMATCH|QUALITY_GATE_FAIL/)
+  })
+})
