@@ -128,6 +128,36 @@ echo "PASS TOTO inactive plan applied independently; rollback of INAX-active res
 echo "PASS per-brand/state rollback leaves the other plans' rows (TOTO inactive) intact"
 # rollback of another state's plan is refused on rows it never applied
 if "${B2[@]}" -v approved_sha=$PII -f $T2/inax-inactive/batch-0001-rollback.sql >/dev/null 2>&1; then echo "FAIL: rollback of a never-applied plan ran"; exit 1; fi
+# ---------- PHASE 3: Owner-accepted historical candidates (single price, source timestamp kept, provenance in the ledger only) ----------
+T3=$T/p3; mkdir -p $T3
+node -e '
+const [dir,id1,id2]=process.argv.slice(1); const fs=require("fs");
+const cols=["brand","dpg_id","dpg_sku","source_sku","category","is_active","match_type","confidence","review_status","historical_regular_price_vnd","historical_promotional_price_vnd","historical_online_voucher_amount_vnd","currency","source_url","source_checked_at_utc","pdp_selling","offer_price","search_sku","matched_hita_product_id","rule_version"];
+const R=(id,sku,price)=>({brand:"INAX",dpg_id:id,dpg_sku:sku,source_sku:sku,category:"thiet-bi-ve-sinh",is_active:"true",match_type:"EXACT_SKU_INDIRECT_BRAND",confidence:"MODERATE",review_status:"HISTORICAL_PRICE_CANDIDATE",historical_regular_price_vnd:String(price),historical_promotional_price_vnd:"",historical_online_voucher_amount_vnd:"",currency:"VND",source_url:`https://hita.com.vn/p-${id}-${id}.html`,source_checked_at_utc:"2026-11-24T03:40:48.253Z",pdp_selling:String(price).replace(/\B(?=(\d{3})+(?!\d))/g,".")+"đ",offer_price:price+".00",search_sku:sku,matched_hita_product_id:String(9000+Number(id)),rule_version:"OWNER_477_OFFLINE"});
+const q=v=>`"${String(v).replaceAll("\"","\"\"")}"`; const rows=[R(id1,"IN-1",1500000),R(id2,"IN-2",2500000)];
+fs.writeFileSync(dir+"/cand.csv",cols.map(q).join(",")+"\r\n"+rows.map(r=>cols.map(c=>q(r[c])).join(",")).join("\r\n")+"\r\n");
+' $T3 $IN1 $IN2
+CSHA=$(sha256sum $T3/cand.csv | cut -d' ' -f1)
+echo "{\"approved_by\":\"Owner\",\"approval_ref\":\"local-test\",\"rule_ref\":\"#443 comment 7127072994\",\"candidate_csv_sha256\":\"$CSHA\",\"approved_ids\":[$IN1]}" > $T3/approval.json
+snap_brand2() { "${S[@]}" -c "select json_build_object('db_size_bytes', pg_database_size(current_database()), 'rows', (select json_agg(t) from (select id, sku, category_id, brand_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_checked_at from dpg_app.products where category_id=1 and brand_id=2 order by id) t))" > $T3/snap.json; }
+snap_brand2
+cand() { npx tsx scripts/hita-price-audit/prod-import.mts $T3/cand.csv --csv-sha256 "$CSHA" --candidate-sha "$CAND" --db-snapshot $T3/snap.json --now 2026-11-25T01:00:00Z --brand inax --state active --owner-candidates "$1" "${@:2}"; }
+echo '{"approved_by":"Owner","approval_ref":"x","rule_ref":"x","candidate_csv_sha256":"'$CSHA'","approved_ids":[]}' > $T3/none.json
+if cand $T3/none.json --out $T3/none > $T3/none.out 2>&1; then if grep -q '"to_change": 0' $T3/none.out; then :; fi; fi
+[ ! -e $T3/none/batch-0001-apply.sql ]; echo "PASS an approval without ids plans nothing (no SQL emitted)"
+cand $T3/approval.json --out $T3/plan > $T3/plan.json
+PC=$(node -p "require('$T3/plan.json').plan_sha")
+node -e 'const r=require(process.argv[1]); if(r.to_change!==1||r.not_approved!==1||r.price_basis!=="OWNER_ACCEPTED_CANDIDATE")process.exit(1)' $T3/plan.json
+grep -q '"price_basis":"OWNER_ACCEPTED_CANDIDATE"' $T3/plan/ledger.jsonl; grep -q '"not_direct_hita_verified":true' $T3/plan/ledger.jsonl
+echo "PASS candidate plan = only the Owner-approved id; the other candidate is left alone; ledger carries provenance (not direct Hita verified)"
+B3=("${PSQL[@]}" -U dpg_operator -d "$DB")
+"${B3[@]}" -v approved_sha=$PC -f $T3/plan/batch-0001-apply.sql >/dev/null
+[ "$("${S[@]}" -c "select canonical_price_status||':'||regular_price_vnd||':'||coalesce(promotional_price_vnd::text,'-')||':'||coalesce(online_voucher_amount_vnd::text,'-')||':'||to_char(canonical_price_checked_at at time zone 'utc','YYYY-MM-DD\"T\"HH24:MI:SS.MS') from dpg_app.products where sku='IN-1'")" = "PRICE_VERIFIED:1500000:-:-:2026-11-24T03:40:48.253" ] || { echo "FAIL candidate state"; exit 1; }
+[ "$("${S[@]}" -c "select canonical_price_status is null and regular_price_vnd is null from dpg_app.products where sku='IN-2'")" = "t" ]
+echo "PASS candidate applied: regular price only, promo/voucher NULL, checked-at = SOURCE time (not now); unapproved SKU untouched"
+"${B3[@]}" -v approved_sha=$PC -f $T3/plan/batch-0001-rollback.sql >/dev/null
+[ "$("${S[@]}" -c "select canonical_price_status is null and regular_price_vnd is null and canonical_price_checked_at is null from dpg_app.products where sku='IN-1'")" = "t" ]
+echo "PASS candidate rollback restores the exact prior (empty) state"
 # stop rule: headroom
 node -e 'const s=require(process.argv[1]); s.db_size_bytes=360*1024*1024; require("fs").writeFileSync(process.argv[1],JSON.stringify(s))' $T/snap.json
 if run > $T/stop.json 2>&1; then echo "FAIL: planner did not stop on headroom"; exit 1; fi; grep -q DB_HEADROOM_INSUFFICIENT $T/stop.json

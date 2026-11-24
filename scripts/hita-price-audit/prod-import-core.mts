@@ -9,14 +9,16 @@ export const DB_CEILING_BYTES = 367_001_600            // leo538 trigger: 350 Mi
 export const SAFETY_MARGIN_BYTES = 8 * 1024 * 1024     // never plan to end closer than this to the ceiling
 export const BYTES_PER_CHANGED_ROW = 2_115             // measured non-HOT update cost on products (heap+indexes), conservative
 export const DEFAULT_BATCH_SIZE = 200
-export type CanonStatus = 'PRICE_VERIFIED' | 'CONTACT_VERIFIED' | 'UNRESOLVED' | 'NOT_FOUND' | 'DISCONTINUED'
+export type CanonStatus = 'PRICE_VERIFIED' | 'CONTACT_VERIFIED' | 'UNRESOLVED' | 'NOT_FOUND' | 'DISCONTINUED' | 'REVERIFY_REQUIRED'   // REVERIFY_REQUIRED is only ever a PRIOR state here (Admin 2C); the planner never writes it
 export type Canon = { status: CanonStatus | null; regular: number | null; promo: number | null; voucher: number | null }
 export type DbRow = { id: number; sku: string; category_id: number; brand_id?: number | null; is_active: boolean; version?: number; canonical_price_status?: string | null
   regular_price_vnd?: number | string | null; promotional_price_vnd?: number | string | null; online_voucher_amount_vnd?: number | string | null
   canonical_price_checked_at?: string | null }
 /** Full prior state of a row: restored exactly by rollback (status, 3 prices, checked-at) and used as the optimistic basis (+ version). */
 export type PlanRow = { id: number; sku: string; is_active: boolean; klass: string; before: Canon; after: Canon; beforeCheckedAt: string | null; version: number
-  checkedAt: string; sourceUrl: string }
+  checkedAt: string; sourceUrl: string
+  /** Where the price comes from when it is NOT a direct Hita-verified crawl row (Owner-accepted historical candidate): written to the ledger only. */
+  provenance?: Record<string, unknown> }
 /** Production identity the generated SQL refuses to run anywhere else (read-only audit 2026-11-24). Not a secret, not an approval. */
 export const PRODUCTION_TARGET = { projectName: 'dongphugia-runtime', region: 'ap-southeast-1', environment: 'preview', ceilingBytes: DB_CEILING_BYTES } as const
 /** Immutable brand identities (dpg_app.brands id + slug, read-only audit 2026-11-24: sanitary toto 2,057 active + 2,384 inactive; inax 1,653 active + 437 inactive).
@@ -29,14 +31,17 @@ export type Plan = {
   /** candidate:csv:plan — an IDENTITY string for the manifest, never an authorisation: only the Owner's GO authorises execution. */
   releaseBinding: string
   summary: Record<string, unknown>; stopReasons: string[]; rows: PlanRow[]; batches: PlanRow[][]
+  /** HITA_REVIEW = direct Hita EXACT crawl row (default). OWNER_ACCEPTED_CANDIDATE = Owner-approved single historical price (never labelled as direct Hita-verified). */
+  source?: 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE'
+  approvalRef?: string
 }
 
-const num = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number.isSafeInteger(Number(v)) ? Number(v) : NaN)
-const canonOf = (r: DbRow): Canon => ({ status: (r.canonical_price_status ?? null) as CanonStatus | null, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) })
-const same = (a: Canon, b: Canon) => a.status === b.status && a.regular === b.regular && a.promo === b.promo && a.voucher === b.voucher
+export const num = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number.isSafeInteger(Number(v)) ? Number(v) : NaN)
+export const canonOf = (r: DbRow): Canon => ({ status: (r.canonical_price_status ?? null) as CanonStatus | null, regular: num(r.regular_price_vnd), promo: num(r.promotional_price_vnd), voucher: num(r.online_voucher_amount_vnd) })
+export const same = (a: Canon, b: Canon) => a.status === b.status && a.regular === b.regular && a.promo === b.promo && a.voucher === b.voucher
 export const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
-const SKU_SAFE = /^[\x21-\x7e]{1,100}$/                // printable ASCII, no space: keeps generated SQL literal-safe
-const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
+export const SKU_SAFE = /^[\x21-\x7e]{1,100}$/                // printable ASCII, no space: keeps generated SQL literal-safe
+export const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 
 // Hita class -> stored status. Unverified outcomes (NOT_CRAWLED / BLOCKED / UNKNOWN) are NEVER written: they stay NULL
 // (price hidden, "cần liên hệ") and can never become CONTACT_VERIFIED (Owner decision #466).
@@ -145,7 +150,7 @@ function batchSql(plan: Plan, idx: number, direction: 'apply' | 'rollback'): str
   }).join(',\n    ')
   const T = PRODUCTION_TARGET
   return `-- #470 import batch ${idx + 1}/${plan.batches.length} (${direction}) — plan ${plan.planSha}
--- DRAFT. Scope: brand ${plan.brand} (id ${plan.brandId}) x is_active=${plan.state === 'active'} only. Runs ONLY after the Owner GO that names candidate ${plan.candidateSha}, CSV ${plan.csvSha256}, plan ${plan.planSha}.
+-- DRAFT. Price basis: ${plan.source ?? 'HITA_REVIEW'}${plan.approvalRef ? ` (approval ${plan.approvalRef})` : ''}. Scope: brand ${plan.brand} (id ${plan.brandId}) x is_active=${plan.state === 'active'} only. Runs ONLY after the Owner GO that names candidate ${plan.candidateSha}, CSV ${plan.csvSha256}, plan ${plan.planSha}.
 -- The plan SHA below binds this file to that reviewed plan; it is NOT an authorisation by itself.
 --   psql -v ON_ERROR_STOP=1 -v approved_sha=${plan.planSha} -f <this file>   (as the Production operator postgres)
 begin;
@@ -194,7 +199,8 @@ export const rollbackSql = (plan: Plan, idx: number) => batchSql(plan, idx, 'rol
 
 /** Ledger = the full before/after of every planned row; the offline rollback source. One JSON object per line. */
 export const ledgerJsonl = (plan: Plan) => plan.batches.flatMap((b, i) => b.map(r => JSON.stringify({ batch: i + 1, id: r.id, sku: r.sku, brand: plan.brand, brand_id: plan.brandId, state: plan.state, klass: r.klass, version_before: r.version,
-  before: r.before, before_checked_at: r.beforeCheckedAt, after: r.after, checked_at: r.checkedAt, source_url: r.sourceUrl }))).join('\n') + '\n'
+  before: r.before, before_checked_at: r.beforeCheckedAt, after: r.after, checked_at: r.checkedAt, source_url: r.sourceUrl,
+  price_basis: plan.source ?? 'HITA_REVIEW', ...(r.provenance ? { provenance: r.provenance } : {}) }))).join('\n') + '\n'
 
 /** Identity check only (does the text quoted in the Owner GO match this exact plan?). It authorises nothing: the GO itself does. */
 export function releaseBindingMatches(plan: Plan, quoted: string | undefined) { return !!quoted && plan.stopReasons.length === 0 && quoted === plan.releaseBinding }
