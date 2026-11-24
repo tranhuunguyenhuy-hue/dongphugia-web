@@ -1,0 +1,18 @@
+{
+  "file": "inax-inactive/status-review.csv",
+  "mode": "import-review",
+  "sha256": "65546c08c84113fcaedd5d643d8de52aadfa0637fad49d356f6e1688696eba7c",
+  "gate_run_at_utc": "2026-11-24T09:40:51.199Z",
+  "max_age_hours": 24,
+  "inventory_rows": 437,
+  "rows": 1,
+  "file_issues": [],
+  "by_class": {
+    "CONTACT_VERIFIED": 1
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 0,
+  "price_verified_with_warnings": 0,
+  "fail_by_code": {},
+  "warn_by_code": {}
+}

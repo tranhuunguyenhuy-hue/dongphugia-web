@@ -1,0 +1,32 @@
+{
+  "brand": "inax",
+  "state": "inactive",
+  "total": 437,
+  "fresh_price_verified_this_run": 0,
+  "held_prices": 400,
+  "source_only_rows": 1,
+  "candidate_rows": 392,
+  "owner_candidate_approval": "NOT_GRANTED",
+  "ready_to_import": false,
+  "statuses": {
+    "UNRESOLVED": 36,
+    "REGULAR": 400,
+    "CONTACT": 1
+  },
+  "holds": {
+    "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 392,
+    "HITA_DIRECT_PASSED_ARCHIVED_GATE": 8
+  },
+  "sha256": {
+    "status-review.csv": "65546c08c84113fcaedd5d643d8de52aadfa0637fad49d356f6e1688696eba7c",
+    "candidate-review.csv": "217bc6a5bb9bf5f0ccee5a70e20f502368f259b0448d447d7fd6c768b1f1f9d7"
+  },
+  "status_only_quality_gate": {
+    "rows": 1,
+    "fails": 0,
+    "warns": 0,
+    "price_rows": 0,
+    "sha256": "aff75986d9f405e3c84de20a1525f0995e6fe3504a81ad9c44bdb9ea285f8883"
+  },
+  "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+}
