@@ -1,0 +1,25 @@
+{
+  "file": "codex/448-toto-hita-review@a361612a7cd49deeadccae37b623daaca5fe9126:docs/ops/hita-448/toto/toto_prices_review.csv",
+  "mode": "import-review",
+  "sha256": "bda8301a86bc9f3d9c9ca01f7297c3183ee6efdcf82f1851b2757580d63ccf26",
+  "gate_run_at_utc": "2026-11-24T04:09:15.000Z",
+  "max_age_hours": 24,
+  "inventory_rows": 4441,
+  "rows": 4441,
+  "file_issues": [],
+  "by_class": {
+    "AMBIGUOUS_UNVERIFIED": 48,
+    "CONTACT_VERIFIED": 960,
+    "DISCONTINUED_REVIEW": 307,
+    "NOT_FOUND_CANDIDATE_DELETE": 2,
+    "PRICE_VERIFIED": 2469,
+    "UNRESOLVED": 655
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 28,
+  "price_verified_with_warnings": 28,
+  "fail_by_code": {},
+  "warn_by_code": {
+    "LARGE_VOUCHER_REVIEW": 28
+  }
+}
