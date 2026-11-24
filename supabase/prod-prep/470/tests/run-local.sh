@@ -23,6 +23,11 @@ echo "PASS 001 refuses an empty approval"
 if "${M[@]}" -f 001_canonical_price_columns.sql >/dev/null 2>&1; then echo "FAIL: 001 ran on a TEST contract"; exit 1; fi
 "${S[@]}" -c "update dpg_control.target_contract set environment='preview'"
 echo "PASS 001 refuses a preview_synthetic (TEST) contract"
+"${S[@]}" -c "update dpg_control.target_contract set project_name='dongphugia-staging'"
+for f in 001_canonical_price_columns 002_canonical_price_grants 003_runtime_order_quote_canonical; do
+  if "${M[@]}" -f $f.sql >/dev/null 2>&1; then echo "FAIL: $f ran on a non-Production project identity"; exit 1; fi; done
+"${S[@]}" -c "update dpg_control.target_contract set project_name='dongphugia-runtime'"
+echo "PASS 001/002/003 refuse any other project identity (exact project/region/environment/ceiling, not just 'not TEST')"
 # --- 001 + 002 (idempotent) ---
 "${M[@]}" -f 001_canonical_price_columns.sql; "${M[@]}" -f 001_canonical_price_columns.sql
 "${M[@]}" -f 002_canonical_price_grants.sql;  "${M[@]}" -f 002_canonical_price_grants.sql
