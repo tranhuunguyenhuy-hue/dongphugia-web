@@ -29,7 +29,7 @@ Còn lại 3 nhóm ngành khác + thương hiệu sanitary khác giữ nguyên l
 | 0 | Sao lưu (mục 5) + đọc headroom | — | — |
 | 1 | Cột + CHECK | `001_canonical_price_columns.sql` | `001_…_rollback.sql` (từ chối nếu còn dữ liệu) |
 | 2 | Grants cột tối thiểu | `002_canonical_price_grants.sql` | `002_…_rollback.sql` |
-| 3 | Hàm order/quote sanitary-only (guard md5 baseline) | `003_runtime_order_quote_canonical.sql` | `003_…_rollback.sql` (khôi phục baseline, kiểm md5) |
+| 3 | **HOÃN (không thuộc release)** — hàm order/quote sanitary-only (guard md5 baseline) | `003_runtime_order_quote_canonical.sql` | `003_…_rollback.sql` (khôi phục baseline, kiểm md5) |
 | 4 | Import 10 batch (mỗi batch 1 transaction, guard plan SHA, row-count, stop rule 350 MiB − 8 MiB) | `prod-import.mts --out` → `batch-NNNN-apply.sql` | `batch-NNNN-rollback.sql` + `ledger.jsonl` |
 | 5 | Đối soát: đếm theo status, kiểm CHECK, dung lượng | truy vấn đọc | — |
 | 6 | Deploy Worker/Admin SPA candidate (Owner duyệt riêng) | workflow Production hiện có | Worker rollback (không hoàn tác SQL) |
@@ -66,9 +66,9 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 | Worker CŨ (rollback Worker), DB đã import | OK — Worker cũ bỏ qua cột mới; Public quay lại không có giá |
 | SQL 002 rollback khi Worker mới còn chạy, cờ BẬT | OK — fail-safe (đã test); nên tắt cờ trước |
 | SQL 001 rollback | Chỉ khi đã xoá hết giá trị (`batch-*-rollback.sql`); sau đó Worker mới cờ TẮT/BẬT đều chạy (đã test) |
-Thứ tự rollback khuyến nghị: **lane M4 `canonical_pricing=off` (hoặc `wrangler rollback <version>`) → batch rollback (chỉ dòng đã apply, từ chối dòng đã bị sửa sau đó) → 003 → 002 → (nếu cần) Edge Function về version trước → 001**. Rollback Worker không hoàn tác SQL và ngược lại.
+Rollback độc lập từng thành phần (Worker/cờ, dữ liệu, quyền cột, Edge Function không xoá được → thôi thấy cột qua P470-002 rollback, schema): xem `release-manifest.md` §5.
 
-**Thứ tự cutover (sửa theo TL review 24/11):** xem `release-manifest.md` mục 3–5 — **Owner GO có TRƯỚC mọi thao tác hosted** (GO-1 backup/export; GO-2 cửa sổ release). Trong GO-2: preflight → `001` → deploy Edge Function `admin-api` (lane `m4-production-function-deploy.yml`, phải trước 002) → `002` → snapshot + planner + import + đối soát → `003` → merge candidate vào `main` → lane **`m4-production-admin-release.yml`** (combined Public+Admin, PostgreSQL; **không** dùng `v1-worker-release.yml` vì đó là lane Public-only, guard từ chối thay Worker có Admin) `verify` rồi `publish` với `canonical_pricing=off` → `publish` lại cùng SHA với `canonical_pricing=on` → smoke/giám sát. Cờ chỉ đi qua input `canonical_pricing` của lane (mặc định off, ghi vào artifact, kiểm identity trước deploy và binding sau deploy); không sửa biến Worker bằng tay (deploy sau sẽ xoá).
+**Thứ tự cutover:** xem `release-manifest.md` §3–§5 (cổng phê duyệt A–E, trình tự thực thi, rollback độc lập). Tóm tắt: merge (quyền riêng) → backup/export (GO-B) → P470-001/002 (GO-C) → snapshot đọc-only + planner → import (GO-D, plan SHA pin trước apply) → Edge Function → lane M4 `publish canonical_pricing=off` → `on` (GO-E). **P470-003 hoãn** (manifest §6).
 
 **Phát hiện độc lập (cần quyết định riêng):** với ACL thật của `dpg_public_catalogue` (thiếu `spec_definitions.key`, `spec_options.slug`) truy vấn sibling của `main` (#432) báo `permission denied` ⇒ PDP có `variant_group` sẽ 5xx nếu phát hành từ `main`. #476 làm "không có sibling" khi gặp 42501; muốn có bộ chọn biến thể thì cần grant #432 (Owner đã dặn không phát hành kèm #432). Đồng thời lọc khoảng giá (`price_min/max`) trên PLP vẫn trả rỗng như hiện nay.
 
@@ -93,4 +93,4 @@ Thứ tự rollback khuyến nghị: **lane M4 `canonical_pricing=off` (hoặc `
 Public: PDP 3 SKU mẫu mỗi trạng thái (PRICE_VERIFIED có promo+voucher, CONTACT_VERIFIED, UNRESOLVED/NULL) hiển thị đúng; PLP sắp xếp giá; schema.org `Offer` chỉ khi có giá; không SKU sanitary nào hiện giá legacy. Admin: đăng nhập, sửa giá 1 SKU TEST-owned rồi hoàn tác (status chuyển PRICE_VERIFIED/NULL). Quote: tạo báo giá 1 SKU canonical + 1 SKU NULL (snapshot không dùng legacy). Order (nếu bật): voucher × qty đúng, replay idempotent. Theo dõi 24h: log lỗi `PRICE_*`, `check_violation`, dung lượng DB < 350 MiB, tỉ lệ 5xx/p95, số báo giá/đơn.
 
 ## 9. Owner GO phải nêu
-Candidate SHA cuối · CSV sha256 · plan SHA · danh sách SQL (001–003, batch) · rollback · headroom đo lại ngay trước GO · xác nhận sao lưu đã tạo · quyết định mục 7 · cửa sổ thực hiện. Sau đó mới dừng ở ngưỡng này; mọi thứ khác không được chạy.
+Candidate SHA cuối · CSV sha256 · plan SHA · danh sách SQL (P470-001/002, batch; 003 hoãn) · rollback · headroom đo lại ngay trước GO · xác nhận sao lưu đã tạo · quyết định mục 7 · cửa sổ thực hiện. Sau đó mới dừng ở ngưỡng này; mọi thứ khác không được chạy.
