@@ -1,0 +1,109 @@
+{
+  "source_head": "c23331e466a55bc064d31a2b37c4cb7b68369c53",
+  "source_pins": {
+    "inax_exceptions.csv": "068609a17166033278ac4b92150d5f554dbf67fb4e1dab98b409703212a9fdf2",
+    "inax_historical_candidates.csv": "99e15544def449a7b6fdd39a1ff084a178534636dcc7dd6b590230fd771f489c",
+    "inax_inactive_exceptions.csv": "4af14904beaccfe12c205b948cd69b59f56d495d9b1fbe99f46ef782de5b90de",
+    "inax_inactive_historical_candidates.csv": "b5c550f8e3f4e8d9524552973922cf6b8b44447c94da2e207a117ab105770091",
+    "inax_inactive_review.csv": "58c1e47afa77b1e9e6218fcefe41dfc15a4d1ad3afc1b065d11b98ff1b5ad6ac",
+    "inax_review.csv": "5fd1f745b883f15d777369e3106168c7aa72131791e74c049ba765d4e64877b3",
+    "owner_price_warnings.csv": "1f54ce92a9c40b79ff5b3b6f0a2cbb674b0b066caa370b6781d8341654cc6a15",
+    "refresh_queue.csv": "de7fe1fb2df5b1afd92a45f661a4c3b52f1a01e8550ef9cc17e084ab0a6418ae",
+    "toto_exceptions.csv": "f61b60c5001d93041d44d506603a4e2b57e2e82b35767932f373cd31ed19bde9",
+    "toto_historical_candidates.csv": "ea06e8058da30e6b3e8cfa93fa546c4f90fd7fbce67941952e54e8cebedf4665",
+    "toto_inactive_candidate_sample.csv": "170a4e8b82fc4e56b10f2f1116c2e91f6d6c51fbb7fce2ce4acc3489831acbcc",
+    "toto_inactive_evidence_review.csv": "c83849c35bc238acfc1cc9e48e0092bb5c48b70935d5d97e1ad12939f94d7154",
+    "toto_inactive_exceptions.csv": "dbfc01fb53d3627ddd5dbb9e3355a72543257979f2d68b33479af2f272429a88",
+    "toto_inactive_historical_candidates.csv": "a5b79f041cb2d24ac031f195abd728f0eecd5e775736b8097f9284fdd0a387c3",
+    "toto_inactive_review.csv": "d29a135dcbfc83d6850f355ed4011a1d2bd9a1c80f56089baeac69996d7524ff",
+    "toto_inactive_voucher_review.csv": "849a68d7bf2d64eafe719ba44b77c7be2c43dd41527c2f221e982d7e56bbf79f",
+    "toto_review.csv": "755426b6bb9364abb70a8e0465f97dbaf193eb052392b8a6c6e9b0730ed75b67",
+    "audit-summary.json": "d7010896a48f8f37db2b07521365791ef56efa12fb85174f3d16e0697cb6a741",
+    "inax_inactive_quality_gate.json": "89df76de2d916c5ab5d746a650ee3b7950b0ede250307f2b2c3a7f089143e967",
+    "inax_quality_gate.json": "a9ece7b6d7b64f8313c2d1ed8345dea13873b546fce30d5a76b9b84fb9b5917a",
+    "toto_inactive_quality_gate.json": "579ca3b22e193cb9e51a6ae64f7d20d66807e88eb04dd3628a0d87a88ba3b469",
+    "toto_quality_gate.json": "48b25137a27a5ed3aa95ac03421105b0a4ba9a2b24cfeaa45dec6a7f0c900dda"
+  },
+  "archived_input_sha256": {
+    "toto448/full-inventory.json": "a289fba405507c532d7e1ba5566de1aede04b24a4ea946d65fcd43b699db0a13",
+    "toto448/batch/prices.json": "2f02defe8161003676c7bd2982fa581b958c74f4c88c77e3b192451c08d9269b",
+    "toto448/batch/checkpoint.jsonl": "19c44c7921a41dfe0ec104d58a130ee2655d9c9d3172eb6dae44ab419d7c82d4",
+    "inax448/full-inventory.json": "3e00e01dfbe45ad2e6a5b6630e0e98dda12c36f399296b76f6ff49614932e1bb",
+    "inax448/batch/prices.json": "96bffa9d4d1e4fa72ff8a3095d94ed7e6c7c5d66bace4a694a0bf588bb4c9298",
+    "inax448/batch/checkpoint.jsonl": "f50df0d867f645843b54a8d6705a895ff6e931bda7b5fd83917254c72e79a888"
+  },
+  "checked_utc": "2026-11-24T09:15:23.817911+00:00",
+  "review_targets_unique": 1915,
+  "source_sku_total": 6531,
+  "by_cohort": {
+    "TOTO_active": {
+      "sku": 2057,
+      "baseline_priced": 1543,
+      "price_verified_at_gate": 1543,
+      "stale": 0,
+      "warning_rows": 28,
+      "source_quote": 283,
+      "unresolved_source": 181,
+      "refresh_required": 1630,
+      "candidates": 87,
+      "INSUFFICIENT_EVIDENCE": 20,
+      "FULL_BRAND_MODEL_CONFIGURATION_NOT_CORROBORATED": 20,
+      "voucher_proposed_null": 28,
+      "ACCEPT_PROPOSED": 67,
+      "EXACT_SKU_PDP_OFFER_VND_FULL_SLUG_TITLE_MATCH": 63,
+      "EXACT_SKU_SAME_COMPATIBILITY_MODEL_REORDERED": 4
+    },
+    "TOTO_inactive": {
+      "sku": 2384,
+      "baseline_priced": 926,
+      "price_verified_at_gate": 926,
+      "stale": 0,
+      "warning_rows": 1,
+      "source_quote": 677,
+      "unresolved_source": 522,
+      "refresh_required": 1319,
+      "candidates": 393,
+      "ACCEPT_PROPOSED": 393,
+      "EXACT_SKU_PDP_OFFER_VND_FULL_SLUG_TITLE_MATCH": 393,
+      "voucher_proposed_null": 1
+    },
+    "INAX_active": {
+      "sku": 1653,
+      "baseline_priced": 852,
+      "price_verified_at_gate": 305,
+      "stale": 547,
+      "warning_rows": 2,
+      "source_quote": 8,
+      "unresolved_source": 783,
+      "refresh_required": 1319,
+      "candidates": 467,
+      "ACCEPT_PROPOSED": 467,
+      "EXACT_SKU_PDP_OFFER_VND_FULL_SLUG_TITLE_MATCH": 467
+    },
+    "INAX_inactive": {
+      "sku": 437,
+      "baseline_priced": 8,
+      "price_verified_at_gate": 8,
+      "stale": 0,
+      "warning_rows": 0,
+      "source_quote": 1,
+      "unresolved_source": 428,
+      "refresh_required": 400,
+      "candidates": 392,
+      "ACCEPT_PROPOSED": 392,
+      "EXACT_SKU_PDP_OFFER_VND_FULL_SLUG_TITLE_MATCH": 392
+    }
+  },
+  "candidate_counts": {
+    "INSUFFICIENT_EVIDENCE": 20,
+    "ACCEPT_PROPOSED": 1319
+  },
+  "candidate_exceptions": {
+    "FULL_BRAND_MODEL_CONFIGURATION_NOT_CORROBORATED": 20
+  },
+  "warning_counts": {
+    "SUPPORTED_HISTORICAL_AMOUNT": 26,
+    "SUSPECT_AVAILABILITY_QTY_ZERO": 3,
+    "DEEP_DISCOUNT_NEEDS_FRESH_PRICE_AND_TERMS": 2
+  }
+}
