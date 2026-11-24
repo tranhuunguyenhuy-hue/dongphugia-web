@@ -48,10 +48,31 @@ describe('#470 prod import planner', () => {
   it('stops on a quality-gate FAIL (voucher >= selling price)', () => {
     const p = buildPlan(input([row(1, { online_voucher_amount_vnd: '900000' })])); expect(p.stopReasons.join()).toMatch(/QUALITY_GATE_FAIL/)
   })
-  it('active-only by default; inactive only with an explicit flag', () => {
+  it('one plan = one state: active by default; the inactive set only via an explicit, separate plan; is_active never changes', () => {
     const rows = [row(1), row(2, { is_active: 'false' })]
-    expect(buildPlan(input(rows)).rows.map(r => r.id)).toEqual([1])
-    expect(buildPlan(input(rows, { activeOnly: false })).rows.map(r => r.id)).toEqual([1, 2])
+    const active = buildPlan(input(rows)), inactive = buildPlan(input(rows, { state: 'inactive' }))
+    expect(active.rows.map(r => r.id)).toEqual([1]); expect(inactive.rows.map(r => r.id)).toEqual([2])
+    expect(active.planSha).not.toBe(inactive.planSha)                                    // independent checksums
+    expect(active.summary).toMatchObject({ state: 'active', skipped_other_state: 1 }); expect(inactive.summary).toMatchObject({ state: 'inactive', skipped_other_state: 1 })
+    expect(applySql(active, 0)).toContain('p.is_active = true and p.is_active = v.is_active'); expect(applySql(inactive, 0)).toContain('p.is_active = false and p.is_active = v.is_active')
+    const setClause = (s: string) => s.slice(s.indexOf('update dpg_app.products p set'), s.indexOf('from (values'))
+    expect(setClause(applySql(inactive, 0))).not.toContain('is_active'); expect(setClause(rollbackSql(inactive, 0))).not.toContain('is_active')   // the update never writes is_active
+    expect(rollbackSql(inactive, 0)).toContain('p.is_active = false')
+    expect(buildPlan(input(rows, { state: 'both' as never })).stopReasons).toContain('STATE_INVALID')
+  })
+  it('one plan = one brand: INAX and TOTO plans are independent, pinned to their own id+slug, and never mix rows', () => {
+    const rows = [row(1), row(2)]
+    const db = [dbRow(1, { brand_id: 1 }), dbRow(2, { brand_id: 2 })]
+    const toto = buildPlan(input(rows, {}, db)), inax = buildPlan(input(rows, { brand: 'inax' }, db))
+    expect(toto.stopReasons.join()).toMatch(/IDENTITY_MISMATCH id=2/)                     // an INAX row inside a TOTO plan stops it
+    expect(inax.stopReasons.join()).toMatch(/IDENTITY_MISMATCH id=1/)
+    const onlyInax = buildPlan(input([row(2)], { brand: 'inax' }, [dbRow(2, { brand_id: 2 })]))
+    expect(onlyInax.stopReasons).toEqual([]); expect(onlyInax.summary).toMatchObject({ brand: 'inax', brand_id: 2 })
+    const sql = applySql(onlyInax, 0)
+    expect(sql).toContain("id = 2 and slug = 'inax'"); expect(sql).toContain('p.brand_id = 2')
+    expect(onlyInax.planSha).not.toBe(buildPlan(input([row(2)], {}, [dbRow(2, { brand_id: 1 })])).planSha)
+    expect(buildPlan(input(rows, { brand: 'american-standard' as never })).stopReasons).toContain('BRAND_NOT_APPROVED')
+    expect(JSON.parse(ledgerJsonl(onlyInax).trim())).toMatchObject({ brand: 'inax', brand_id: 2, state: 'active' })
   })
   it('size guard: stops before any write when projected size leaves < 8 MiB under the 350 MiB trigger', () => {
     const p = buildPlan(input(R, { dbSizeBytes: DB_CEILING_BYTES - 8 * 1024 * 1024 - 100 })); expect(p.stopReasons.join()).toMatch(/DB_HEADROOM_INSUFFICIENT/)
@@ -84,7 +105,7 @@ describe('#470 prod import planner', () => {
     expect(buildPlan(input([R[0]], {}, [dbRow(1, { brand_id: 2 })])).stopReasons.join()).toMatch(/IDENTITY_MISMATCH id=1/)
     expect(buildPlan(input([R[0]], {}, [dbRow(1, { version: undefined })])).stopReasons.join()).toMatch(/IDENTITY_MISMATCH/)
     const sql = applySql(buildPlan(input(R)), 0)
-    for (const s of ["p.brand_id = 1", "p.version = v.from_version", "p.canonical_price_checked_at is not distinct from v.from_checked", "project_name = 'dongphugia-runtime'",
+    for (const s of ["p.brand_id = 1", "id = 1 and slug = 'toto'", "p.version = v.from_version", "p.canonical_price_checked_at is not distinct from v.from_checked", "project_name = 'dongphugia-runtime'",
       "region = 'ap-southeast-1'", "environment = 'preview'", 'PRICE_IMPORT_BRAND_IDENTITY_CHANGED', 'PRICE_IMPORT_SCHEMA_001_MISSING']) expect(sql).toContain(s)
   })
   it('never overwrites a newer DB value (e.g. an Admin edit after the crawl): row skipped and listed', () => {
