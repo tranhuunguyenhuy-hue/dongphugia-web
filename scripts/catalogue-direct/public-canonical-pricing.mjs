@@ -23,21 +23,23 @@ export function inCanonicalScope(input, scope) {
     && Array.isArray(scope.brands) && brand !== null && scope.brands.includes(brand)
 }
 
+export const canonicalUnverifiedPricing = () => unpriced(CANONICAL_LABEL_UNVERIFIED)
 const unpriced = label => ({
   price: null, original_price: null, list_price: null, sale_price: null, online_discount_amount: null, final_online_price: null,
   price_display: label, is_promotion: false, price_provenance: CANONICAL_PROVENANCE,
 })
 
 /** Returns the 9 public price keys. Throws (build stops) on stale or inconsistent verified data: a wrong price must never ship silently. */
-export function canonicalPublicPricing(input, { now = new Date(), maxAgeMs = DEFAULT_MAX_AGE_MS } = {}) {
+export function canonicalPublicPricing(input, { now = new Date(), maxAgeMs = DEFAULT_MAX_AGE_MS, requireFresh = true } = {}) {
   const status = input.canonical_price_status ?? null
   if (status === 'CONTACT_VERIFIED') return unpriced(CANONICAL_LABEL_CONTACT)
   if (status !== 'PRICE_VERIFIED') return unpriced(CANONICAL_LABEL_UNVERIFIED)
   const regular = vnd(input.regular_price_vnd), promo = vnd(input.promotional_price_vnd), voucher = vnd(input.online_voucher_amount_vnd)
   if (regular === null || [regular, promo, voucher].some(Number.isNaN)) throw new Error('PUBLIC_CANONICAL_PRICE_INVALID')
   if ((promo !== null && promo >= regular) || (voucher !== null && voucher >= (promo ?? regular))) throw new Error('PUBLIC_CANONICAL_PRICE_INVALID')
+  // The live read path cannot see canonical_price_checked_at (minimum grants); freshness there is the release process, not the reader.
   const checked = input.canonical_price_checked_at instanceof Date ? input.canonical_price_checked_at.getTime() : Date.parse(input.canonical_price_checked_at ?? '')
-  if (!Number.isFinite(checked) || checked > now.getTime() + 5 * 60_000 || now.getTime() - checked > maxAgeMs) throw new Error('PUBLIC_CANONICAL_PRICE_STALE')
+  if (requireFresh && (!Number.isFinite(checked) || checked > now.getTime() + 5 * 60_000 || now.getTime() - checked > maxAgeMs)) throw new Error('PUBLIC_CANONICAL_PRICE_STALE')
   const selling = promo ?? regular
   return {
     price: selling, original_price: promo === null ? null : regular, list_price: regular, sale_price: promo,

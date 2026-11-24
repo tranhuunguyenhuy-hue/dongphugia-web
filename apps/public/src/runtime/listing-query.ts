@@ -2,7 +2,7 @@
 // A listing page must ignore them instead of returning 404 (Facebook adds fbclid, Google Ads adds
 // gclid, campaigns add utm_*). Any other unknown key is still rejected so filters that the server
 // cannot honour never produce misleading results.
-const TRACKING_KEYS = new Set(['_rsc', 'fbclid', 'gclid'])
+import { canonicalSortEnabled } from '@/lib/canonical-price'; const TRACKING_KEYS = new Set(['_rsc', 'fbclid', 'gclid'])
 
 export function isTrackingQueryKey(key: string) {
   return TRACKING_KEYS.has(key) || key.startsWith('utm_')
@@ -29,10 +29,10 @@ export function resolveListingQuery<T extends ListingQuery>(
 const BASE_LISTING_KEYS = ['page', 'brand', 'dong', 'is_featured'] as const
 export const LISTING_SORT_VALUES = ['default', 'price-asc', 'price-desc'] as const
 
-type ListingEnv = { APP_ENV?: string; PREVIEW_TEST_DATABASE_ISOLATED?: string }
+type ListingEnv = { APP_ENV?: string; PREVIEW_TEST_DATABASE_ISOLATED?: string; PUBLIC_CANONICAL_PRICING?: string }
 
 export function supportedListingKeys(categorySlug: string, env: ListingEnv = process.env): readonly string[] {
-  const sortEnabled = categorySlug === 'thiet-bi-ve-sinh' && env.APP_ENV === 'staging' && env.PREVIEW_TEST_DATABASE_ISOLATED === 'true'
+  const sortEnabled = canonicalSortEnabled(categorySlug, env)  // TEST Preview, or Production only with PUBLIC_CANONICAL_PRICING=on (#470)
   return sortEnabled ? [...BASE_LISTING_KEYS, 'sort'] : BASE_LISTING_KEYS
 }
 

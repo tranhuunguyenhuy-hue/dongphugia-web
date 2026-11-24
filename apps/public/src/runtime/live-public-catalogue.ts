@@ -4,6 +4,8 @@ import { cache } from 'react'
 import { sanitizeRichHtml } from '@/lib/html-sanitizer'
 import { QUARANTINED_VARIANT_GROUPS, VARIANT_SIBLING_CAP, normalizeSeriesSelection, type SeriesFacet } from '@/lib/series-facet-contract'
 import { readPublicRows } from './public-db'
+import { canonicalPricingMode, canonicalProductionBrands } from '@/lib/canonical-price'
+import { canonicalPublicPricing, canonicalUnverifiedPricing, inCanonicalScope } from '../../../../scripts/catalogue-direct/public-canonical-pricing.mjs'
 import type { SnapshotCategory, SnapshotProduct, SnapshotSearchProduct } from './public-snapshot-catalogue'
 
 export type PublicProductRow = {
@@ -15,16 +17,43 @@ export type PublicProductRow = {
   gallery_images?:{image_url:string}[]|null; description_html?:string|null
   specifications?:Record<string,string>|null; documents?:{name:string;url:string;type:string;size?:number|null}[]|null
   regular_price_vnd?:number|string|null; promotional_price_vnd?:number|string|null; online_voucher_amount_vnd?:number|string|null
+  canonical_price_status?:string|null
   product_feature_values?:{product_features:{name:string}}[]|null
 }
 const COLS='p.id,p.sku,p.name,p.display_name,p.slug,p.description,p.image_main_url,p.is_featured,p.variant_group,p.variant_type,p.variant_label,c.name AS category_name,c.slug AS category_slug,s.name AS listing_name,s.slug AS listing_slug,b.name AS brand_name,b.slug AS brand_slug'
-// Only the fixed TEST Preview has these columns. Production's read role and SQL
-// remain on the existing projection until a separately approved release.
-const testPricingEnabled=()=>process.env.APP_ENV==='staging'&&process.env.PREVIEW_TEST_DATABASE_ISOLATED==='true'
-const priceColumns=()=>testPricingEnabled()
- ? COLS+',p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd' : COLS
-const pricePriority=()=>testPricingEnabled()
- ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.regular_price_vnd IS NULL THEN 1 ELSE 0 END," : ''
+// Pricing modes (see src/lib/canonical-price.ts): 'test' = isolated TEST Preview pilot (unchanged), 'production' = #470 live read,
+// only when PUBLIC_CANONICAL_PRICING=on (default OFF). With the flag off every statement below is byte-identical to before.
+const testPricingEnabled=()=>canonicalPricingMode()==='test'
+const productionPricingEnabled=()=>canonicalPricingMode()==='production'
+// withCanonical=false is the schema-missing fail-safe: same statement without any canonical column.
+const priceColumns=(withCanonical=true)=>testPricingEnabled()
+ ? COLS+',p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd'
+ : productionPricingEnabled()&&withCanonical
+  ? COLS+',p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd,p.canonical_price_status' : COLS
+const pricePriority=(withCanonical=true)=>testPricingEnabled()
+ ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.regular_price_vnd IS NULL THEN 1 ELSE 0 END,"
+ : productionPricingEnabled()&&withCanonical
+  ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.canonical_price_status IS DISTINCT FROM 'PRICE_VERIFIED' THEN 1 ELSE 0 END," : ''
+// Price sort key: only a verified price sorts; everything else goes last (never a legacy value).
+const priceSortKey=(withCanonical=true)=>productionPricingEnabled()&&withCanonical
+ ? "CASE WHEN p.canonical_price_status='PRICE_VERIFIED' THEN COALESCE(p.promotional_price_vnd,p.regular_price_vnd) END "
+ : 'COALESCE(p.promotional_price_vnd,p.regular_price_vnd) '
+// #470 fail-safe: if the canonical columns are missing/unreadable (42703/42501/42P01) the SAME statement runs without them, so
+// in-scope rows become "Cần liên hệ xác nhận giá" (never a legacy price) instead of a 5xx. Remembered for 60 s per isolate.
+let canonicalUnavailableUntil=0
+async function readProductRows<T>(build:(withCanonical:boolean)=>string,values:readonly (string|number|boolean|readonly string[])[],label?:Parameters<typeof readPublicRows>[2]):Promise<T[]>{
+ const canonical=productionPricingEnabled()&&Date.now()>=canonicalUnavailableUntil
+ try{return await readPublicRows<T>(build(canonical),values,label) as T[]}
+ catch(error){
+  const code=error&&typeof error==='object'&&'code' in error?String((error as {code:unknown}).code):''
+  if(!productionPricingEnabled()||!canonical||!['42703','42501','42P01'].includes(code))throw error
+  // Only a retry that SUCCEEDS proves the canonical columns were the problem; otherwise the retry's own error propagates untouched.
+  const rows=await readPublicRows<T>(build(false),values,label) as T[]
+  canonicalUnavailableUntil=Date.now()+60_000
+  console.error(JSON.stringify({event:'PUBLIC_CANONICAL_SCHEMA_UNAVAILABLE',sqlState:code}))
+  return rows
+ }
+}
 const vnd=(input:number|string|null|undefined)=>{
  const value=Number(input)
  return Number.isSafeInteger(value)&&value>0&&value<=9_999_999_999_999?value:null
@@ -59,10 +88,16 @@ function normalizeProductHtmlImages(html:string){
   return normalized?`${prefix}${quote}${normalized}${quote}`:whole
  })
 }
+// #470: the ONE price DTO shared with the snapshot projection (scripts/catalogue-direct/public-canonical-pricing.mjs).
+// Fail-safe: anything inconsistent or missing becomes "Cần liên hệ xác nhận giá"; legacy columns are never read.
+function productionPricing(row:PublicProductRow){
+ try{return canonicalPublicPricing(row,{requireFresh:false})}catch{return canonicalUnverifiedPricing()}
+}
 export function mapLiveProduct(row:PublicProductRow):SnapshotProduct{
  if(!Number.isSafeInteger(row.id)||row.id<=0||![row.category_slug,row.listing_slug,row.slug].every(s=>SLUG.test(s))
    ||!row.name||row.name.length>240||!row.sku||row.sku.length>120)throw Error('PUBLIC_PRODUCT_DB_ROW_INVALID')
  const sanitaryTest=testPricingEnabled()&&row.category_slug==='thiet-bi-ve-sinh'
+ const production=productionPricingEnabled()&&inCanonicalScope({category_slug:row.category_slug,brand_slug:row.brand_slug},{categories:['thiet-bi-ve-sinh'],brands:canonicalProductionBrands()})
  const regular=sanitaryTest?vnd(row.regular_price_vnd):null
  const suppliedPromo=vnd(row.promotional_price_vnd)
  const promo=regular!==null&&suppliedPromo!==null&&suppliedPromo<regular?suppliedPromo:null
@@ -76,6 +111,7 @@ export function mapLiveProduct(row:PublicProductRow):SnapshotProduct{
   price:selling,price_display:selling===null?'Liên hệ báo giá':null,stock_status:'contact',image_main_url:image,
   ...(sanitaryTest?{list_price:regular,original_price:regular,sale_price:promo,online_discount_amount:voucher,price_provenance:'hita-exact-test'}:{}),
   is_active:true,is_featured:Boolean(row.is_featured),is_promotion:promo!==null,variant_options:[],
+  ...(production?productionPricing(row):{}),
   categories:{name:row.category_name,slug:row.category_slug},subcategories:{name:row.listing_name,slug:row.listing_slug},
   brands:brand,canonical_category_slug:row.category_slug,canonical_subcategory_slug:row.listing_slug,
   url:'/'+row.category_slug+'/'+row.listing_slug+'/'+row.slug,
@@ -98,16 +134,17 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
  // A series tag without a selected brand (or of another brand) is ignored; it never produces an odd/empty result.
  const seriesSlugs=normalizeSeriesSelection(brandSlugs,[...(filters.seriesSlugs??[])].filter(s=>SLUG.test(s))).accepted.slice(0,16)
  // One product (SKU) = one row = one card. Series is a filter on SKUs, never a grouping.
- const priceSort=testPricingEnabled()&&category==='thiet-bi-ve-sinh'&&filters.priceSort
- const priceOrder=priceSort
-  ? 'COALESCE(p.promotional_price_vnd,p.regular_price_vnd) '+(priceSort==='desc'?'DESC':'ASC')+' NULLS LAST,'
-  : pricePriority()
- const rows=await readPublicRows<PublicProductRow>('SELECT '+priceColumns()+',count(*) OVER() AS total_count'+FROM+
+ const priceSort=(testPricingEnabled()||productionPricingEnabled())&&category==='thiet-bi-ve-sinh'&&filters.priceSort
+ const rows=await readProductRows<PublicProductRow>(c=>{
+  const priceOrder=priceSort
+   ? priceSortKey(c)+(priceSort==='desc'?'DESC':'ASC')+' NULLS LAST,'
+   : pricePriority(c)
+  return 'SELECT '+priceColumns(c)+',count(*) OVER() AS total_count'+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
    ' AND (NOT $6::boolean OR p.is_featured=true)'+
    ' AND (cardinality($7::text[])=0 OR'+SERIES_MATCH+')'+
-   ' ORDER BY '+priceOrder+'p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3',
+   ' ORDER BY '+priceOrder+'p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3'},
    [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true,seriesSlugs], 'listing-page')
  return {products:rows.map(mapLiveProduct),totalCount:Number(rows[0]?.total_count??0),page}
 })
@@ -116,9 +153,9 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
 // while avoiding a full-listing window count that the root never uses.
 export const getLiveListingPreview=cache(async(category:string,listing:string)=>{
  if(![category,listing].every(s=>SLUG.test(s)))return [] as SnapshotProduct[]
- const rows=await readPublicRows<PublicProductRow>('SELECT '+priceColumns()+FROM+
+ const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
-   ' ORDER BY '+pricePriority()+'p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $3',
+   ' ORDER BY '+pricePriority(c)+'p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $3',
    [category,listing,48], 'category-root-featured')
  return rows.map(mapLiveProduct)
 })
@@ -246,7 +283,7 @@ export function mapLiveProductDetail(row: PublicProductRow) {
 }
 
 const loadLiveProduct=async(where:string,values:readonly string[])=>{
- const rows=await readPublicRows<PublicProductRow>('SELECT '+priceColumns()+','+detailSelect+FROM+' WHERE '+PUBLIC+' '+where+' LIMIT 1',values)
+ const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+','+detailSelect+FROM+' WHERE '+PUBLIC+' '+where+' LIMIT 1',values)
  return rows.length?mapLiveProductDetail(rows[0]):null
 }
 export const getLiveProduct=cache(async(category:string,listing:string,slug:string)=>{
@@ -261,15 +298,16 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
  const query=raw.trim().slice(0,120)
  if(query.length<2||!Number.isSafeInteger(page)||page<1||page>100||!Number.isSafeInteger(limit)||limit<1||limit>48)
   return {results:[] as SnapshotSearchProduct[],total:0,page,limit,query}
- const rows=await readPublicRows<PublicProductRow>('SELECT '+priceColumns()+',count(*) OVER() AS total_count'+FROM+
+ const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+',count(*) OVER() AS total_count'+FROM+
   ' WHERE '+PUBLIC+" AND p.search_visibility='visible' AND (p.sku ILIKE $1 OR p.name ILIKE $1)"+
   " ORDER BY CASE WHEN lower(p.sku)=lower($2) THEN 0 WHEN lower(p.sku) LIKE lower($2)||'%' THEN 1 ELSE 2 END,p.name,p.id"+
   ' LIMIT $3 OFFSET $4',['%'+query+'%',query,limit,(page-1)*limit], 'public-search')
  const results=rows.map(row=>{
   const p=mapLiveProduct(row)
   return {id:p.id,sku:p.sku,name:p.name,slug:p.slug,url:p.url,price:p.price,original_price:p.original_price??null,
-   list_price:p.list_price??null,sale_price:p.sale_price??null,online_discount_amount:p.online_discount_amount??null,final_online_price:null,
+   list_price:p.list_price??null,sale_price:p.sale_price??null,online_discount_amount:p.online_discount_amount??null,final_online_price:p.final_online_price??null,
    price_display:p.price_display,image_main_url:p.image_main_url,
+   ...(p.price_provenance?{price_provenance:p.price_provenance}:{}),
    category_slug:p.categories.slug,subcategory_slug:p.subcategories.slug,
    brand_name:p.brands?.name??null,product_feature_values:[],colors:null} satisfies SnapshotSearchProduct
  })
@@ -279,8 +317,16 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
 // Never the whole series. A group is excluded when it is in the reviewed-wrong list (#431 D5) or when its public members
 // carry two different approved series (mixed group). No prefix guessing; cap is a safety bound, not a 8-item truncation.
 export async function getLiveVariantSiblings(group:string,currentId:number){
+ try{return await loadVariantSiblings(group,currentId)}catch(error){
+  // #470 finding: the Production public role cannot read spec_definitions.key / spec_options.slug (the #432 series grants are not applied).
+  // Without them a PDP must degrade to "no siblings" instead of a 5xx. Any other error still propagates.
+  if(error&&typeof error==='object'&&'code' in error&&(error as {code:unknown}).code==='42501'){console.error(JSON.stringify({event:'PUBLIC_VARIANT_SIBLINGS_UNAVAILABLE',sqlState:'42501'}));return [] as SnapshotProduct[]}
+  throw error
+ }
+}
+async function loadVariantSiblings(group:string,currentId:number){
  if(!group||group.length>100||!Number.isSafeInteger(currentId)||QUARANTINED_VARIANT_GROUPS.includes(group))return [] as SnapshotProduct[]
- const rows=await readPublicRows<PublicProductRow>('SELECT '+priceColumns()+FROM+' WHERE '+PUBLIC+
+ const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+FROM+' WHERE '+PUBLIC+
   ' AND p.variant_group=$1 AND p.id<>$2'+
   ' AND p.brand_id IS NOT NULL AND p.brand_id=(SELECT cur.brand_id FROM dpg_app.products cur WHERE cur.id=$2)'+
   ' AND p.subcategory_id=(SELECT cur.subcategory_id FROM dpg_app.products cur WHERE cur.id=$2)'+
