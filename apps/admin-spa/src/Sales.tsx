@@ -71,7 +71,7 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
   useEffect(() => { if (canAssign) commerce.assignees().then(setUsers).catch(() => setUsers([])) }, [canAssign])
   const run = async (work: () => Promise<SalesDetail>, ok: string) => {
     setBusy(true)
-    try { const d = await work(); setRow(d); setNote(d.staff_note ?? ''); setError(''); toast.success(ok) }
+    try { await work(); await load(); toast.success(ok) }   // the write returns only the changed row: the detail (lines, history) is always re-read, never replaced by a partial response
     catch (e) {
       if (e instanceof ApiError && e.code === 'VERSION_CONFLICT') { await load(); setError('Bản ghi vừa được người khác cập nhật. Đã tải lại — vui lòng kiểm tra rồi thử lại.') } else setError(errorText(e))
     }
