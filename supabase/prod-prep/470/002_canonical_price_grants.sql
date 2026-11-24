@@ -7,7 +7,7 @@ select set_config('dpg.price_release_go', :'approved_sha', true);
 do $$
 begin
   if coalesce(current_setting('dpg.price_release_go', true), '') = '' then raise exception 'PRICE_RELEASE_NO_OWNER_GO'; end if;
-  if not exists (select 1 from dpg_control.target_contract where environment <> 'preview_synthetic' and hard_database_ceiling_bytes = 367001600) then
+  if not exists (select 1 from dpg_control.target_contract where project_name = 'dongphugia-runtime' and region = 'ap-southeast-1' and environment = 'preview' and hard_database_ceiling_bytes = 367001600) then
     raise exception 'PRICE_RELEASE_TARGET_NOT_PRODUCTION_CONTRACT';
   end if;
   if (select count(*) from pg_attribute where attrelid = 'dpg_app.products'::regclass and not attisdropped

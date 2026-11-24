@@ -15,7 +15,7 @@ begin
   end if;
   if not exists (
     select 1 from dpg_control.target_contract
-    where environment <> 'preview_synthetic'
+    where project_name = 'dongphugia-runtime' and region = 'ap-southeast-1' and environment = 'preview'
       and production_data_allowed = true and production_writes_allowed = true
       and hard_database_ceiling_bytes = 367001600
   ) then
