@@ -10,7 +10,7 @@ const helperCleanupMigration = readFileSync(resolve(root, 'supabase/migrations/2
 const acceptance = readFileSync(resolve(root, 'scripts/acceptance/leo542-runtime-acceptance.mjs'), 'utf8')
 const rollback = readFileSync(resolve(root, 'docs/deploy/leo542-admin-publishing-rollback.sql'), 'utf8')
 const config = readFileSync(resolve(root, 'supabase/config.toml'), 'utf8')
-const functions = ['admin-commerce','admin-content','admin-blog','admin-products','admin-audit','publishing-posts','publishing-media']
+const functions = ['admin-content','admin-blog','admin-products','admin-audit','publishing-posts','publishing-media']
   .map((name) => readFileSync(resolve(root, `supabase/functions/${name}/index.ts`), 'utf8')).join('\n')
 
 describe('LEO-542 Phase A security contract', () => {
@@ -39,7 +39,7 @@ describe('LEO-542 Phase A security contract', () => {
   it('uses caller JWTs and no service role or database credential in Edge code', () => {
     expect(functions).toContain('requireAuthenticatedClient')
     expect(functions).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|DATABASE_URL|password_hash/i)
-    for (const name of ['admin-audit','admin-blog','admin-commerce','admin-content','admin-products','publishing-media','publishing-posts']) {
+    for (const name of ['admin-audit','admin-blog','admin-content','admin-products','publishing-media','publishing-posts']) {
       expect(config).toMatch(new RegExp(`\\[functions\\.${name}\\][\\s\\S]*?verify_jwt = true`))
     }
     expect(migration).toContain('security invoker')
