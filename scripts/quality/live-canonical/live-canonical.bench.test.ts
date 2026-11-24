@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 // synthetic data shaped like Production (17,752 products, 16,447 sanitary). It shows plan shape / relative cost, NOT live latency.
 const url = process.env.POSTGRES_SNAPSHOT_INTEGRATION_URL
 const run = url && process.env.LIVE_CANONICAL_BENCH === '1' ? describe : describe.skip
-const root = path.resolve(__dirname, '../../../..')
+const root = path.resolve(__dirname, '../../..')
 const sqlOf = async (file: string) => roleNames((await readFile(path.join(root, 'supabase/prod-prep/470', file), 'utf8')).replaceAll(":'approved_sha'", "'bench'"))
 let admin: Client, db: Client, dbName = ''
 const tag = Math.random().toString(36).slice(2, 8)
@@ -17,8 +17,8 @@ const PUB = `dpg_public_catalogue_${tag}`, ADM = `dpg_admin_api_${tag}`, RUN = `
 const roleNames = (text: string) => text.replaceAll('dpg_public_catalogue', PUB).replaceAll('dpg_admin_api', ADM).replaceAll('dpg_runtime', RUN).replaceAll('dpg_operator470', OPR)
 const captured: { name: string; sql: string; values: unknown[] }[] = []
 let currentName = ''
-vi.mock('./public-db', () => ({ readPublicRows: async (sql: string, values: unknown[]) => { captured.push({ name: currentName, sql, values: [...values] }); return [] } }))
-const load = async () => { vi.resetModules(); return import('./live-public-catalogue') }
+vi.mock('../../../apps/public/src/runtime/public-db', () => ({ readPublicRows: async (sql: string, values: unknown[]) => { captured.push({ name: currentName, sql, values: [...values] }); return [] } }))
+const load = async () => { vi.resetModules(); return import('../../../apps/public/src/runtime/live-public-catalogue') }
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]
 
 run('benchmark', () => {
@@ -26,7 +26,7 @@ run('benchmark', () => {
         admin = new Client({ connectionString: url }); await admin.connect()
         dbName = 'live_bench_' + Math.random().toString(36).slice(2, 8); await admin.query(`create database ${dbName}`)
         const u = new URL(url!); u.pathname = '/' + dbName; db = new Client({ connectionString: u.toString() }); await db.connect()
-        await db.query(roleNames(await readFile(path.join(__dirname, 'test-fixtures/live-public-schema.sql'), 'utf8')))
+        await db.query(roleNames(await readFile(path.join(__dirname, 'live-public-schema.sql'), 'utf8')))
         await db.query(`insert into dpg_app.categories(slug,name) values ('thiet-bi-ve-sinh','VS'),('thiet-bi-bep','Bep'),('vat-lieu-nuoc','VLN'),('gach-op-lat','Gach');
           insert into dpg_app.subcategories(category_id,slug,name) select c.id, 'sub-'||g, 'Sub '||g from dpg_app.categories c, generate_series(1,6) g;
           insert into dpg_app.brands(slug,name) values ('toto','TOTO'),('inax','INAX'),('caesar','Caesar'),('other','Other');
