@@ -21,7 +21,7 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 ---
 ## A. CSV Quality Gate
 
-**Snapshot đã audit:** nhánh `codex/448-toto-hita-review` tại **`7f9ba89c85176406043478f7f23403571b5f8ea1`** (2026-11-23 18:55:33 UTC), file `docs/ops/hita-448/toto/toto_prices_review.csv`. Dữ liệu Codex thay đổi sau SHA này **chưa audit**. Không sửa CSV/nhánh/PR của Codex. (Lần audit trước ở `98e3101` đã được thay thế bằng bản này.)
+**Snapshot đã audit:** nhánh `codex/448-toto-hita-review` (PR #463) tại **`a361612a7cd49deeadccae37b623daaca5fe9126`** (2026-11-23 21:41:40 UTC), file `docs/ops/hita-448/toto/toto_prices_review.csv`, **sha256 `bda8301a86bc9f3d9c9ca01f7297c3183ee6efdcf82f1851b2757580d63ccf26`**, 4.441/4.441 SKU TOTO (2.057 active, 2.384 inactive). Dữ liệu Codex thay đổi sau SHA này **chưa audit**. Không sửa CSV/nhánh/PR của Codex. Các snapshot cũ (`98e3101`, `7f9ba89`, 731 SKU) **không** được dùng để nghiệm thu.
 
 ### Phân loại (CONTACT ≠ NOT_FOUND ≠ AMBIGUOUS)
 | Nhóm | Điều kiện | Hành động tương lai (sau Owner GO) |
@@ -37,25 +37,30 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 **Lỗi chặn (FAIL):** thiếu/trùng cột; **số ô khác số cột, ngoặc kép chưa đóng hoặc đặt sai chỗ**; `dpg_id` sai/trùng; SKU rỗng/thừa khoảng trắng/trùng (không phân biệt hoa thường); `is_active` sai; trạng thái lạ; **dòng không phải EXACT mà có giá** (blank ≠ 0; giá DPG cũ không được nằm trong dòng CONTACT); giá không phải số nguyên dương; thiếu giá gốc; KM ≥ gốc; voucher ≥ giá bán hoặc thiếu điều kiện; SKU Hita lệch SKU DPG; URL không phải trang sản phẩm Hita; tiền tệ ≠ VND; thời điểm sai/ở tương lai; kết quả CONTACT/DISCONTINUED không từ đúng trang SKU; NOT_FOUND/mọi kết quả không giá thiếu thời điểm kiểm; NOT_FOUND mà lại có SKU Hita; lệch id/SKU/active so với inventory Production; ô bắt đầu bằng `= + - @`.
 **Cảnh báo (Owner xem, không tự loại):** giá hết hạn/còn dưới 48 giờ/thiếu hạn; nguồn cũ hơn 24 giờ; điều kiện voucher không nêu "online"; nhiều SKU dùng chung một URL; giảm ≥ 50% và voucher ≥ 30% giá bán (cờ để xem, không phải ngưỡng loại).
 
-### Kết quả trên snapshot `7f9ba89` (4.441 dòng TOTO, đối chiếu inventory Production đủ 4.441)
-| Nhóm | Số dòng |
-|---|---:|
-| **PRICE_VERIFIED** | **533** |
-| **CONTACT_VERIFIED** | **52** |
-| **DISCONTINUED_REVIEW** | **16** |
-| **AMBIGUOUS_UNVERIFIED** | **32** |
-| **NOT_FOUND_CANDIDATE_DELETE** | **1** |
-| UNRESOLVED (3.710 NOT_CRAWLED + 97 UNKNOWN) | 3.807 |
-| INVALID (lỗi chặn) | **0** |
-| Dòng có cảnh báo | 7 (cùng loại `LARGE_VOUCHER_REVIEW`) |
+### Kết quả trên snapshot `a361612a` (chế độ `import-review`, đối chiếu inventory Production đủ 4.441 id/SKU)
+Chạy lúc 2026-11-24 04:09 UTC. **0 lỗi chặn, 28 cảnh báo**; không trùng id/SKU, không lệch inventory (id, SKU, `is_active`).
+| Nhóm | Tổng | Active (2.057) | Inactive (2.384) |
+|---|---:|---:|---:|
+| **PRICE_VERIFIED** (EXACT) | **2.469** | **1.543** (75,0%) | 926 |
+| **CONTACT_VERIFIED** | **960** | 283 (13,8%) | 677 |
+| **DISCONTINUED_REVIEW** | **307** | 49 | 258 |
+| **AMBIGUOUS_UNVERIFIED** | **48** | 34 | 14 |
+| **NOT_FOUND_CANDIDATE_DELETE** | **2** | 1 (id 2695) | 1 (id 35467) |
+| UNRESOLVED (`UNKNOWN`) | **655** | 147 | 508 |
+| INVALID | 0 | 0 | 0 |
+Không còn dòng `NOT_CRAWLED`; mọi dòng ở trạng thái `FRESH_CRAWL_PENDING_OWNER_REVIEW`, nguồn `CODEX_CRAWL`, thời điểm nguồn 18:23–21:40 UTC ngày 23/11.
 
-- Trong 533 dòng có giá: 533 có giá KM, 207 có voucher, 0 chỉ có giá gốc. Thời điểm nguồn 18:23–18:54 UTC (trong 24 giờ lúc chạy). Không trùng id/SKU, không lệch inventory.
-- **7 cảnh báo** (voucher 31–38% giá bán): `TCF24410AAA#NW1` và 6 SKU họ `CS735*/CS838*` (khoảng 34%). Cùng một họ sản phẩm nên có thể là chương trình thật, nhưng cần Owner xem.
-- **Lưu ý cho Owner:** SKU NOT_FOUND duy nhất (`TBV11130A/…/TBN01002B/`, id 2695) **kết thúc bằng dấu `/`**; có thể là SKU DPG bị cắt chứ chưa chắc không có trên Hita. Chưa nên coi là ứng viên xóa khi chưa xem lại.
-- Nhóm UNKNOWN (97): 60 "giá không đủ bằng chứng/mâu thuẫn", 37 `INVALID_PDP_URL` (trông như giới hạn của bộ parse URL, **không phải** kết luận về giá). Nhóm AMBIGUOUS (32): 31 "không có kết quả tìm đúng SKU" (có ứng viên gần giống, không được lấy giá), 1 "SKU trang không khớp".
-- Danh sách theo nhóm cho Owner xem (không phải lệnh xóa): `docs/ops/hita-466/lists/{contact_verified,not_found_candidates,discontinued_review,ambiguous_unverified}.csv`; tổng hợp: `quality-gate-summary.json`.
-- **Độ phủ:** 731 dòng có kết quả = 35,5% TOTO active (731/2.057), 16,5% toàn TOTO (731/4.441), **4,4% toàn ngành vệ sinh Production (731/16.447)**. Đây không phải kết quả toàn ngành.
-- **Giới hạn:** "đạt cổng" = nhất quán, đúng SKU, đúng định dạng và đủ bằng chứng nội bộ; **không** chứng minh khớp giá đang niêm yết trên Hita lúc này (tôi không truy cập được Hita).
+**Nhóm active (phạm vi đợt phát hành đề xuất đầu tiên, 2.057 SKU):** có kết luận cuối 1.876 (91,2%) = 1.543 có giá + 283 CONTACT + 49 DISCONTINUED + 1 NOT_FOUND; **chưa xác minh 181 (8,8%)** = 147 UNKNOWN + 34 AMBIGUOUS. Trong 1.543 EXACT active: **771 đủ 3 giá** (gốc + KM + voucher), 772 hai giá (gốc + KM), 0 chỉ giá gốc; 771 có voucher. **Không dùng giá của nhóm inactive làm nguồn cho phát hành active** (inactive: 926 EXACT, trong đó 3 có voucher).
+
+**Cần Owner xem (cảnh báo/ngoại lệ, không phải lỗi):**
+- **28 cảnh báo `LARGE_VOUCHER_REVIEW`** (tất cả thuộc nhóm active): voucher **31% đến 68%** giá bán, tập trung ở các họ `CS838*`, `CS735*`, `TBV10*`, `TBV09*`, `TBW13*`, `TBW10*`. Có thể là chương trình thật nhưng 68% là rất cao; cần duyệt từng dòng trước khi nạp.
+- **Hạn giá:** cả 2.469 dòng EXACT cùng `price_valid_until = 2026-12-01`. Giá trị giống hệt nhau cho mọi SKU nên **nhiều khả năng là mặc định của trang Hita, không phải hạn thật của từng khuyến mãi** (suy luận, chưa kiểm chứng). Còn khoảng 7 ngày kể từ lúc chạy; cổng sẽ cảnh báo khi còn dưới 48 giờ. **Kế hoạch release phải crawl lại ngay trước cutover.**
+- **NOT_FOUND (2):** id 2695 là SKU kết thúc bằng `/` (có thể bị cắt, **kiểm tra lại danh tính trước khi coi là ứng viên xóa**); id 35467 là SKU 13 ký tự, đang inactive. Cả hai chỉ vào danh sách rà soát, không xóa.
+- **UNKNOWN (655):** 596 "giá không đủ bằng chứng hoặc mâu thuẫn" và **59 `INVALID_PDP_URL`** (trông như giới hạn của bộ đọc URL phía crawler, **chưa phải kết luận về giá**; cần Codex xem lại, tôi không sửa CSV). **AMBIGUOUS (48):** 47 "không có kết quả tìm đúng SKU" (không lấy giá SKU tương tự), 1 "SKU trên trang không khớp".
+- Mọi kết quả crawler **chưa phải giá đã được Owner duyệt** và chưa được so với giá đang niêm yết trên Hita (tôi không truy cập được Hita).
+
+Danh sách theo nhóm cho Owner xem (không phải lệnh xóa/ghi): `docs/ops/hita-466/lists/{contact_verified,not_found_candidates,discontinued_review,ambiguous_unverified}.csv`; tổng hợp: `quality-gate-summary.json` (kèm sha256 và thời điểm chạy).
+- **Độ phủ:** TOTO 4.441/4.441 có kết quả crawler; toàn ngành vệ sinh Production 16.447 SKU thì mới **27,0% (4.441)** (active ngành vệ sinh 5.344, trong đó TOTO active 2.057 = 38,5%). Các thương hiệu khác chưa crawl.
 
 **Kiểm chứng:** 19 unit test của cổng (gồm 4 nhóm kết quả tách biệt, giá cũ trong CONTACT, NOT_FOUND mang SKU Hita, thiếu thời điểm, ô lệch số cột, ngoặc kép, danh sách xuất) và 60 test cả thư mục `hita-price-audit` đạt; `tsc`, `eslint` sạch. Lần chèn lỗi vào bản sao snapshot thật trước đó đã bắt đủ 8/8 lỗi.
 
@@ -75,7 +80,7 @@ npx tsx scripts/hita-price-audit/quality-gate.mts <file.csv> --mode import-revie
 | V6 | Quyền mức bảng: `dpg_migration` có UPDATE; `dpg_admin_api`, `dpg_public_catalogue` không có SELECT/UPDATE mức bảng (quyền mức cột/view chưa kiểm). |
 
 ### B.2 Điều kiện chuyển hệ thống sang giá mới (thứ tự đề xuất, mỗi bước cần Owner GO)
-1. **Dữ liệu đủ (đã chốt):** **không chuyển toàn bộ ngành sang giá mới trước khi hoàn thành lượt crawl các SKU active thuộc phạm vi phát hành** được xác định trong kế hoạch release; 731 SKU đã kiểm hiện tại chưa đủ. Owner phải duyệt tập CSV. Sau cutover, SKU chưa có dữ liệu chuẩn ẩn giá và hiển thị trạng thái cần liên hệ (B.7).
+1. **Dữ liệu đủ (đã chốt):** **không chuyển toàn bộ ngành sang giá mới trước khi hoàn thành lượt crawl các SKU active thuộc phạm vi phát hành** được xác định trong kế hoạch release; với TOTO active hiện còn 181/2.057 SKU (8,8%) chưa xác minh (147 UNKNOWN + 34 AMBIGUOUS) và chưa có phạm vi/ngưỡng nào được chốt. Owner phải duyệt tập CSV. Sau cutover, SKU chưa có dữ liệu chuẩn ẩn giá và hiển thị trạng thái cần liên hệ (B.7).
 2. **DDL:** 3 cột nullable + CHECK (số nguyên dương, KM < gốc, voucher < giá bán) + quyền cho vai trò Admin (mẫu `006`/`007` ở TEST, tên vai trò Production khác).
 3. **Nạp dữ liệu (chưa hiển thị):** vì Public Production bỏ qua 3 cột, bước này không đổi gì với khách.
 4. **Mã:** Public/PDP/listing/sắp xếp (NULL cuối)/Admin/giỏ chỉ đọc canonical cho ngành vệ sinh (đổi cổng từ "staging" sang "ngành vệ sinh"); ngành khác giữ nguyên. Tách khỏi #432/#433/#440.
@@ -111,7 +116,7 @@ Owner duyệt tập CSV đã qua cổng → preflight `SELECT` (nối id+sku 100
 | 5 | Audit dung lượng Production **chỉ đọc**, để tìm cơ hội giảm dung lượng thực tế; phân biệt đo với ước tính; không suy đoán trùng lặp; không UPDATE/DELETE/DROP/VACUUM FULL hay đổi hạ tầng. | **Chưa chạy** audit riêng (báo cáo riêng, không thuộc PR này). Kế hoạch: với `products`, `product_spec_values`, `product_descriptions`, `product_images`, `m5_cdn_ledger`, `product_source_mappings`, `product_documents`: đo heap/index/toast, số hàng, dead tuple, kích thước theo cột bằng `pg_column_size` (đo), kiểm chứng trùng lặp bằng so khớp nội dung thật trước khi kết luận (không suy đoán), ghi rõ phần nào là đo và phần nào là ước tính. Số đo đã có ở B.4 là điểm khởi đầu. | Đã được Owner duyệt (chỉ đọc); chờ Tech Lead xếp lịch |
 
 **Việc còn mở (chưa đặt chính sách):**
-- **Phạm vi phát hành chính xác** (ví dụ chỉ TOTO active hay mọi thương hiệu active của ngành vệ sinh) và **ngưỡng sẵn sàng** (tỷ lệ SKU trong phạm vi có kết quả cuối) phải nêu rõ trong kế hoạch release. Số liệu để tham chiếu: 5.344 SKU active ngành vệ sinh, trong đó TOTO active 2.057; 731 SKU đã có kết quả ở snapshot `7f9ba89` (35,5% TOTO active, 13,7% so với 5.344 SKU active nếu tính cả ngành vệ sinh).
+- **Phạm vi phát hành chính xác** (ví dụ chỉ TOTO active hay mọi thương hiệu active của ngành vệ sinh) và **ngưỡng sẵn sàng** (tỷ lệ SKU trong phạm vi có kết quả cuối) phải nêu rõ trong kế hoạch release. Số liệu để tham chiếu (snapshot `a361612a`): 5.344 SKU active ngành vệ sinh, trong đó **TOTO active 2.057** có 1.543 giá đã xác minh (75,0%), 283 CONTACT, 49 DISCONTINUED, 1 NOT_FOUND, **181 chưa xác minh (8,8%)**; các thương hiệu active còn lại (3.287 SKU) chưa crawl.
 - Cách hiển thị chi tiết của từng trạng thái "cần liên hệ"/"ngừng kinh doanh" (nội dung chữ, nút) là quyết định giao diện, chưa chốt.
 
 ### B.8 Giả định chưa kiểm chứng
