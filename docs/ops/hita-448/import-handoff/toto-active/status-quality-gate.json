@@ -1,0 +1,19 @@
+{
+  "file": "toto-active/status-review.csv",
+  "mode": "import-review",
+  "sha256": "00d70d7039d462f915d2eda01ff89d0f831356c63d4b108cf98026d999016b53",
+  "gate_run_at_utc": "2026-11-24T09:40:50.190Z",
+  "max_age_hours": 24,
+  "inventory_rows": 2057,
+  "rows": 332,
+  "file_issues": [],
+  "by_class": {
+    "CONTACT_VERIFIED": 283,
+    "DISCONTINUED_REVIEW": 49
+  },
+  "rows_with_fail": 0,
+  "rows_with_warn": 0,
+  "price_verified_with_warnings": 0,
+  "fail_by_code": {},
+  "warn_by_code": {}
+}
