@@ -23,7 +23,7 @@ for (const r of holds) {
 approved.sort((a, b) => Number(a.dpg_id) - Number(b.dpg_id)); heldNull.sort((a, b) => a - b)
 const cols = ['brand', 'dpg_id', 'sku', 'is_active', 'voucher_vnd', 'source_checked_at_utc', 'source_url']
 const q = (v: string) => `"${v.replaceAll('"', '""')}"`
-const csv = '﻿' + [cols.map(q).join(','), ...approved.map(r => cols.map(c => q(r[c])).join(','))].join('\r\n') + '\r\n'
+const csv = '﻿' + [cols.map(q).join(','), ...approved.map(r => cols.map(c => q(r[c])).join(','))].join('\n') + '\n'
 writeFileSync(path.join(out, 'voucher-approved.csv'), csv)
 const approval = { approved_by: 'Owner', approval_ref: 'https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/470#issuecomment-7128797116', rule_ref: 'https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/443#issuecomment-7128795600',
   csv_sha256: sha256(csv), approved_ids: approved.map(r => Number(r.dpg_id)), hold_null_ids: heldNull, production_go: false }
