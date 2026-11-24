@@ -1,0 +1,37 @@
+{
+  "brand": "inax",
+  "state": "active",
+  "total": 1653,
+  "fresh_price_verified_this_run": 0,
+  "held_prices": 1319,
+  "source_only_rows": 16,
+  "candidate_rows": 467,
+  "owner_candidate_approval": "NOT_GRANTED",
+  "ready_to_import": false,
+  "statuses": {
+    "REGULAR+PROMO+VOUCHER": 358,
+    "REGULAR": 772,
+    "REGULAR+PROMO": 189,
+    "UNRESOLVED": 316,
+    "NOT_FOUND": 2,
+    "DISCONTINUED": 8,
+    "CONTACT": 8
+  },
+  "holds": {
+    "INAX_BASELINE_PENDING_REFRESH": 547,
+    "HITA_DIRECT_PASSED_ARCHIVED_GATE": 305,
+    "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 467
+  },
+  "sha256": {
+    "status-review.csv": "a8861d99fe9612e7ad2cdee62d7bb96de69c820633f3afa83a61c5c6f1046d68",
+    "candidate-review.csv": "54ca380a0cd62967061fe292fd9f2341f9541e024ac9871ce6e7ed937f9f73e1"
+  },
+  "status_only_quality_gate": {
+    "rows": 16,
+    "fails": 0,
+    "warns": 0,
+    "price_rows": 0,
+    "sha256": "4203913074da4d4a0dac8d51b295d8be8a05bdc3222e66a3196557d0450fca0b"
+  },
+  "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+}

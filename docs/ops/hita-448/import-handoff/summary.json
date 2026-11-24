@@ -1,0 +1,199 @@
+{
+  "base_commit": "3bd1b9b52722cec684174e5ac7953f9f54c909a5",
+  "archived_data_pins": {
+    "docs/ops/hita-448/final-owner-review/historical_candidate_decisions.csv": "c789975e533eb64a7547f7fcf70fce93feb83deb103076cc8f793b69280c1b91",
+    "docs/ops/hita-448/final-owner-review/inax_stale_review.csv": "515b1cf94e7a50cda14513517b4f1fe0a66d70cacb11f031a0f44482d87b5b33",
+    "docs/ops/hita-448/final-owner-review/owner_decisions.csv": "665ecc53a6aa958a997d7155bf76fa9340e3161b1d7665dacd3ecd01f575549a",
+    "docs/ops/hita-448/final-owner-review/price_warning_decisions.csv": "14a03dbe0776cc239cdc8a9d2f6ec7cef1dcac7a757733f870ee901bb7c0b1d9",
+    "docs/ops/hita-448/final-owner-review/decision-summary.json": "c7d3ebbf3ea461310f0f16c67433d761e6ecff85f90b16696d3f2470fd75b561",
+    "docs/ops/hita-448/toto-inax-data-review/inax_exceptions.csv": "068609a17166033278ac4b92150d5f554dbf67fb4e1dab98b409703212a9fdf2",
+    "docs/ops/hita-448/toto-inax-data-review/inax_historical_candidates.csv": "99e15544def449a7b6fdd39a1ff084a178534636dcc7dd6b590230fd771f489c",
+    "docs/ops/hita-448/toto-inax-data-review/inax_inactive_exceptions.csv": "4af14904beaccfe12c205b948cd69b59f56d495d9b1fbe99f46ef782de5b90de",
+    "docs/ops/hita-448/toto-inax-data-review/inax_inactive_historical_candidates.csv": "b5c550f8e3f4e8d9524552973922cf6b8b44447c94da2e207a117ab105770091",
+    "docs/ops/hita-448/toto-inax-data-review/inax_inactive_review.csv": "58c1e47afa77b1e9e6218fcefe41dfc15a4d1ad3afc1b065d11b98ff1b5ad6ac",
+    "docs/ops/hita-448/toto-inax-data-review/inax_review.csv": "5fd1f745b883f15d777369e3106168c7aa72131791e74c049ba765d4e64877b3",
+    "docs/ops/hita-448/toto-inax-data-review/owner_price_warnings.csv": "1f54ce92a9c40b79ff5b3b6f0a2cbb674b0b066caa370b6781d8341654cc6a15",
+    "docs/ops/hita-448/toto-inax-data-review/refresh_queue.csv": "de7fe1fb2df5b1afd92a45f661a4c3b52f1a01e8550ef9cc17e084ab0a6418ae",
+    "docs/ops/hita-448/toto-inax-data-review/toto_exceptions.csv": "f61b60c5001d93041d44d506603a4e2b57e2e82b35767932f373cd31ed19bde9",
+    "docs/ops/hita-448/toto-inax-data-review/toto_historical_candidates.csv": "ea06e8058da30e6b3e8cfa93fa546c4f90fd7fbce67941952e54e8cebedf4665",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_candidate_sample.csv": "170a4e8b82fc4e56b10f2f1116c2e91f6d6c51fbb7fce2ce4acc3489831acbcc",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_evidence_review.csv": "c83849c35bc238acfc1cc9e48e0092bb5c48b70935d5d97e1ad12939f94d7154",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_exceptions.csv": "dbfc01fb53d3627ddd5dbb9e3355a72543257979f2d68b33479af2f272429a88",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_historical_candidates.csv": "a5b79f041cb2d24ac031f195abd728f0eecd5e775736b8097f9284fdd0a387c3",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_review.csv": "d29a135dcbfc83d6850f355ed4011a1d2bd9a1c80f56089baeac69996d7524ff",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_voucher_review.csv": "849a68d7bf2d64eafe719ba44b77c7be2c43dd41527c2f221e982d7e56bbf79f",
+    "docs/ops/hita-448/toto-inax-data-review/toto_review.csv": "755426b6bb9364abb70a8e0465f97dbaf193eb052392b8a6c6e9b0730ed75b67",
+    "docs/ops/hita-448/toto-inax-data-review/audit-summary.json": "d7010896a48f8f37db2b07521365791ef56efa12fb85174f3d16e0697cb6a741",
+    "docs/ops/hita-448/toto-inax-data-review/inax_inactive_quality_gate.json": "89df76de2d916c5ab5d746a650ee3b7950b0ede250307f2b2c3a7f089143e967",
+    "docs/ops/hita-448/toto-inax-data-review/inax_quality_gate.json": "a9ece7b6d7b64f8313c2d1ed8345dea13873b546fce30d5a76b9b84fb9b5917a",
+    "docs/ops/hita-448/toto-inax-data-review/toto_inactive_quality_gate.json": "579ca3b22e193cb9e51a6ae64f7d20d66807e88eb04dd3628a0d87a88ba3b469",
+    "docs/ops/hita-448/toto-inax-data-review/toto_quality_gate.json": "48b25137a27a5ed3aa95ac03421105b0a4ba9a2b24cfeaa45dec6a7f0c900dda"
+  },
+  "technical_candidate": "4e674728bb04374f3ea327b0707c0f67bbf856c2",
+  "hita_access": [
+    {
+      "source": "https://hita.com.vn/robots.txt",
+      "checked_utc": "2026-11-24T09:38:55.951Z",
+      "http_status": 403
+    }
+  ],
+  "current_price_verified_this_run": 0,
+  "price_target_hold": 4648,
+  "deferred_no_price_search": 599,
+  "outcomes": {
+    "REGULAR+PROMO+VOUCHER": 1103,
+    "REGULAR+PROMO": 1913,
+    "CONTACT": 969,
+    "UNRESOLVED": 595,
+    "DISCONTINUED": 315,
+    "NOT_FOUND": 4,
+    "REGULAR": 1632
+  },
+  "cohorts": {
+    "toto-active": {
+      "brand": "toto",
+      "state": "active",
+      "total": 2057,
+      "fresh_price_verified_this_run": 0,
+      "held_prices": 1610,
+      "source_only_rows": 332,
+      "candidate_rows": 67,
+      "owner_candidate_approval": "NOT_GRANTED",
+      "ready_to_import": false,
+      "statuses": {
+        "REGULAR+PROMO+VOUCHER": 743,
+        "REGULAR+PROMO": 800,
+        "CONTACT": 283,
+        "UNRESOLVED": 114,
+        "DISCONTINUED": 49,
+        "NOT_FOUND": 1,
+        "REGULAR": 67
+      },
+      "holds": {
+        "HITA_DIRECT_PASSED_ARCHIVED_GATE": 1543,
+        "voucher_null_proposed": 28,
+        "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 67
+      },
+      "sha256": {
+        "status-review.csv": "00d70d7039d462f915d2eda01ff89d0f831356c63d4b108cf98026d999016b53",
+        "candidate-review.csv": "776086a1174ee7effaa49ff00bd237d38f110e9051ac3aa5984bc043611b3b1a"
+      },
+      "status_only_quality_gate": {
+        "rows": 332,
+        "fails": 0,
+        "warns": 0,
+        "price_rows": 0,
+        "sha256": "60334c174793c6c9f70a8fc4aad1ed915f695be8241d25168126b8e9b973f462"
+      },
+      "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+    },
+    "toto-inactive": {
+      "brand": "toto",
+      "state": "inactive",
+      "total": 2384,
+      "fresh_price_verified_this_run": 0,
+      "held_prices": 1319,
+      "source_only_rows": 935,
+      "candidate_rows": 393,
+      "owner_candidate_approval": "NOT_GRANTED",
+      "ready_to_import": false,
+      "statuses": {
+        "REGULAR+PROMO": 924,
+        "REGULAR": 393,
+        "UNRESOLVED": 129,
+        "CONTACT": 677,
+        "DISCONTINUED": 258,
+        "REGULAR+PROMO+VOUCHER": 2,
+        "NOT_FOUND": 1
+      },
+      "holds": {
+        "HITA_DIRECT_PASSED_ARCHIVED_GATE": 926,
+        "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 393,
+        "voucher_null_proposed": 1
+      },
+      "sha256": {
+        "status-review.csv": "a79bdb0bcff2a5a1c228cdf3f648333392c3a6ad86ee46d4820ec78ae83b3c2d",
+        "candidate-review.csv": "badcf8d097f66ffdb5f416b17789aabf29539b8c85a7dfad87db431cb4524046"
+      },
+      "status_only_quality_gate": {
+        "rows": 935,
+        "fails": 0,
+        "warns": 0,
+        "price_rows": 0,
+        "sha256": "2877e2963234e68b26487f766ccdfa5d7b948e67489706681b79c16143ba4835"
+      },
+      "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+    },
+    "inax-active": {
+      "brand": "inax",
+      "state": "active",
+      "total": 1653,
+      "fresh_price_verified_this_run": 0,
+      "held_prices": 1319,
+      "source_only_rows": 16,
+      "candidate_rows": 467,
+      "owner_candidate_approval": "NOT_GRANTED",
+      "ready_to_import": false,
+      "statuses": {
+        "REGULAR+PROMO+VOUCHER": 358,
+        "REGULAR": 772,
+        "REGULAR+PROMO": 189,
+        "UNRESOLVED": 316,
+        "NOT_FOUND": 2,
+        "DISCONTINUED": 8,
+        "CONTACT": 8
+      },
+      "holds": {
+        "INAX_BASELINE_PENDING_REFRESH": 547,
+        "HITA_DIRECT_PASSED_ARCHIVED_GATE": 305,
+        "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 467
+      },
+      "sha256": {
+        "status-review.csv": "a8861d99fe9612e7ad2cdee62d7bb96de69c820633f3afa83a61c5c6f1046d68",
+        "candidate-review.csv": "54ca380a0cd62967061fe292fd9f2341f9541e024ac9871ce6e7ed937f9f73e1"
+      },
+      "status_only_quality_gate": {
+        "rows": 16,
+        "fails": 0,
+        "warns": 0,
+        "price_rows": 0,
+        "sha256": "4203913074da4d4a0dac8d51b295d8be8a05bdc3222e66a3196557d0450fca0b"
+      },
+      "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+    },
+    "inax-inactive": {
+      "brand": "inax",
+      "state": "inactive",
+      "total": 437,
+      "fresh_price_verified_this_run": 0,
+      "held_prices": 400,
+      "source_only_rows": 1,
+      "candidate_rows": 392,
+      "owner_candidate_approval": "NOT_GRANTED",
+      "ready_to_import": false,
+      "statuses": {
+        "UNRESOLVED": 36,
+        "REGULAR": 400,
+        "CONTACT": 1
+      },
+      "holds": {
+        "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 392,
+        "HITA_DIRECT_PASSED_ARCHIVED_GATE": 8
+      },
+      "sha256": {
+        "status-review.csv": "65546c08c84113fcaedd5d643d8de52aadfa0637fad49d356f6e1688696eba7c",
+        "candidate-review.csv": "217bc6a5bb9bf5f0ccee5a70e20f502368f259b0448d447d7fd6c768b1f1f9d7"
+      },
+      "status_only_quality_gate": {
+        "rows": 1,
+        "fails": 0,
+        "warns": 0,
+        "price_rows": 0,
+        "sha256": "aff75986d9f405e3c84de20a1525f0995e6fe3504a81ad9c44bdb9ea285f8883"
+      },
+      "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+    }
+  },
+  "owner_price_approvals": 0,
+  "price_import_gate": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+}

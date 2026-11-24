@@ -1,0 +1,37 @@
+{
+  "brand": "toto",
+  "state": "active",
+  "total": 2057,
+  "fresh_price_verified_this_run": 0,
+  "held_prices": 1610,
+  "source_only_rows": 332,
+  "candidate_rows": 67,
+  "owner_candidate_approval": "NOT_GRANTED",
+  "ready_to_import": false,
+  "statuses": {
+    "REGULAR+PROMO+VOUCHER": 743,
+    "REGULAR+PROMO": 800,
+    "CONTACT": 283,
+    "UNRESOLVED": 114,
+    "DISCONTINUED": 49,
+    "NOT_FOUND": 1,
+    "REGULAR": 67
+  },
+  "holds": {
+    "HITA_DIRECT_PASSED_ARCHIVED_GATE": 1543,
+    "voucher_null_proposed": 28,
+    "OWNER_CANDIDATE_PENDING_ROW_APPROVAL": 67
+  },
+  "sha256": {
+    "status-review.csv": "00d70d7039d462f915d2eda01ff89d0f831356c63d4b108cf98026d999016b53",
+    "candidate-review.csv": "776086a1174ee7effaa49ff00bd237d38f110e9051ac3aa5984bc043611b3b1a"
+  },
+  "status_only_quality_gate": {
+    "rows": 332,
+    "fails": 0,
+    "warns": 0,
+    "price_rows": 0,
+    "sha256": "60334c174793c6c9f70a8fc4aad1ed915f695be8241d25168126b8e9b973f462"
+  },
+  "price_import_review": "NOT_RUN_NO_FRESH_PRICE_ROWS"
+}
