@@ -26,12 +26,14 @@
 | INAX toàn bộ | 2.090 | 0 | 2 | 313 | 1.746 + 12 |
 | INAX active | 1.653 | 0 | 2 | 305 | 1.320 + 10 |
 | TOTO active (#481) | 2.057 | 0 | 28 | 1.543 | 147 + 34 |
+| TOTO inactive | 2.384 | 0 | 0 | 926 | 508 + 14 |
+| INAX inactive | 437 | 0 | 0 | 8 | 426 + 2 |
 
 547 giá INAX baseline giữ nhãn stale nên gate phân loại vào UNRESOLVED, dù timestamp tại lúc audit còn trong 24 giờ. Kết quả PRICE_VERIFIED là phân loại kỹ thuật của file ở thời điểm gate. Cả 3.329 giá có trường Offer `priceValidUntil=2026-12-01`. Ngày này từ nguồn, chưa chứng minh là hạn riêng của mỗi ưu đãi. Khoảng thời gian lấy giá là 23/11/2026 18:23–21:40 UTC với TOTO và 24/11/2026 03:04–05:47 UTC với INAX. Không đổi timestamp hoặc hạn.
 
 - **TOTO:** 28 cảnh báo voucher lớn đều thuộc active. Giữ kết luận #481 gồm 26 đủ căn cứ số tiền lịch sử và 2 nghi vấn khả dụng. Ba voucher inactive có giá trị khớp bằng chứng đã lưu; `DU601N` có quantity 0, cần kiểm tra khả dụng nếu dùng sau này.
 - **INAX:** 358 voucher đều từ baseline active; số tiền và điều kiện online khớp bằng chứng đã lưu, tỷ lệ cao nhất 6,72% giá bán. Không có WARN voucher lớn. Hai WARN giảm giá sâu gồm `BFV-7145T-3C` và `AC-919R+CW-H17VN/BW1`.
-- **Trước cutover:** xác nhận lại inventory active 3.710 SKU, refresh hợp lệ các giá và trạng thái, ưu tiên 964 active chưa xác minh cùng 30 dòng WARN. Owner duyệt giá, voucher và phương án với SKU chưa có bằng chứng, rồi pin CSV mới và chạy lại gate. CONTACT dùng “Liên hệ báo giá”; SKU chưa xác minh giữ giá trống và dùng “Cần liên hệ xác nhận giá”. Inactive chỉ phục vụ đối soát và không thuộc nhập đợt 1. Nếu INAX còn vướng refresh/duyệt, Owner quyết định tách rollout tại [#449](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/449), theo phạm vi đã chốt ở #443.
+- **Trước cutover:** xác nhận lại inventory 6.531 SKU, refresh hợp lệ dữ liệu dự kiến đưa vào từng tập; ưu tiên 964 active chưa xác minh cùng 30 dòng WARN. Owner duyệt giá, voucher và phương án với SKU chưa có bằng chứng, rồi pin CSV mới và chạy lại gate. CONTACT dùng “Liên hệ báo giá”; SKU chưa xác minh giữ giá trống và dùng “Cần liên hệ xác nhận giá”. Inactive cũng thuộc phạm vi chuẩn bị. Chỉ dữ liệu đủ căn cứ và được Owner duyệt mới được nhập, với plan/ledger/checksum riêng cho từng hãng và trạng thái. Giữ nguyên is_active, SKU, URL và trạng thái kinh doanh; inactive tiếp tục không hiển thị Public. Nếu inactive hoặc INAX còn vướng refresh/duyệt, Owner có thể quyết định chạy phần active đủ điều kiện trước tại [#449](https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/449), theo phạm vi đã chốt ở #443.
 
 ## File bàn giao
 
@@ -42,6 +44,8 @@
 
 - [Danh sách refresh theo hãng và active](refresh_queue.csv) · [30 WARN cho Owner](owner_price_warnings.csv)
 - [Đối chiếu TOTO inactive](toto_inactive_evidence_review.csv) · [Mẫu 20 ứng viên](toto_inactive_candidate_sample.csv) · [Voucher inactive](toto_inactive_voucher_review.csv)
+- TOTO inactive: [CSV](toto_inactive_review.csv) · [Ngoại lệ](toto_inactive_exceptions.csv) · [Ứng viên](toto_inactive_historical_candidates.csv) · [Gate](toto_inactive_quality_gate.json)
+- INAX inactive: [CSV](inax_inactive_review.csv) · [Ngoại lệ](inax_inactive_exceptions.csv) · [Ứng viên](inax_inactive_historical_candidates.csv) · [Gate](inax_inactive_quality_gate.json)
 - [CSV và gate INAX active](../inax/release-review/) · [Gói TOTO active đã nghiệm thu](../toto/release-review/)
 - [Tóm tắt và checksum đầu vào](audit-summary.json) · [Checksum đầu ra](SHA256SUMS)
 
