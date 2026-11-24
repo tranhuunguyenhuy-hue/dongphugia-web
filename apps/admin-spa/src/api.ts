@@ -87,34 +87,25 @@ export const errorText = (error: unknown, labels: Record<string, string> = {}) =
   return named.length ? `${base} Kiểm tra: ${named.join(', ')}.` : base
 }
 
-// ---- orders / quotes / dashboard (dedicated function handlers) ----
+// ---- commerce v1 inbox (dpg_commerce) + dashboard (dedicated function handlers) ----
 export type Money = number | null
-export type OrderRow = { id: number; order_number: string; customer_name: string; customer_phone: string; total: Money; status: string; payment_status: string; payment_method: string | null; created_at: string; assigned_to: number | null; assigned_name: string | null; item_count: number }
-export type OrderItem = { id: number; product_id: number; product_name: string; product_sku: string; quantity: number; unit_price: Money; total_price: Money; image_main_url: string | null }
-export type OrderDetail = Omit<OrderRow, 'item_count'> & { customer_email: string | null; customer_address: string | null; note: string | null; subtotal: Money; shipping_fee: Money; discount: Money; vat_rate: number; items: OrderItem[] }
-export type QuoteRow = { id: number; quote_number: string | null; name: string; phone: string; email: string | null; status: string; created_at: string; assigned_to: number | null; assigned_name: string | null; item_names: string }
-export type QuoteItem = { id: number; product_id: number; quantity: number; note: string | null; admin_quantity: number | null; admin_unit_price: Money; product_name_snapshot: string | null; product_sku_snapshot: string | null; snapshot_at: string | null; list_price_snapshot: Money; sale_price_snapshot: Money; product_name: string | null; product_sku: string | null; product_price: Money }
-export type QuoteDetail = { id: number; quote_number: string | null; name: string; phone: string; email: string | null; message: string | null; status: string; admin_notes: string | null; shipping_fee: Money; vat_rate: number; assigned_to: number | null; items: QuoteItem[] }
+export type SalesKind = 'orders' | 'quotes'
+export type SalesStatus = 'new' | 'processing' | 'done' | 'cancelled'
+export type SalesRow = { id: number; code: string; status: SalesStatus; customer_name: string; customer_phone: string; total_vnd?: Money; line_count: number; assigned_to: number | null; created_at: string; updated_at: string }
+export type SalesLine = { line_no: number; product_id: number; sku: string; product_name: string; brand: string | null; quantity: number; regular_vnd?: Money; unit_selling_vnd: Money; unit_voucher_vnd?: Money; line_subtotal_vnd?: Money; line_voucher_vnd?: Money; reason?: string }
+export type SalesDetail = SalesRow & { customer_email: string | null; note: string | null; staff_note: string | null; version: number; delivery_address?: string; subtotal_vnd?: Money; voucher_vnd?: Money; assigned_name: string | null; lines: SalesLine[]; events: { actor: string; action: string; from_status: string | null; to_status: string | null; at: string }[] }
 export type Dashboard = {
-  stats: { pending_quotes: number; pending_orders: number; revenue_this_month: number; revenue_last_month: number; revenue_growth: number | null; orders_this_month: number; total_products: number; active_products: number }
-  period: string; revenue: { date: string; revenue: number; order_count: number }[]
-  pending_quotes: { id: number; quote_number: string | null; name: string; phone: string; created_at: string; item_names: string }[]
-  pending_orders: { id: number; order_number: string; customer_name: string; customer_phone: string; total: Money; payment_status: string; created_at: string }[]
-  top_sold: { product_id: number; product_name: string; product_sku: string; total_sold: number }[]; top_quoted: { product_id: number; name: string; sku: string; quote_count: number }[]
+  stats: { new_orders: number; new_quotes: number; processing_orders: number; processing_quotes: number; total_products: number; active_products: number }
+  new_orders: { id: number; code: string; customer_name: string; customer_phone: string; total_vnd: Money; line_count: number; created_at: string }[]
+  new_quotes: { id: number; code: string; customer_name: string; customer_phone: string; line_count: number; created_at: string }[]
 }
+const qs = (params: Record<string, string | number>) => new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '').map(([k, v]) => [k, String(v)]))
 export const commerce = {
   assignees: () => request<{ items: { id: number; name: string; role: string }[] }>('GET', '/assignees').then((r) => r.items),
-  dashboard: (period: string) => request<Dashboard>('GET', `/dashboard?period=${period}`),
-  orders: (params: Record<string, string | number>) => request<{ items: OrderRow[]; total: number; stats: { total: number; pending: number; processing: number; completed: number; revenue: number } }>('GET', `/orders?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '').map(([k, v]) => [k, String(v)]))}`),
-  order: (id: number) => request<OrderDetail>('GET', `/orders/${id}`),
-  orderStatus: (id: number, status: string) => request<OrderDetail>('PATCH', `/orders/${id}/status`, { status }),
-  orderPayment: (id: number, payment_status: string) => request<OrderDetail>('PATCH', `/orders/${id}/payment`, { payment_status }),
-  orderAssign: (id: number, user_id: number | null) => request<OrderDetail>('PATCH', `/orders/${id}/assign`, { user_id }),
-  orderSave: (id: number, body: Row) => request<OrderDetail>('PATCH', `/orders/${id}`, body),
-  quotes: (params: Record<string, string | number>) => request<{ items: QuoteRow[]; total: number; counts: Record<string, number> }>('GET', `/quotes?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '').map(([k, v]) => [k, String(v)]))}`),
-  quote: (id: number) => request<QuoteDetail>('GET', `/quotes/${id}`),
-  quoteStatus: (id: number, status: string) => request<QuoteDetail>('PATCH', `/quotes/${id}/status`, { status }),
-  quoteAssign: (id: number, user_id: number | null) => request<QuoteDetail>('PATCH', `/quotes/${id}/assign`, { user_id }),
-  quoteSave: (id: number, body: Row) => request<QuoteDetail>('PATCH', `/quotes/${id}`, body),
-  quoteComplete: (id: number, body: Row) => request<QuoteDetail>('POST', `/quotes/${id}/complete`, body),
+  dashboard: () => request<Dashboard>('GET', '/dashboard'),
+  list: (kind: SalesKind, params: Record<string, string | number>) => request<{ items: SalesRow[]; total: number; counts: Record<SalesStatus, number> }>('GET', `/sales/${kind}?${qs(params)}`),
+  get: (kind: SalesKind, id: number) => request<SalesDetail>('GET', `/sales/${kind}/${id}`),
+  setStatus: (kind: SalesKind, id: number, status: Exclude<SalesStatus, 'new'>, expected_version: number, note?: string) => request<SalesDetail>('POST', `/sales/${kind}/${id}/status`, { status, expected_version, ...(note ? { note } : {}) }),
+  setNote: (kind: SalesKind, id: number, note: string, expected_version: number) => request<SalesDetail>('POST', `/sales/${kind}/${id}/note`, { note, expected_version }),
+  assign: (kind: SalesKind, id: number, user_id: number | null, expected_version: number) => request<SalesDetail>('POST', `/sales/${kind}/${id}/assign`, { user_id, expected_version }),
 }

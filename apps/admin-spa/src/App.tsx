@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, can, type ResourceMeta, type User } from './api'
 import { ResourceForm, ResourceList } from './Resource'
 import { DashboardPage } from './Dashboard'
-import { OrderDetailPage, OrdersList, QuoteBuilderPage, QuotesList } from './Commerce'
+import { SalesDetailPage, SalesList } from './Sales'
 import { AppShell, type Crumb } from './Shell'
 import { ConfirmProvider, Toaster } from './ui'
 import { Login } from './Login'
@@ -29,11 +29,11 @@ export function App() {
   if (!user) return <><Login onDone={setUser} /><Toaster /></>
   const resource = path.match(/^\/r\/([a-z][a-z0-9-]*)(?:\/(new|\d+))?$/)
   const meta = resource ? resources.find((r) => r.key === resource[1]) : undefined
-  const order = path.match(/^\/orders(?:\/(\d+))?$/); const quoteRoute = path.match(/^\/quotes(?:\/(\d+))?$/)
+  const order = path.match(/^\/orders(?:\/(\d+))?$/); const quoteRoute = path.match(/^\/quotes(?:\/(\d+))?$/)   // commerce v1 inbox (same URLs as before, new data)
   let content
   if (path === '/dashboard') content = can(user, 'dashboard:read') ? <DashboardPage go={go} /> : <section className="card"><p className="muted">Bạn không có quyền xem tổng quan.</p></section>
-  else if (order) content = order[1] ? <OrderDetailPage key={order[1]} id={Number(order[1])} user={user} go={go} /> : <OrdersList user={user} go={go} />
-  else if (quoteRoute) content = quoteRoute[1] ? <QuoteBuilderPage key={quoteRoute[1]} id={Number(quoteRoute[1])} user={user} go={go} /> : <QuotesList user={user} go={go} />
+  else if (order) content = order[1] ? <SalesDetailPage key={`o${order[1]}`} kind="orders" id={Number(order[1])} user={user} go={go} /> : <SalesList kind="orders" user={user} go={go} />
+  else if (quoteRoute) content = quoteRoute[1] ? <SalesDetailPage key={`q${quoteRoute[1]}`} kind="quotes" id={Number(quoteRoute[1])} user={user} go={go} /> : <SalesList kind="quotes" user={user} go={go} />
   else if (resource) {
     if (!meta) content = <section className="card"><p className="muted">{resources.length ? 'Không tìm thấy hoặc không có quyền truy cập.' : 'Đang tải…'}</p></section>
     else if (resource[2] === 'new') content = <ResourceForm key={`${meta.key}:new`} meta={meta} id={null} go={go} />
