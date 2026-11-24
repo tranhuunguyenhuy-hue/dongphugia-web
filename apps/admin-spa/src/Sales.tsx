@@ -36,10 +36,10 @@ export function SalesList({ kind, user, go }: { kind: SalesKind; user: User; go:
       <PageHeader title={label.title} description="Do khách gửi từ website. Thanh toán, giao hàng và chi phí được xác nhận trực tiếp với khách." />
       {error && <Alert>{error}</Alert>}
       <Tabs value={status || 'all'} onValueChange={(v) => { setStatus(v === 'all' ? '' : v); setPage(1) }}>
-        <TabsList>
+        <div className="max-w-full overflow-x-auto"><TabsList>
           <TabsTrigger value="all">Tất cả{data ? ` (${Object.values(data.counts).reduce((a, b) => a + b, 0)})` : ''}</TabsTrigger>
           {(Object.keys(SALES_STATUS) as SalesStatus[]).map((s) => <TabsTrigger key={s} value={s}>{SALES_STATUS[s]}{data ? ` (${data.counts[s]})` : ''}</TabsTrigger>)}
-        </TabsList>
+        </TabsList></div>
       </Tabs>
       <div className="relative min-w-52 sm:max-w-sm"><Search className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground" /><Input type="search" aria-label="Tìm theo mã, tên hoặc số điện thoại" placeholder="Mã, tên, số điện thoại" className="pl-8" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <Card className="py-0"><CardContent className="p-0">
@@ -93,7 +93,7 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
       <PageHeader title={<>{label.one} {row.code} <Badge variant={tone(row.status)} className="ml-2 align-middle">{SALES_STATUS[row.status]}</Badge></>} description={`Gửi lúc ${dateText(row.created_at)} · cập nhật ${dateText(row.updated_at)}`}
         actions={<Button variant="outline" onClick={() => go(`/${label.nav}`)}>Danh sách</Button>} />
       {error && <Alert>{error}</Alert>}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 content-start gap-4">
           <Card><CardHeader><CardTitle>Sản phẩm ({row.lines.length})</CardTitle></CardHeader><CardContent className="px-0">
             <Table>
