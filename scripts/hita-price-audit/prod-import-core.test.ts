@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySql, buildPlan, DB_CEILING_BYTES, goTokenMatches, ledgerJsonl, rollbackSql, sha256, type DbRow, type PlanInput } from './prod-import-core.mts'
+import { applySql, buildPlan, DB_CEILING_BYTES, releaseBindingMatches, ledgerJsonl, rollbackSql, sha256, type DbRow, type PlanInput } from './prod-import-core.mts'
 import { REQUIRED_COLUMNS } from './quality-gate-core.mts'
 
 const NOW = new Date('2026-11-24T01:00:00Z'), CAND = 'a'.repeat(40)
@@ -9,7 +9,7 @@ const base: Record<string, string> = { dpg_id: '1', sku: 'A-1', is_active: 'true
   status: 'EXACT', review_status: 'FRESH_CRAWL_PENDING_OWNER_REVIEW', product_name: 'A', reason: '' }
 const csv = (rows: Array<Record<string, string>>) => [COLS.join(','), ...rows.map(r => COLS.map(c => `"${(({ ...base, ...r })[c] ?? '').replaceAll('"', '""')}"`).join(','))].join('\r\n') + '\r\n'
 const row = (id: number, o: Record<string, string> = {}) => ({ dpg_id: String(id), sku: `S-${id}`, hita_exact_sku: `S-${id}`, hita_url: `https://hita.com.vn/s-${id}-${id}.html`, ...o })
-const dbRow = (id: number, o: Partial<DbRow> = {}): DbRow => ({ id, sku: `S-${id}`, category_id: 1, is_active: true, version: 3, canonical_price_status: null, ...o })
+const dbRow = (id: number, o: Partial<DbRow> = {}): DbRow => ({ id, sku: `S-${id}`, category_id: 1, brand_id: 1, is_active: true, version: 3, canonical_price_status: null, canonical_price_checked_at: null, ...o })
 function input(rows: Array<Record<string, string>>, over: Partial<PlanInput> = {}, db?: DbRow[]): PlanInput {
   const text = csv(rows)
   return { csvText: text, expectedCsvSha256: sha256(text), candidateSha: CAND, inventory: rows.map(r => ({ id: Number(r.dpg_id), sku: r.sku, is_active: (r.is_active ?? 'true') === 'true' })),
@@ -67,17 +67,32 @@ describe('#470 prod import planner', () => {
   })
   it('rollback SQL swaps before/after and clears the checked-at stamp; ledger has one line per row', () => {
     const p = buildPlan(input(R)); const rb = rollbackSql(p, 0)
-    // rollback: the basis (from_*) is the imported state and the target (to_*) is the previous state with the stamp cleared
-    expect(rb).toContain("(1, 'S-1', true, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, null::text, null::bigint, null::bigint, null::bigint, null::timestamptz)")
-    expect(applySql(p, 0)).toContain("(1, 'S-1', true, null::text, null::bigint, null::bigint, null::bigint, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, '2026-11-23T18:00:00.000Z'::timestamptz)")
+    // rollback: basis = imported state at version v+1 with the CSV checked-at; target = exact prior state (incl. its checked-at)
+    expect(rb).toContain("(1, 'S-1', true, 4, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, '2026-11-23T18:00:00.000Z'::timestamptz, null::text, null::bigint, null::bigint, null::bigint, null::timestamptz)")
+    expect(applySql(p, 0)).toContain("(1, 'S-1', true, 3, null::text, null::bigint, null::bigint, null::bigint, null::timestamptz, 'PRICE_VERIFIED'::text, 1000000, 900000, 50000, '2026-11-23T18:00:00.000Z'::timestamptz)")
     expect(ledgerJsonl(p).trim().split('\n')).toHaveLength(p.rows.length)
   })
   it('the Owner GO token must quote candidate:csv:plan exactly and the plan must be free of stop reasons', () => {
-    const p = buildPlan(input(R)); expect(goTokenMatches(p, p.goToken)).toBe(true)
-    expect(goTokenMatches(p, undefined)).toBe(false); expect(goTokenMatches(p, `${CAND}:${p.csvSha256}:${'0'.repeat(64)}`)).toBe(false)
-    const bad = buildPlan(input(R, { candidateSha: 'x' })); expect(goTokenMatches(bad, bad.goToken)).toBe(false)
+    const p = buildPlan(input(R)); expect(releaseBindingMatches(p, p.releaseBinding)).toBe(true)
+    expect(releaseBindingMatches(p, undefined)).toBe(false); expect(releaseBindingMatches(p, `${CAND}:${p.csvSha256}:${'0'.repeat(64)}`)).toBe(false)
+    const bad = buildPlan(input(R, { candidateSha: 'x' })); expect(releaseBindingMatches(bad, bad.releaseBinding)).toBe(false)
   })
   it('refuses SKUs that are not safe SQL literals', () => {
     const p = buildPlan(input([row(1, { sku: "A'; drop", hita_exact_sku: "A'; drop" })])); expect(p.stopReasons.join()).toMatch(/IDENTITY_MISMATCH|QUALITY_GATE_FAIL/)
+  })
+  it('pins the immutable brand identity: a row of another brand stops the plan; every batch re-checks brand, target identity, schema and version', () => {
+    expect(buildPlan(input([R[0]], {}, [dbRow(1, { brand_id: 2 })])).stopReasons.join()).toMatch(/IDENTITY_MISMATCH id=1/)
+    expect(buildPlan(input([R[0]], {}, [dbRow(1, { version: undefined })])).stopReasons.join()).toMatch(/IDENTITY_MISMATCH/)
+    const sql = applySql(buildPlan(input(R)), 0)
+    for (const s of ["p.brand_id = 1", "p.version = v.from_version", "p.canonical_price_checked_at is not distinct from v.from_checked", "project_name = 'dongphugia-runtime'",
+      "region = 'ap-southeast-1'", "environment = 'preview'", 'PRICE_IMPORT_BRAND_IDENTITY_CHANGED', 'PRICE_IMPORT_SCHEMA_001_MISSING']) expect(sql).toContain(s)
+  })
+  it('never overwrites a newer DB value (e.g. an Admin edit after the crawl): row skipped and listed', () => {
+    const p = buildPlan(input([R[0], row(2)], {}, [dbRow(1, { canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: 5, canonical_price_checked_at: '2026-11-24T00:30:00.000Z' }), dbRow(2)]))
+    expect(p.rows.map(r => r.id)).toEqual([2]); expect(p.summary).toMatchObject({ skipped_newer_db_edit: 1, newer_db_edit_ids: [1] })
+  })
+  it('the plan SHA changes when the basis (version / prior state) changes, so a GO for one snapshot cannot run on another', () => {
+    const a = buildPlan(input([R[0]], {}, [dbRow(1)])), b = buildPlan(input([R[0]], {}, [dbRow(1, { version: 4 })]))
+    expect(a.planSha).not.toBe(b.planSha)
   })
 })

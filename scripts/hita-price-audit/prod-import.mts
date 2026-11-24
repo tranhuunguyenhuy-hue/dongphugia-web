@@ -1,14 +1,14 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { applySql, buildPlan, goTokenMatches, ledgerJsonl, rollbackSql, SNAPSHOT_SQL, type DbRow } from './prod-import-core.mts'
+import { applySql, buildPlan, releaseBindingMatches, ledgerJsonl, rollbackSql, SNAPSHOT_SQL, type DbRow } from './prod-import-core.mts'
 import type { InvRow } from './quality-gate-core.mts'
 
 // #470 Step 3b. DRY-RUN BY DEFAULT and WRITE-INCAPABLE: this tool never opens a database connection.
 //   npx tsx scripts/hita-price-audit/prod-import.mts <prices.csv> --csv-sha256 <hex64> --candidate-sha <git sha40> \
 //     --inventory inv.json [--inventory inv2.json] --db-snapshot snapshot.json [--now ISO] [--batch-size 200] [--include-inactive] \
 //     [--out dir]   (writes apply/rollback SQL batches, ledger.jsonl and manifest.json; nothing is executed)
-//     [--go-token candidate:csv:plan]   (only prints whether the Owner GO text matches; still executes nothing)
+//     [--go-token candidate:csv:plan]   (only checks that the text quoted in the Owner GO identifies this plan; executes nothing)
 // snapshot.json = { "db_size_bytes": number, "rows": [DbRow...] } produced read-only with the SNAPSHOT_SQL printed by --print-snapshot-sql.
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'csv-sha256': { type: 'string' }, 'candidate-sha': { type: 'string' }, inventory: { type: 'string', multiple: true, default: [] }, 'db-snapshot': { type: 'string' },
@@ -23,8 +23,8 @@ const plan = buildPlan({
   csvText, expectedCsvSha256: values['csv-sha256'] ?? '', candidateSha: values['candidate-sha'] ?? '', inventory, db: snap.rows, dbSizeBytes: snap.db_size_bytes,
   now: values.now ? new Date(values.now) : new Date(), batchSize: values['batch-size'] ? Number(values['batch-size']) : undefined, activeOnly: !values['include-inactive'],
 })
-const report = { mode: values.out ? 'emit-sql (nothing executed)' : 'dry-run', plan_sha: plan.planSha, csv_sha256: plan.csvSha256, candidate_sha: plan.candidateSha, go_token_required: plan.goToken,
-  go_token_matches: values['go-token'] === undefined ? null : goTokenMatches(plan, values['go-token']), stop_reasons: plan.stopReasons, ...plan.summary }
+const report = { mode: values.out ? 'emit-sql (nothing executed)' : 'dry-run', plan_sha: plan.planSha, csv_sha256: plan.csvSha256, candidate_sha: plan.candidateSha, release_binding: plan.releaseBinding, release_binding_note: 'identity for the manifest only; execution needs the Owner GO',
+  release_binding_matches: values['go-token'] === undefined ? null : releaseBindingMatches(plan, values['go-token']), stop_reasons: plan.stopReasons, ...plan.summary }
 if (values.out && !plan.stopReasons.length) {
   await mkdir(values.out, { recursive: true })
   for (let i = 0; i < plan.batches.length; i++) {
