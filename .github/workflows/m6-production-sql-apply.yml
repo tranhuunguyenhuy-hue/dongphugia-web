@@ -1,0 +1,147 @@
+name: M6 Production SQL apply (protected, manual)
+
+# #470 — the ONLY lane that may change the Production database for the price/commerce release. Never runs on merge, push or schedule.
+# Inputs are choices/ids only: there is no input for SQL text, a file path, a URL or an identifier. Every file, plan and expected count comes from the
+# sha256-pinned scripts/m6/allowlist.json. Read-only operations: preflight, plan-import. Mutating: apply-004, apply-schema, apply-import, rollback-import,
+# rollback-schema, provision-intake (each needs a fresh m4-production-backup run (<2h, dump + restore rehearsal PASS) and the Owner's GO phrase).
+# Credential (environment `production-sql-apply`, Owner-approval required): secret M6_OPERATOR_DATABASE_URL = a SHORT-LIVED operator login (see
+# docs/ops/price-release-470/m6-owner-setup.md). Never printed, never uploaded. Artifacts hold plans/ledgers only (public catalogue data, no PII, no credentials).
+on:
+  workflow_dispatch:
+    inputs:
+      approved_source_sha:
+        description: Exact reviewed main SHA (must equal the dispatched main SHA)
+        required: true
+        type: string
+      operation:
+        description: preflight and plan-import are read-only; the rest mutate Production and need the GO phrase
+        required: true
+        type: choice
+        options: [preflight, plan-import, apply-004, apply-schema, apply-import, rollback-import, rollback-schema, provision-intake]
+        default: preflight
+      group:
+        description: plan-import / apply-import only. prices = 4,648 prices + 1,284 statuses (CP1) · voucher = 1,101 vouchers (after prices)
+        required: false
+        type: choice
+        options: ['', prices, voucher]
+        default: ''
+      plan_set_sha256:
+        description: apply-import only. The plan-set sha256 the Owner approved at the checkpoint (printed by plan-import)
+        required: false
+        type: string
+        default: ''
+      resume:
+        description: plan-import / apply-import only. true = continue an interrupted apply (already-applied rows are allowed)
+        required: true
+        type: boolean
+        default: false
+      rollback_source_run_id:
+        description: rollback-import only. Run id of the apply-import run whose artifact holds the ledgers to roll back
+        required: false
+        type: string
+        default: ''
+      go_prod:
+        description: Mutating operations only. Type exactly GO-PROD-<first 12 characters of approved_source_sha>
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: m6-production-sql-apply
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+  V1_PUBLIC_HYPERDRIVE_ID: 905f5791e9d84cf285f7533b92d03f49
+
+jobs:
+  lane:
+    if: >-
+      github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && github.ref == 'refs/heads/main' &&
+      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: production-sql-apply
+    env:
+      M6_OPERATION: ${{ inputs.operation }}
+      M6_APPROVED_SHA: ${{ inputs.approved_source_sha }}
+      M6_GROUP: ${{ inputs.group }}
+      M6_PLAN_SET_SHA256: ${{ inputs.plan_set_sha256 }}
+      M6_RESUME: ${{ inputs.resume }}
+      DATABASE_URL: ${{ secrets.M6_OPERATOR_DATABASE_URL }}
+      GO_PROD_INPUT: ${{ inputs.go_prod }}
+      ROLLBACK_RUN_INPUT: ${{ inputs.rollback_source_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies (committed lockfile) and the PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client; }
+          psql --version
+      - name: Guard the inputs (mutating operations need the GO phrase tied to this SHA)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo 'M6 status=FAIL reason=operator_credential_missing'; exit 1; }
+          echo "::add-mask::$DATABASE_URL"
+          case "$M6_OPERATION" in
+            preflight|plan-import) ;;
+            *) test "$GO_PROD_INPUT" = "GO-PROD-${M6_APPROVED_SHA:0:12}" || { echo 'M6 status=FAIL reason=go_phrase_missing_or_wrong'; exit 1; } ;;
+          esac
+          if [ "$M6_OPERATION" = rollback-import ]; then [[ "$ROLLBACK_RUN_INPUT" =~ ^[0-9]{6,15}$ ]] || { echo 'M6 status=FAIL reason=rollback_source_run_id_required'; exit 1; }; fi
+          echo 'M6 status=PASS stage=guard'
+      - name: Verify the fresh backup evidence (mutating operations only; fail closed)
+        if: inputs.operation != 'preflight' && inputs.operation != 'plan-import'
+        id: backup
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wf=$(node -e 'process.stdout.write(require("./scripts/m6/allowlist.json").backup.workflow.split("/").pop())')
+          run=$(gh api -X GET "repos/${{ github.repository }}/actions/workflows/$wf/runs" -f branch=main -f status=completed -f per_page=10 \
+            --jq '[.workflow_runs[] | select(.conclusion=="success")][0]')
+          test -n "$run" && [ "$run" != null ] || { echo 'M6 status=FAIL reason=no_successful_backup_run'; exit 1; }
+          id=$(jq -r .id <<<"$run")
+          jobs=$(gh api "repos/${{ github.repository }}/actions/runs/$id/jobs" --paginate --jq '[.jobs[] | {key: .name, value: (.conclusion // "none")}] | from_entries' | jq -s 'add')
+          steps=$(gh api "repos/${{ github.repository }}/actions/runs/$id/jobs" --paginate --jq '[.jobs[] | select(.name=="backup") | .steps[] | {key: .name, value: (.conclusion=="success")}] | from_entries' | jq -s 'add')
+          evidence=$(jq -cn --argjson run "$run" --argjson jobs "$jobs" --argjson steps "$steps" '{run_id: $run.id, path: $run.path, head_branch: $run.head_branch, conclusion: $run.conclusion, updated_at: $run.updated_at, steps: $steps, jobs: $jobs}')
+          echo "M6_BACKUP_EVIDENCE=$evidence" >> "$GITHUB_ENV"
+          echo "M6 status=PASS stage=backup_evidence run=$id"
+      - name: Fetch the apply run's ledgers (rollback-import only)
+        if: inputs.operation == 'rollback-import'
+        uses: actions/download-artifact@v4
+        with:
+          name: m6-apply-import-${{ inputs.rollback_source_run_id }}
+          path: ${{ runner.temp }}/m6-rollback
+          run-id: ${{ inputs.rollback_source_run_id }}
+          github-token: ${{ github.token }}
+      - name: Run the lane
+        shell: bash
+        env:
+          M6_OUT: ${{ runner.temp }}/m6-out
+          M6_ROLLBACK_DIR: ${{ runner.temp }}/m6-rollback
+          CLOUDFLARE_API_TOKEN: ${{ secrets.M6_CLOUDFLARE_HYPERDRIVE_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$M6_OUT"
+          node scripts/m6/production-sql-apply.mjs
+      - name: Upload plans and ledgers (no credentials, no PII)
+        if: always() && (inputs.operation == 'plan-import' || inputs.operation == 'apply-import' || inputs.operation == 'rollback-import')
+        uses: actions/upload-artifact@v4
+        with:
+          name: m6-${{ inputs.operation }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/m6-out
+          if-no-files-found: ignore
+          retention-days: 30
