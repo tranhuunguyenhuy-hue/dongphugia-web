@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { formatPrice, cn } from '@/lib/utils';
-import { siteConfig } from '@/config/site';
-import { canonicalPriceLabel, isCanonicalPriceProvenance } from '@/lib/canonical-price';
+import { siteConfig } from '@/config/site'; import { canonicalPriceLabel, isCanonicalPriceProvenance } from '@/lib/canonical-price';
 import { getVariantDisplayColor } from '@/lib/variant-color-display';
 import { DeferredResponsiveMedia } from '@/components/media/deferred-responsive-media'; import { ResponsiveMedia } from '@/components/media/responsive-media'; import { resolveFinalOnlinePrice, resolveProductCommerce } from '@/lib/product-commerce';
 
