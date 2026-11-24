@@ -2,6 +2,7 @@
 create role dpg_migration nologin; create role dpg_operator login bypassrls; grant dpg_migration to dpg_operator;  -- Production: postgres (BYPASSRLS, non-superuser) inherits dpg_migration
  create role dpg_admin_api nologin; create role dpg_public_catalogue nologin; create role dpg_runtime nologin;
 create role dpg_readonly nologin; create role authenticated nologin; create role dpg_direct_import nologin;
+create role anon nologin; create role service_role nologin;   -- exist on Supabase; the commerce lock (004) revokes from them
 create schema dpg_control authorization dpg_migration; create schema dpg_app authorization dpg_migration;
 grant usage on schema dpg_app, dpg_control to dpg_admin_api, dpg_public_catalogue, dpg_runtime, dpg_readonly, authenticated, dpg_direct_import;
 grant usage on schema public to authenticated;
@@ -47,7 +48,8 @@ create table dpg_app.quote_requests(id int primary key, name varchar not null, p
   quote_number varchar, shipping_fee numeric not null default 0, vat_rate int not null default 0, owner_id uuid);
 create table dpg_app.quote_items(id serial primary key, quote_id int not null, product_id int not null, quantity int not null, note varchar, created_at timestamptz not null default now(), admin_quantity int, admin_unit_price numeric,
   product_sku_snapshot varchar, product_name_snapshot varchar, commerce_mode_snapshot varchar, availability_snapshot varchar, list_price_snapshot numeric, sale_price_snapshot numeric, snapshot_at timestamptz);
-grant select, insert, update, delete on dpg_app.orders, dpg_app.order_items, dpg_app.quote_requests, dpg_app.quote_items, dpg_app.runtime_idempotency_records, dpg_app.runtime_audit_events to authenticated;
-grant usage on all sequences in schema dpg_app to authenticated;
+grant select, insert, update, delete on dpg_app.orders, dpg_app.order_items, dpg_app.quote_requests, dpg_app.quote_items, dpg_app.runtime_idempotency_records to authenticated;
+grant insert on dpg_app.runtime_audit_events to authenticated;   -- Production: authenticated=a only on the audit table
+grant usage, select on all sequences in schema dpg_app to authenticated;   -- Production: authenticated=rU
 grant select on dpg_control.target_contract to authenticated;
 reset role;

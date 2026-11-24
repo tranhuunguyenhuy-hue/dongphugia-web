@@ -7,7 +7,7 @@ cd "$(dirname "$0")/../../../.."
 T=$(mktemp -d); CAND=$(printf 'c%.0s' $(seq 1 40))
 PSQL=(psql -X -q -tA -v ON_ERROR_STOP=1 -h "$H" -p "$P")
 drop_all() { "${PSQL[@]}" -U "$U" -d postgres -c "drop database if exists $DB" >/dev/null 2>&1 || true
-  for r in dpg_operator dpg_migration dpg_admin_api dpg_public_catalogue dpg_runtime dpg_readonly authenticated dpg_direct_import; do "${PSQL[@]}" -U "$U" -d postgres -c "drop role if exists $r" >/dev/null 2>&1 || true; done; }
+  for r in dpg_operator dpg_migration dpg_admin_api dpg_public_catalogue dpg_runtime dpg_readonly authenticated dpg_direct_import anon service_role; do "${PSQL[@]}" -U "$U" -d postgres -c "drop role if exists $r" >/dev/null 2>&1 || true; done; }
 trap 'drop_all; rm -rf "$T"' EXIT; drop_all
 "${PSQL[@]}" -U "$U" -d postgres -c "create database $DB"
 S=("${PSQL[@]}" -U "$U" -d "$DB"); D=supabase/prod-prep/470

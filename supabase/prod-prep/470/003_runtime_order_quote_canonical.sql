@@ -1,6 +1,8 @@
--- #470 DRAFT — NOT APPLIED. Replaces public.runtime_order_create / runtime_quote_create with a sanitary-only canonical branch.
--- Sanitary = category_id 1 ('thiet-bi-ve-sinh'; asserted below). Other categories keep the legacy list/sale branch byte-for-byte.
--- The roles that call these functions (authenticated) cannot read dpg_app.categories, so the branch keys on the stable category_id.
+-- #470 DRAFT — NOT APPLIED. Replaces public.runtime_order_create / runtime_quote_create with a canonical branch scoped to
+-- sanitary (category_id 1, 'thiet-bi-ve-sinh') AND the approved brands TOTO (brand_id 1) / INAX (brand_id 2) — both asserted below.
+-- Every other category AND every other sanitary brand keeps the legacy list/sale branch byte-for-byte (not a blanket sanitary rule).
+-- The roles that call these functions (authenticated) cannot read dpg_app.categories, so the branch keys on the stable ids.
+-- This file only decides HOW an order/quote is priced. It does NOT decide WHO may create one: that is 004_commerce_direct_access_lock.sql.
 -- Baseline asserted by md5(pg_get_functiondef) captured read-only from Production on 2026-11-24:
 --   runtime_order_create a3c83a9ba45a709fdc0b23efd6aa07d8, runtime_quote_create 2de47a88ea642102d471cb957e4ff930.
 -- Needs 001 + 002 applied first. Rollback: 003_runtime_order_quote_canonical_rollback.sql (restores the baseline text).
@@ -16,6 +18,7 @@ begin
   end if;
   select id into v_sanitary from dpg_app.categories where slug = 'thiet-bi-ve-sinh';
   if v_sanitary is distinct from 1 then raise exception 'PRICE_RELEASE_SANITARY_CATEGORY_ID_CHANGED'; end if;
+  if (select count(*) from dpg_app.brands where (id, slug) in ((1, 'toto'), (2, 'inax'))) <> 2 then raise exception 'PRICE_RELEASE_BRAND_IDS_CHANGED'; end if;
   if (select count(*) from pg_attribute where attrelid = 'dpg_app.products'::regclass and not attisdropped
         and attname in ('regular_price_vnd','promotional_price_vnd','online_voucher_amount_vnd','canonical_price_status')) <> 4 then
     raise exception 'PRICE_RELEASE_001_NOT_APPLIED';
@@ -120,7 +123,7 @@ begin
     v_install_option := coalesce(v_item->>'installOption', 'none');
     if v_install_option not in ('none', 'install', 'replace') then raise exception 'INVALID_INSTALL_OPTION'; end if;
     select id, sku, name, price, original_price, list_price, sale_price, stock_status,
-           category_id, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_status
+           category_id, brand_id, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_status
       into v_product from dpg_app.products
      where id = (v_item->>'productId')::integer
        and is_active
@@ -130,8 +133,9 @@ begin
        and pdp_visibility = 'public';
     if not found then raise exception 'PRODUCT_UNAVAILABLE'; end if;
     v_qty := (v_item->>'quantity')::integer;
-    -- #470: sanitary (category_id = 1, asserted by 003) is priced ONLY from the canonical columns. No legacy fallback.
-    v_canonical := v_product.category_id = 1;
+    -- #470: sanitary (category_id = 1) of the approved brands (TOTO 1 / INAX 2) is priced ONLY from the canonical columns. No legacy fallback.
+    -- Other sanitary brands and every other category keep the legacy branch.
+    v_canonical := v_product.category_id = 1 and v_product.brand_id in (1, 2);
     if v_canonical then
       if v_product.stock_status <> 'in_stock'
          or v_product.canonical_price_status is distinct from 'PRICE_VERIFIED'
@@ -252,7 +256,7 @@ begin
        or coalesce((v_item->>'quantity')::integer,1) not between 1 and 99 then
       raise exception 'INVALID_ITEM';
     end if;
-    select id,sku,name,price,original_price,list_price,sale_price,stock_status,category_id,regular_price_vnd,promotional_price_vnd,canonical_price_status into v_product from dpg_app.products
+    select id,sku,name,price,original_price,list_price,sale_price,stock_status,category_id,brand_id,regular_price_vnd,promotional_price_vnd,canonical_price_status into v_product from dpg_app.products
      where id=(v_item->>'product_id')::integer
        and is_active
        and stock_status <> 'discontinued'
@@ -262,8 +266,8 @@ begin
     if not found then raise exception 'PRODUCT_UNAVAILABLE'; end if;
     v_availability:=case v_product.stock_status when 'in_stock' then 'InStock' when 'pre_order' then 'PreOrder' when 'preorder' then 'PreOrder' when 'contact' then 'QuoteOnly' else null end;
     if v_availability is null then raise exception 'QUOTE_PRODUCT_NOT_QUOTEABLE'; end if;
-    if v_product.category_id = 1 then
-      -- #470: sanitary quotes snapshot the canonical regular/promotional price only; unverified => CONTACT_FOR_QUOTE, no legacy fallback.
+    if v_product.category_id = 1 and v_product.brand_id in (1, 2) then
+      -- #470: sanitary TOTO/INAX quotes snapshot the canonical regular/promotional price only; unverified => CONTACT_FOR_QUOTE, no legacy fallback.
       v_mode:='CONTACT_FOR_QUOTE'; v_list_price:=null; v_sale_price:=null;
       if v_product.canonical_price_status = 'PRICE_VERIFIED' and v_product.regular_price_vnd > 0 then
         v_list_price:=v_product.regular_price_vnd;

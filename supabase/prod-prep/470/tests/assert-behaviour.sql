@@ -39,3 +39,20 @@ select pg_temp.assert((select list_price_snapshot is null and sale_price_snapsho
 select pg_temp.assert((select list_price_snapshot is null and commerce_mode_snapshot='CONTACT_FOR_QUOTE' from dpg_app.quote_items where product_id=4),'q4 contact verified');
 select pg_temp.assert((select list_price_snapshot=500000 and sale_price_snapshot=450000 and commerce_mode_snapshot='PUBLIC_PRICE' from dpg_app.quote_items where product_id=5),'q5 other category legacy');
 reset role;
+
+-- h) #470 scope = sanitary AND TOTO/INAX. INAX is canonical; another sanitary brand and inactive/unresolved never use a canonical or legacy price wrongly
+reset role;
+update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=1500000, promotional_price_vnd=1400000, online_voucher_amount_vnd=50000 where sku='VS-INAX';
+update dpg_app.products set canonical_price_status='UNRESOLVED' where sku='VS-INAX-UNRES';
+update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=1200000 where sku='VS-INACTIVE';   -- inactive but priced: must still not be orderable
+set role authenticated;
+select pg_temp.assert((pg_temp.order_('[{"productId":7,"quantity":2}]','key-h-000001')->>'total')::numeric=2*1400000-2*50000,'h1 INAX canonical promo, voucher x qty once');
+select pg_temp.assert((select unit_price=1400000 and total_price=2800000 from dpg_app.order_items order by id desc limit 1),'h1 INAX item = canonical promo, not legacy 777');
+select pg_temp.assert((pg_temp.order_('[{"productId":8,"quantity":1}]','key-h-000002')->>'total')::numeric=650000,'h2 other sanitary brand keeps LEGACY sale price (not canonical, not blanket)');
+select pg_temp.fails_with($$select pg_temp.order_('[{"productId":10,"quantity":1}]','key-h-000003')$$,'PRODUCT_REQUIRES_QUOTE');   -- INAX unresolved: legacy 888 never used
+select pg_temp.fails_with($$select pg_temp.order_('[{"productId":9,"quantity":1}]','key-h-000004')$$,'PRODUCT_UNAVAILABLE');      -- inactive cannot be ordered even with a canonical price
+select pg_temp.quote_('[{"product_id":7},{"product_id":8},{"product_id":10}]','key-q-000002');
+select pg_temp.assert((select list_price_snapshot=1500000 and sale_price_snapshot=1400000 and commerce_mode_snapshot='PUBLIC_PRICE' from dpg_app.quote_items where product_id=7),'q7 INAX canonical promo snapshot');
+select pg_temp.assert((select list_price_snapshot=700000 and sale_price_snapshot=650000 from dpg_app.quote_items where product_id=8),'q8 other brand legacy snapshot');
+select pg_temp.assert((select list_price_snapshot is null and sale_price_snapshot is null and commerce_mode_snapshot='CONTACT_FOR_QUOTE' from dpg_app.quote_items where product_id=10),'q10 INAX unresolved: no legacy snapshot');
+select pg_temp.fails_with($$select public.runtime_quote_create(jsonb_build_object('name','T','phone','0900000001','products','[{"product_id":9}]'::jsonb),'key-q-000003',null)$$,'PRODUCT_UNAVAILABLE');
