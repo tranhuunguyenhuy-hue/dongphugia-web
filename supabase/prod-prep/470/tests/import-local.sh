@@ -22,29 +22,63 @@ const q=v=>`"${String(v).replaceAll("\"","\"\"")}"`;
 require("fs").writeFileSync(process.argv[1],cols.join(",")+"\r\n"+rows.map(r=>cols.map(c=>q(r[c])).join(",")).join("\r\n")+"\r\n");
 require("fs").writeFileSync(process.argv[2],JSON.stringify([1,2,3,4,6].map((id,i)=>({id,sku:["VS-OK","VS-PROMO","VS-NOPRICE","VS-CONTACT","VS-OUT"][i],is_active:true}))));
 ' $T/p.csv $T/inv.json
-snapshot() { "${S[@]}" -c "select json_build_object('db_size_bytes', pg_database_size(current_database()), 'rows', (select json_agg(t) from (select id, sku, category_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd from dpg_app.products where category_id=1 order by id) t))" > $T/snap.json; }
+snapshot() { "${S[@]}" -c "select json_build_object('db_size_bytes', pg_database_size(current_database()), 'rows', (select json_agg(t) from (select id, sku, category_id, brand_id, is_active, version, canonical_price_status, regular_price_vnd, promotional_price_vnd, online_voucher_amount_vnd, canonical_price_checked_at from dpg_app.products where category_id=1 and brand_id=1 order by id) t))" > $T/snap.json; }
+state() { "${S[@]}" -c "select string_agg(id||':'||coalesce(canonical_price_status,'-')||':'||coalesce(regular_price_vnd::text,'-')||':'||coalesce(promotional_price_vnd::text,'-')||':'||coalesce(online_voucher_amount_vnd::text,'-')||':'||coalesce(to_char(canonical_price_checked_at at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI'),'-')||':v'||version, ' ' order by id) from dpg_app.products where category_id=1"; }
+expect_state() { local got; got=$(state); [ "$got" = "$1" ] || { echo "FAIL state: $got"; echo "    want:  $1"; exit 1; }; }
 snapshot
 SHA=$(sha256sum $T/p.csv | cut -d' ' -f1)
 run() { npx tsx scripts/hita-price-audit/prod-import.mts $T/p.csv --csv-sha256 "$SHA" --candidate-sha "$CAND" --inventory $T/inv.json --db-snapshot $T/snap.json --now 2026-11-24T01:00:00Z "$@"; }
 run > $T/dry.json; grep -q '"mode": "dry-run"' $T/dry.json; test ! -e $T/out
 echo "PASS dry-run by default writes nothing"
-run --out $T/out > $T/emit.json; PLAN=$(node -p "require('$T/emit.json').plan_sha"); test -f $T/out/batch-0001-apply.sql
-echo "PASS emit-sql produced batches + ledger (nothing executed)"; "${S[@]}" -c "select count(*) from dpg_app.products where canonical_price_status is not null" | grep -qx 0
+run --out $T/out --batch-size 2 > $T/emit.json; PLAN=$(node -p "require('$T/emit.json').plan_sha"); test -f $T/out/batch-0002-apply.sql
+grep -q '"release_binding_note": "identity for the manifest only; execution needs the Owner GO"' $T/emit.json
+echo "PASS emit-sql produced 2 batches + ledger (nothing executed); release binding is identity, not authorisation"
 O=("${PSQL[@]}" -U dpg_operator -d "$DB")
+INIT="1:-:-:-:-:-:v1 2:-:-:-:-:-:v1 3:-:-:-:-:-:v1 4:-:-:-:-:-:v1 6:-:-:-:-:-:v1"
+expect_state "$INIT"
 if "${O[@]}" -v approved_sha=wrong -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: ran with wrong plan sha"; exit 1; fi
 if "${O[@]}" -v approved_sha= -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: ran without approval"; exit 1; fi
-echo "PASS batch refuses wrong/empty approval"
+"${S[@]}" -c "update dpg_control.target_contract set project_name='dongphugia-staging'"
+if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: ran on a non-Production target identity"; exit 1; fi
+"${S[@]}" -c "update dpg_control.target_contract set project_name='dongphugia-runtime'"
+"${S[@]}" -c "update dpg_app.brands set slug='toto-x' where id=1"
+if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: ran with a changed brand identity"; exit 1; fi
+"${S[@]}" -c "update dpg_app.brands set slug='toto' where id=1"
+expect_state "$INIT"
+echo "PASS batch refuses wrong/empty approval, wrong target identity, changed brand identity (nothing written)"
+# batch 1 = ids 1,2 ; batch 2 = ids 3,4
 "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-apply.sql >/dev/null
-"${S[@]}" -c "select string_agg(id||':'||coalesce(canonical_price_status,'-')||':'||coalesce(regular_price_vnd::text,'-')||':'||coalesce(promotional_price_vnd::text,'-')||':'||coalesce(online_voucher_amount_vnd::text,'-')||':v'||version, ' ' order by id) from dpg_app.products where category_id=1" > $T/after.txt
-grep -qx "1:PRICE_VERIFIED:1000000:-:-:v2 2:PRICE_VERIFIED:2000000:1800000:100000:v2 3:CONTACT_VERIFIED:-:-:-:v2 4:NOT_FOUND:-:-:-:v2 6:-:-:-:-:v1" $T/after.txt || { cat $T/after.txt; exit 1; }
-echo "PASS apply wrote exactly the 4 planned rows; BLOCKED row untouched (NULL), version bumped"
-if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: second apply should abort on row-count mismatch (idempotent no-op)"; exit 1; fi
-echo "PASS re-apply aborts (row-count/basis check) instead of double writing"
-snapshot; run > $T/dry2.json; grep -q '"to_change": 0' $T/dry2.json
-echo "PASS re-plan after apply = 0 changes (idempotent)"
+expect_state "1:PRICE_VERIFIED:1000000:-:-:2026-11-23T18:00:v2 2:PRICE_VERIFIED:2000000:1800000:100000:2026-11-23T18:00:v2 3:-:-:-:-:-:v1 4:-:-:-:-:-:v1 6:-:-:-:-:-:v1"
+echo "PASS batch 1 applied exactly ids 1,2 (status, prices, checked-at, version+1)"
+# concurrent Admin edit on id 3 between batches -> batch 2 must abort atomically (id 4 untouched too)
+"${S[@]}" -c "update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=777000, canonical_price_checked_at='2026-11-24T02:00:00Z', version=version+1 where id=3"
+if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0002-apply.sql >/dev/null 2>&1; then echo "FAIL: batch 2 overwrote a concurrent edit"; exit 1; fi
+EDITED="1:PRICE_VERIFIED:1000000:-:-:2026-11-23T18:00:v2 2:PRICE_VERIFIED:2000000:1800000:100000:2026-11-23T18:00:v2 3:PRICE_VERIFIED:777000:-:-:2026-11-24T02:00:v2 4:-:-:-:-:-:v1 6:-:-:-:-:-:v1"
+expect_state "$EDITED"
+echo "PASS partial failure: batch 2 aborted as a whole on a concurrent edit; nothing stale written, id 4 untouched"
+# re-apply of batch 1 aborts (idempotent no-op instead of a double write)
+if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-apply.sql >/dev/null 2>&1; then echo "FAIL: re-apply wrote again"; exit 1; fi
+expect_state "$EDITED"
+# rerun: fresh snapshot -> new plan only for id 4; id 3 (newer Admin edit) is skipped and listed, never overwritten
+snapshot; run --out $T/out2 > $T/emit2.json; PLAN2=$(node -p "require('$T/emit2.json').plan_sha")
+node -e 'const r=require(process.argv[1]); if(r.to_change!==1||r.skipped_newer_db_edit!==1||r.newer_db_edit_ids[0]!==3||r.unchanged!==2) {console.log(r);process.exit(1)}' $T/emit2.json
+[ "$PLAN2" != "$PLAN" ]
+"${O[@]}" -v approved_sha=$PLAN2 -f $T/out2/batch-0001-apply.sql >/dev/null
+expect_state "1:PRICE_VERIFIED:1000000:-:-:2026-11-23T18:00:v2 2:PRICE_VERIFIED:2000000:1800000:100000:2026-11-23T18:00:v2 3:PRICE_VERIFIED:777000:-:-:2026-11-24T02:00:v2 4:NOT_FOUND:-:-:-:2026-11-23T18:00:v2 6:-:-:-:-:-:v1"
+echo "PASS rerun planned only id 4 (new plan SHA); the newer Admin edit on id 3 was kept"
+# rollback of plan 1 / batch 1: restores ids 1,2 to their exact prior state, version keeps increasing
 "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0001-rollback.sql >/dev/null
-"${S[@]}" -c "select count(*) from dpg_app.products where canonical_price_status is not null or regular_price_vnd is not null or canonical_price_checked_at is not null" | grep -qx 0
-echo "PASS rollback batch restored the pre-import state"
+expect_state "1:-:-:-:-:-:v3 2:-:-:-:-:-:v3 3:PRICE_VERIFIED:777000:-:-:2026-11-24T02:00:v2 4:NOT_FOUND:-:-:-:2026-11-23T18:00:v2 6:-:-:-:-:-:v1"
+echo "PASS rollback restored exactly the rows batch 1 applied (status/prices/checked-at), version monotonic (v3)"
+# rollback of plan 1 / batch 2 (never applied) must refuse: it would otherwise clobber the Admin edit on id 3
+if "${O[@]}" -v approved_sha=$PLAN -f $T/out/batch-0002-rollback.sql >/dev/null 2>&1; then echo "FAIL: rolled back a batch that was never applied"; exit 1; fi
+# Admin edits id 4 after plan 2 -> plan 2 rollback must refuse instead of restoring a stale value
+"${S[@]}" -c "update dpg_app.products set canonical_price_status='CONTACT_VERIFIED', canonical_price_checked_at='2026-11-24T03:00:00Z', version=version+1 where id=4"
+if "${O[@]}" -v approved_sha=$PLAN2 -f $T/out2/batch-0001-rollback.sql >/dev/null 2>&1; then echo "FAIL: rollback overwrote a newer edit"; exit 1; fi
+expect_state "1:-:-:-:-:-:v3 2:-:-:-:-:-:v3 3:PRICE_VERIFIED:777000:-:-:2026-11-24T02:00:v2 4:CONTACT_VERIFIED:-:-:-:2026-11-24T03:00:v3 6:-:-:-:-:-:v1"
+echo "PASS rollback refuses rows that were never applied or were edited since (no stale overwrite)"
+node -e 'const l=require("fs").readFileSync(process.argv[1],"utf8").trim().split("\n").map(JSON.parse); if(l.length!==4||l.some(x=>!("before_checked_at" in x)||x.version_before!==1||x.brand_id!==1))process.exit(1)' $T/out/ledger.jsonl
+echo "PASS ledger keeps full prior state (status, prices, checked-at, version, brand) for every planned row"
 # stop rule: headroom
 node -e 'const s=require(process.argv[1]); s.db_size_bytes=360*1024*1024; require("fs").writeFileSync(process.argv[1],JSON.stringify(s))' $T/snap.json
 if run > $T/stop.json 2>&1; then echo "FAIL: planner did not stop on headroom"; exit 1; fi; grep -q DB_HEADROOM_INSUFFICIENT $T/stop.json

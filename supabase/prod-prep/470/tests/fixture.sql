@@ -12,8 +12,10 @@ create table dpg_control.target_contract(singleton bool primary key default true
 insert into dpg_control.target_contract values (true,'dongphugia-runtime','ap-southeast-1','preview','production-derived-reduced-runtime',true,false,true,367001600);
 create table dpg_app.categories(id serial primary key, slug varchar(100) unique, name text, is_active bool default true);
 insert into dpg_app.categories(slug,name) values ('thiet-bi-ve-sinh','VS'),('thiet-bi-bep','Bep'),('vat-lieu-nuoc','VLN'),('san-go','SG'),('gach-op-lat','Gach');
+create table dpg_app.brands(id serial primary key, slug varchar(100) not null unique, name text);
+insert into dpg_app.brands(slug,name) values ('toto','TOTO'),('inax','INAX');
 create table dpg_app.products(
-  id serial primary key, sku varchar(100) not null unique, name varchar(500) not null, slug varchar(500) not null, category_id int not null references dpg_app.categories(id),
+  id serial primary key, sku varchar(100) not null unique, name varchar(500) not null, slug varchar(500) not null, category_id int not null references dpg_app.categories(id), brand_id int references dpg_app.brands(id),
   price numeric(15,2), price_display varchar(50) default 'Liên hệ báo giá', stock_status varchar(20) not null default 'in_stock', is_active bool not null default true,
   original_price numeric(15,2), online_discount_amount numeric(15,2), publication_status varchar(30) not null default 'public', pdp_visibility varchar(30) not null default 'public',
   sale_status varchar(40) not null default 'available', price_state varchar(40) not null default 'unknown', list_price numeric(15,2), sale_price numeric(15,2),
