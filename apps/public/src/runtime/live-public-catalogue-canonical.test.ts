@@ -64,10 +64,15 @@ describe('flag ON (Production)', () => {
             expect(p).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' }); expect(p).not.toHaveProperty('price_provenance')
         }
     })
-    it('brand scope is configurable and exact', () => {
-        vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', 'toto,inax')
-        expect(mapLiveProduct(row({ brand_slug: 'inax', canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5' })).price).toBe(5)
-        expect(mapLiveProduct(row({ brand_slug: 'american-standard' })).price_provenance).toBeUndefined()
+    it('brand scope is the approved set only, each brand separately: toto / inax / both / none / unknown', () => {
+        const priced = (brand: string) => mapLiveProduct(row({ brand_slug: brand, brand_name: brand.toUpperCase(), canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5' })).price
+        const scope = (value?: string) => { vi.unstubAllEnvs(); production(); if (value !== undefined) vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', value) }
+        scope(); expect([priced('toto'), priced('inax')]).toEqual([5, null])                  // default = first release scope
+        scope('inax'); expect([priced('toto'), priced('inax')]).toEqual([null, 5])             // TOTO untouched when only INAX is on
+        scope('toto,inax'); expect([priced('toto'), priced('inax'), priced('american-standard')]).toEqual([5, 5, null])
+        scope(''); expect([priced('toto'), priced('inax')]).toEqual([null, null])              // explicit empty list = nothing priced
+        scope("inax'); drop table x;--,american-standard"); expect([priced('toto'), priced('inax'), priced('american-standard')]).toEqual([null, null, null])
+        expect(mapLiveProduct(row({ brand_slug: 'inax', canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5' }))).not.toHaveProperty('price_provenance')   // INAX off: untouched DTO
     })
     it('default order is unchanged in Production (identical ORDER BY to flag OFF); explicit price sort is scoped and parameter-bound', async () => {
         mocks.readPublicRows.mockResolvedValue([row()])

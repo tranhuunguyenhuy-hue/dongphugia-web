@@ -10,6 +10,7 @@ const money = (name: string, label: string): FieldMeta => ({ ...editable, kind: 
 const [regularLabel, promoLabel, voucherLabel] = ['Giá gốc (VNĐ)', 'Giá khuyến mãi (VNĐ)', 'Voucher online']
 const legacyFields: FieldMeta[] = [
   { ...editable, kind: 'ref', name: 'category_id', label: 'Danh mục', ref: 'categories' },
+  { ...editable, kind: 'ref', name: 'brand_id', label: 'Thương hiệu', ref: 'brands' },
   money('price', 'Giá bán cũ'),
 ]
 const meta: ResourceMeta = {
@@ -18,11 +19,13 @@ const meta: ResourceMeta = {
   fields: [...legacyFields, ...CANONICAL_PRICE_FIELDS.map((name, index) => money(name, [regularLabel, promoLabel, voucherLabel][index]))],
 }
 
-const sanitary = { id: 207, category_id: 18, price: '3500000', regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }
+const sanitary = { id: 207, category_id: 18, brand_id: 3, price: '3500000', regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }
 const productPath = '/admin-next/api/r/products/207'
 
 beforeEach(() => {
-  vi.spyOn(api, 'options').mockResolvedValue([{ id: 18, label: 'Thiết Bị Vệ Sinh' }, { id: 19, label: 'Thiết bị bếp' }])
+  vi.spyOn(api, 'options').mockImplementation(async ref => ref === 'brands'
+    ? [{ id: 3, label: 'TOTO' }, { id: 4, label: 'INAX' }, { id: 5, label: 'American Standard' }]
+    : [{ id: 18, label: 'Thiết Bị Vệ Sinh' }, { id: 19, label: 'Thiết bị bếp' }])
   vi.spyOn(api, 'get').mockResolvedValue(sanitary)
 })
 afterEach(() => {
@@ -101,6 +104,20 @@ describe('Admin product pricing', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(PRICE_ERROR_TEXT[code])
     expect(request).toHaveBeenCalledTimes(1)
     expect(screen.getByLabelText(promoLabel)).toHaveValue(800_000)
+  })
+
+  it.each([[3, 'TOTO'], [4, 'INAX']])('approved sanitary brand %s (%s) uses the canonical controls', async brandId => {
+    vi.mocked(api.get).mockResolvedValue({ ...sanitary, brand_id: brandId })
+    await openPricing()
+    expect(await screen.findByLabelText(regularLabel)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Giá bán cũ')).not.toBeInTheDocument()
+  })
+
+  it.each([[5, 'another sanitary brand'], [null, 'no brand yet']])('%s keeps the legacy price controls (canonical hidden)', async brandId => {
+    vi.mocked(api.get).mockResolvedValue({ ...sanitary, brand_id: brandId })
+    await openPricing()
+    expect(await screen.findByLabelText('Giá bán cũ')).toBeInTheDocument()
+    for (const label of [regularLabel, promoLabel, voucherLabel]) expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
   })
 
   it('keeps the existing price controls for other categories', async () => {

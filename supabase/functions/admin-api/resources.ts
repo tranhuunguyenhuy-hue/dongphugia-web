@@ -183,7 +183,19 @@ export function assertCanonicalPrices(final: Record<string, unknown>): void {
   if (promo !== null && (regular === null || promo >= regular)) throw new ApiError(400, 'PRICE_RELATION_INVALID', ['promotional_price_vnd', 'regular_price_vnd'])
   if (voucher !== null && (regular === null || voucher >= (promo ?? regular))) throw new ApiError(400, 'VOUCHER_INVALID', ['online_voucher_amount_vnd'])
 }
-const productHook: WriteHook = ({ mode, existing, input }) => {
+/** #470 scope of the canonical price rules: sanitary x approved brands (equals CANONICAL_APPROVED_BRANDS in src/lib/canonical-price.ts; asserted by a test).
+ * Other brands/categories keep managing prices exactly as before (legacy fields). */
+export const CANONICAL_ADMIN_BRANDS = ['toto', 'inax'] as const
+const CANONICAL_ADMIN_CATEGORY = 'thiet-bi-ve-sinh'
+/** Policy constant (Owner to confirm): a verified price older than this must be re-verified/re-entered before the SKU is re-activated. */
+export const CANONICAL_REACTIVATION_MAX_AGE_MS = 7 * 24 * 3600_000
+async function inCanonicalAdminScope(tx: Db, final: Row): Promise<boolean> {
+  const rows = await tx.query<{ brand: string | null; category: string | null }>(
+    'select (select slug from dpg_app.brands where id = $1) as brand, (select slug from dpg_app.categories where id = $2) as category', [final.brand_id ?? null, final.category_id ?? null])
+  const row = rows[0]
+  return Boolean(row && row.category === CANONICAL_ADMIN_CATEGORY && row.brand && (CANONICAL_ADMIN_BRANDS as readonly string[]).includes(row.brand))
+}
+const productHook: WriteHook = async ({ tx, mode, existing, input }) => {
   if (mode === 'delete') return undefined
   const final: Record<string, unknown> = { ...(existing ?? {}), ...input }
   if (CANONICAL_PRICE_FIELDS.some((field) => field in input) || 'canonical_price_status' in input) assertCanonicalPrices(final)
@@ -195,6 +207,15 @@ const productHook: WriteHook = ({ mode, existing, input }) => {
   let statusSet: Record<string, unknown> | undefined
   if (externalColumns.has('canonical_price_status')) {
     const hasPrice = CANONICAL_PRICE_FIELDS.some((field) => final[field] !== null && final[field] !== undefined && final[field] !== '')
+    const priceInRequest = CANONICAL_PRICE_FIELDS.some((field) => field in input)
+    // Canonical prices are only for approved brands: any other sanitary brand keeps the legacy price management untouched.
+    if (hasPrice && priceInRequest && !(await inCanonicalAdminScope(tx, final))) throw new ApiError(400, 'PRICE_SCOPE_INVALID', ['brand_id'])
+    // Re-activating a SKU whose verified price is stale (or has no check time) needs a fresh price in the same request.
+    const activating = input.is_active === true && existing?.is_active !== true
+    if (activating && !priceInRequest && final.canonical_price_status === 'PRICE_VERIFIED' && await inCanonicalAdminScope(tx, final)) {
+      const checked = Date.parse(String(final.canonical_price_checked_at ?? ''))
+      if (!Number.isFinite(checked) || Date.now() - checked > CANONICAL_REACTIVATION_MAX_AGE_MS) throw new ApiError(400, 'PRICE_REVERIFY_REQUIRED', ['regular_price_vnd'])
+    }
     const requested = input.canonical_price_status as string | null | undefined
     if (hasPrice && requested !== undefined && requested !== null && requested !== 'PRICE_VERIFIED') throw new ApiError(400, 'PRICE_STATUS_INVALID', ['canonical_price_status'])
     if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) {
@@ -506,6 +527,7 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'regular_price_vnd', label: 'Giá gốc (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'promotional_price_vnd', label: 'Giá khuyến mãi (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'online_voucher_amount_vnd', label: 'Voucher online (VNĐ/sản phẩm)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'canonical_price_checked_at', label: 'Giá kiểm lúc', kind: 'datetime', nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
       { name: 'canonical_price_status', label: 'Trạng thái giá (Hita)', kind: 'enum', options: ['PRICE_VERIFIED', 'CONTACT_VERIFIED', 'UNRESOLVED', 'NOT_FOUND', 'DISCONTINUED'], nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
       { name: 'stock_status', label: 'Tồn kho', kind: 'enum', options: ['in_stock', 'out_of_stock', 'discontinued', 'pre_order', 'contact'], initial: 'in_stock' },
       { name: 'warranty_months', label: 'Bảo hành (tháng)', kind: 'int', min: 1, max: 600, nullable: true },

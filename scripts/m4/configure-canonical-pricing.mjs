@@ -3,7 +3,10 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const APPROVED_CANONICAL_BRANDS = ['toto']   // first release scope; widening it is a reviewed code change, not an input
+// Must equal CANONICAL_APPROVED_BRANDS in src/lib/canonical-price.ts (asserted by a test). Widening = reviewed code change, not an input.
+export const APPROVED_CANONICAL_BRANDS = ['toto', 'inax']
+// Lane input values (exact strings): each brand can be switched on separately.
+export const CANONICAL_BRAND_CHOICES = ['toto', 'inax', 'toto,inax']
 
 export function applyCanonicalPricing(cfg, mode, brands = 'toto') {
   if (cfg?.name !== 'dongphugia-v1-public-production') throw new Error('WRONG_WORKER_TARGET')
@@ -12,8 +15,9 @@ export function applyCanonicalPricing(cfg, mode, brands = 'toto') {
   delete vars.PUBLIC_CANONICAL_PRICING; delete vars.PUBLIC_CANONICAL_PRICE_BRANDS
   if (mode === 'on') {
     const list = String(brands).split(',').map(value => value.trim()).filter(Boolean)
-    if (!list.length || list.some(value => !APPROVED_CANONICAL_BRANDS.includes(value)) || new Set(list).size !== list.length) throw new Error('CANONICAL_PRICING_SCOPE_NOT_APPROVED')
-    vars.PUBLIC_CANONICAL_PRICING = 'on'; vars.PUBLIC_CANONICAL_PRICE_BRANDS = list.join(',')
+    const normalized = list.join(',')
+    if (!list.length || list.some(value => !APPROVED_CANONICAL_BRANDS.includes(value)) || new Set(list).size !== list.length || !CANONICAL_BRAND_CHOICES.includes(normalized)) throw new Error('CANONICAL_PRICING_SCOPE_NOT_APPROVED')
+    vars.PUBLIC_CANONICAL_PRICING = 'on'; vars.PUBLIC_CANONICAL_PRICE_BRANDS = normalized
   }
   return { ...cfg, vars }
 }
@@ -21,7 +25,7 @@ export function applyCanonicalPricing(cfg, mode, brands = 'toto') {
 export function assertCanonicalPricingVars(vars, mode) {
   if (mode === 'off') return vars?.PUBLIC_CANONICAL_PRICING === undefined && vars?.PUBLIC_CANONICAL_PRICE_BRANDS === undefined
   return vars?.PUBLIC_CANONICAL_PRICING === 'on' && typeof vars.PUBLIC_CANONICAL_PRICE_BRANDS === 'string'
-    && vars.PUBLIC_CANONICAL_PRICE_BRANDS.split(',').every(value => APPROVED_CANONICAL_BRANDS.includes(value))
+    && CANONICAL_BRAND_CHOICES.includes(vars.PUBLIC_CANONICAL_PRICE_BRANDS)
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

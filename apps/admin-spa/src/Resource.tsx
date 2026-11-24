@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import {
-  CANONICAL_PRICE_FIELDS, LEGACY_PRICE_FIELDS, PRICE_ERROR_TEXT, SANITARY_CATEGORY_SLUG, validateCanonicalPricing,
+  CANONICAL_ADMIN_BRANDS, CANONICAL_PRICE_FIELDS, LEGACY_PRICE_FIELDS, PRICE_ERROR_TEXT, SANITARY_CATEGORY_SLUG, validateCanonicalPricing,
 } from '@/components/admin/products/canonical-pricing'
 import { api, ApiError, displayMediaUrl, errorText, uploadImage, type FieldMeta, type ResourceMeta, type Row } from './api'
 import { Alert, CTA, EmptyState, NativeSelect, PageHeader, SkeletonRows, money, toast, useConfirm } from './ui'
@@ -212,8 +212,12 @@ export function ResourceForm({ meta, id, go, resources = [] }: { meta: ResourceM
   const category = options.categories?.find(option => option.id === Number(form.category_id))
   const hasCanonicalPrices = isProduct && CANONICAL_PRICE_FIELDS.every(name => meta.fields.some(f => f.name === name))
   // Category options expose only an ID and the master-data label.
-  const usesCanonicalPrices = hasCanonicalPrices && category !== undefined && slugify(category.label) === SANITARY_CATEGORY_SLUG
-  const canResolvePricing = !hasCanonicalPrices || category !== undefined
+  const isSanitary = hasCanonicalPrices && category !== undefined && slugify(category.label) === SANITARY_CATEGORY_SLUG
+  // #470: only approved sanitary brands use the canonical fields; other brands (or no brand yet) keep the legacy price management.
+  const hasBrand = form.brand_id !== null && form.brand_id !== undefined && form.brand_id !== ''
+  const brand = options.brands?.find(option => option.id === Number(form.brand_id))
+  const usesCanonicalPrices = isSanitary && brand !== undefined && (CANONICAL_ADMIN_BRANDS as readonly string[]).includes(slugify(brand.label))
+  const canResolvePricing = !hasCanonicalPrices || (category !== undefined && (!isSanitary || !hasBrand || options.brands !== undefined))
   const priceFieldAllowed = (name: string) => {
     if (canonicalPriceNames.has(name)) return usesCanonicalPrices
     if (legacyPriceNames.has(name)) return canResolvePricing && !usesCanonicalPrices

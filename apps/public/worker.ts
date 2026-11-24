@@ -153,7 +153,7 @@ export default {
       || (environment.APP_ENV === 'staging' && environment.PREVIEW_TEST_DATABASE_ISOLATED === 'true')
     const plan = cacheEnabled ? planPageCache(request) : null
     const pricingMode = canonicalPricingMode(environment as CanonicalEnv)
-    const pricingVariant = pricingMode === 'production' ? 'production:' + canonicalProductionBrands(environment as CanonicalEnv).join(',') : pricingMode
+    const pricingVariant = pricingMode === 'production' ? 'production:' + (canonicalProductionBrands(environment as CanonicalEnv).join(',') || 'none') : pricingMode
     const cacheKey = plan ? pageCacheKey(request, plan, __DPG_BUILD_SOURCE_SHA__, publicSnapshotCheckpoint(), pricingVariant) : null
     const workerCache = cacheKey ? await caches.open('dongphugia-public-v2') : null
     const edgeControl = plan ? `public, max-age=${plan.ttlSeconds}, must-revalidate` : PUBLIC_EDGE_CACHE_CONTROL

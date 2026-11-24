@@ -29,3 +29,7 @@ describe('Admin Hita price validation', () => {
         expect(validateCanonicalPricing(draft)).toBe('VOUCHER_INVALID')
     })
 })
+
+import { CANONICAL_ADMIN_BRANDS } from './canonical-pricing'
+import { CANONICAL_APPROVED_BRANDS } from '@/lib/canonical-price'
+it('#470: the Admin form brand allowlist equals the runtime allowlist', () => { expect([...CANONICAL_ADMIN_BRANDS]).toEqual([...CANONICAL_APPROVED_BRANDS]) })

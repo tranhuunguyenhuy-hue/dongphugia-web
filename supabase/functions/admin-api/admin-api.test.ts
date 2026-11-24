@@ -767,9 +767,12 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
       await owner.query('alter table dpg_app.products add column if not exists canonical_price_status text, add column if not exists canonical_price_checked_at timestamptz')
       await owner.query(`alter table dpg_app.products drop constraint if exists products_canonical_price_check, add constraint products_canonical_price_check check (${check})`)
       await owner.query(`grant select, insert, update (canonical_price_status, canonical_price_checked_at) on dpg_app.products to ${apiRole}`)
-      setExternalColumns(['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd', 'canonical_price_status'])
+      setExternalColumns(['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd', 'canonical_price_status', 'canonical_price_checked_at'])
+      // brand/category identity the scope check reads: sanitary x approved brands (TOTO, INAX); American Standard stays on legacy prices
+      await owner.query("update dpg_app.categories set slug='thiet-bi-ve-sinh' where id=1; insert into dpg_app.brands(name,slug) values ('TOTO','toto'),('American Standard','american-standard') on conflict do nothing")
+      const brandId = async (slug: string) => Number((await owner.query('select id from dpg_app.brands where slug=$1', [slug])).rows[0].id)
       try {
-        const made = await call('POST', '/r/products', { input: { sku: 'C470-1', name: 'TOTO canonical', slug: 'c470-1', category_id: 1, price_display: 'Liên hệ báo giá', is_active: false } }, { token: t })
+        const made = await call('POST', '/r/products', { input: { sku: 'C470-1', name: 'TOTO canonical', slug: 'c470-1', category_id: 1, brand_id: await brandId('toto'), price_display: 'Liên hệ báo giá', is_active: false } }, { token: t })
         expect(made.status).toBe(201); const id = made.json.data.id
         const patch = (input: Record<string, unknown>, v: number, tok = t) => call('PATCH', `/r/products/${id}`, { expected_version: v, input }, { token: tok })
         // mixed update: canonical price + an invalid legacy sale price is still rejected (no bypass), nothing is written
@@ -784,12 +787,23 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(ok.status).toBe(200)
         const row = (await owner.query('select canonical_price_status, canonical_price_checked_at is not null as stamped, version from dpg_app.products where id=$1', [id])).rows[0]
         expect(row).toEqual({ canonical_price_status: 'PRICE_VERIFIED', stamped: true, version: 2 })
+        // reactivation of a SKU whose verified price is stale needs a fresh price in the same request (policy constant, Owner to confirm)
+        await owner.query("update dpg_app.products set canonical_price_checked_at = now() - interval '30 days', image_main_url = $2 where id=$1", [id, `${MEDIA}/products/a.webp`])
+        expect(code(await patch({ is_active: true }, 2))).toBe('PRICE_REVERIFY_REQUIRED')
+        await owner.query('update dpg_app.products set canonical_price_checked_at = now() where id=$1', [id])
+        expect((await patch({ is_active: true }, 2)).status).toBe(200)
+        expect((await patch({ is_active: false }, 3)).status).toBe(200)
         // clearing every canonical price hides the price again (status NULL), the CHECK never fires
-        expect((await patch({ regular_price_vnd: null, promotional_price_vnd: null }, 2)).status).toBe(200)
-        expect((await owner.query('select canonical_price_status, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, version: 3 })
+        expect((await patch({ regular_price_vnd: null, promotional_price_vnd: null }, 4)).status).toBe(200)
+        expect((await owner.query('select canonical_price_status, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, version: 5 })
+        // another sanitary brand cannot receive canonical prices (legacy price management untouched)
+        await owner.query('update dpg_app.products set brand_id=$2 where id=$1', [id, await brandId('american-standard')])
+        expect(code(await patch({ regular_price_vnd: 1000000 }, 5))).toBe('PRICE_SCOPE_INVALID')
+        expect((await patch({ price: 1000, stock_status: 'in_stock' }, 5)).status).toBe(200)
         const audit = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows.map(r => r.action)
-        expect(audit).toEqual(['products.create', 'products.update', 'products.update'])
+        expect(audit).toEqual(['products.create', 'products.update', 'products.update', 'products.update', 'products.update', 'products.update'])
       } finally {
+        await owner.query("update dpg_app.categories set slug='cat' where id=1; delete from dpg_app.products where sku='C470-1'; delete from dpg_app.brands where slug in ('toto','american-standard')")
         await owner.query(`revoke select, insert, update (canonical_price_status, canonical_price_checked_at) on dpg_app.products from ${apiRole}`)
         await owner.query('alter table dpg_app.products drop constraint if exists products_canonical_price_check, drop column if exists canonical_price_status, drop column if exists canonical_price_checked_at')
         // restore exactly what the handler's own probe would see now

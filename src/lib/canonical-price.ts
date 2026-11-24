@@ -20,9 +20,13 @@ export function canonicalPricingMode(env: CanonicalEnv = process.env as Canonica
     return 'off'
 }
 /** Production scope = sanitary x listed brands (default TOTO). Rows outside it are never touched by the flag. */
+/** Brands that may EVER be priced canonically (immutable Production ids verified read-only 24/11: toto=1, inax=2). Widening = reviewed code change. */
+export const CANONICAL_APPROVED_BRANDS = ['toto', 'inax'] as const
 export function canonicalProductionBrands(env: CanonicalEnv = process.env as CanonicalEnv): readonly string[] {
-    const brands = (env.PUBLIC_CANONICAL_PRICE_BRANDS ?? 'toto').split(',').map(value => value.trim()).filter(value => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value))
-    return brands.length ? brands : ['toto']
+    const raw = env.PUBLIC_CANONICAL_PRICE_BRANDS
+    if (raw === undefined) return ['toto']                       // flag ON without an explicit list = the first release scope only
+    // an explicit list is intersected with the approved set (unknown/unsafe entries dropped; empty = no brand is priced)
+    return CANONICAL_APPROVED_BRANDS.filter(brand => raw.split(',').map(value => value.trim()).includes(brand))
 }
 export const canonicalSortEnabled = (categorySlug: string, env: CanonicalEnv = process.env as CanonicalEnv): boolean =>
     categorySlug === 'thiet-bi-ve-sinh' && canonicalPricingMode(env) !== 'off'

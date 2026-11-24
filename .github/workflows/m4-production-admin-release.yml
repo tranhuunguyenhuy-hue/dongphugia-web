@@ -33,6 +33,12 @@ on:
         type: choice
         options: [off, on]
         default: 'off'
+      canonical_brands:
+        description: '#470 brands priced when canonical_pricing=on (each can be switched on separately). Ignored when canonical_pricing=off.'
+        required: true
+        type: choice
+        options: [toto, inax, 'toto,inax']
+        default: toto
 
 permissions:
   contents: read
@@ -99,7 +105,7 @@ jobs:
           cp apps/public/wrangler.production.jsonc apps/public/wrangler.jsonc
           node scripts/app-foundation/configure-v1-m1-worker-source.mjs apps/public/wrangler.jsonc "$PUBLIC_CATALOGUE_SOURCE" "$V1_PUBLIC_HYPERDRIVE_ID"
           # #470: the pricing flag is part of the reviewed artifact (default off); it is never edited on the Worker directly.
-          node scripts/m4/configure-canonical-pricing.mjs apps/public/wrangler.jsonc '${{ inputs.canonical_pricing }}' toto
+          node scripts/m4/configure-canonical-pricing.mjs apps/public/wrangler.jsonc '${{ inputs.canonical_pricing }}' '${{ inputs.canonical_brands }}'
           npm run build:public-worker
           npm run app:assemble-public-worker -- --repository-root . --server-dir apps/public/dist/server --assets-dir apps/public/dist/client --output "$RUNNER_TEMP/v1-release" --source-sha "$GITHUB_SHA"
       - name: Add the Admin (SPA, dispatch, upload, Images binding) to the release
@@ -111,6 +117,7 @@ jobs:
         env:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
           CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
         run: |
           set -euo pipefail
           node - "$RUNNER_TEMP/v1-release/wrangler.json" <<'NODE'
@@ -123,7 +130,7 @@ jobs:
           if (v.PUBLIC_CATALOGUE_SOURCE !== 'postgresql') fail('source');
           const pricing = process.env.CANONICAL_PRICING;
           if (pricing === 'off' ? (v.PUBLIC_CANONICAL_PRICING !== undefined || v.PUBLIC_CANONICAL_PRICE_BRANDS !== undefined)
-            : (pricing !== 'on' || v.PUBLIC_CANONICAL_PRICING !== 'on' || v.PUBLIC_CANONICAL_PRICE_BRANDS !== 'toto')) fail('canonical-pricing');
+            : (pricing !== 'on' || v.PUBLIC_CANONICAL_PRICING !== 'on' || v.PUBLIC_CANONICAL_PRICE_BRANDS !== process.env.CANONICAL_BRANDS)) fail('canonical-pricing');
           if (v.ADMIN_API_URL !== 'https://bonxyxluzlxfkdetryoo.supabase.co/functions/v1/admin-api') fail('function-url');
           if (v.BUNNY_CDN_HOSTNAME !== 'dpg-products.b-cdn.net') fail('cdn');
           if (Object.keys(v).some((n) => /(SECRET|PASSWORD|TOKEN|PRIVATE_KEY|CREDENTIAL|DATABASE_URL|API_KEY|_KEY$)/i.test(n))) fail('secret-like-var');
@@ -261,6 +268,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
           CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
         run: |
           set -euo pipefail
           wrangler="$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js"
@@ -277,7 +285,7 @@ jobs:
             && has('IMAGES') && has('ADMIN_API_HMAC_SECRET', 'secret_text') && has('ASSETS')
             && b.some((x) => x.name === 'APP_ENV' && x.text === 'production') && b.some((x) => x.name === 'ADMIN_API_URL')
             && (process.env.CANONICAL_PRICING === 'on'
-              ? b.some((x) => x.name === 'PUBLIC_CANONICAL_PRICING' && x.text === 'on') && b.some((x) => x.name === 'PUBLIC_CANONICAL_PRICE_BRANDS' && x.text === 'toto')
+              ? b.some((x) => x.name === 'PUBLIC_CANONICAL_PRICING' && x.text === 'on') && b.some((x) => x.name === 'PUBLIC_CANONICAL_PRICE_BRANDS' && x.text === process.env.CANONICAL_BRANDS)
               : !b.some((x) => x.name === 'PUBLIC_CANONICAL_PRICING' || x.name === 'PUBLIC_CANONICAL_PRICE_BRANDS'));
           if (!ok) { console.error('M4_VERSION_BINDINGS_FAIL'); process.exit(1); }
           console.log(`M4_VERSION_BINDINGS_PASS names=${b.map((x) => x.name).sort().join(',')}`);
@@ -291,7 +299,7 @@ jobs:
           {
             echo "### M4 Production Admin release (${{ inputs.operation }})"
             echo "- Source SHA: $GITHUB_SHA"
-            echo "- Canonical pricing (#470): ${{ inputs.canonical_pricing }}"
+            echo "- Canonical pricing (#470): ${{ inputs.canonical_pricing }} brands=${{ inputs.canonical_brands }}"
             echo "- Packaged verification: ${{ steps.packaged.outcome }}"
             echo "- Media target verified (unique test object, removed): ${{ steps.media.outputs.verified }}"
             echo "- Publish: ${{ steps.deploy.outcome }}"
