@@ -364,7 +364,10 @@ export async function getLiveVariantLabel(currentId:number):Promise<string|null>
 export async function getLiveSeriesFacet(category:string,listing:string,brandSlugs:readonly string[],selectedSeries:readonly string[]=[],opts:{featured?:boolean}={}):Promise<SeriesFacet>{
  const none:SeriesFacet={applicable:false,options:[],selected:[],dropped:[...selectedSeries]}
  if(![category,listing].every(s=>SLUG.test(s))||brandSlugs.length===0||brandSlugs.length>32||brandSlugs.some(s=>!SLUG.test(s)))return none
- const rows=await readPublicRows<{slug:string;name:string;brand_slug:string;sku_count:number|string}>(
+ // #470 finding (same as siblings): the Production public role cannot read spec_definitions.key / spec_options.slug (#432 grants not
+ // applied). Degrade to "no series facet" (the page then drops any ?dong= and redirects) instead of a 5xx on brand-filtered PLPs.
+ let rows:{slug:string;name:string;brand_slug:string;sku_count:number|string}[]
+ try{ rows=await readPublicRows<{slug:string;name:string;brand_slug:string;sku_count:number|string}>(
   'SELECT so.slug,so.value AS name,b.slug AS brand_slug,count(DISTINCT p.id) AS sku_count'+FROM+
   ' JOIN dpg_app.product_spec_values sv ON sv.product_id=p.id'+
   " JOIN dpg_app.spec_definitions sd ON sd.id=sv.spec_definition_id AND sd.key='Bộ sưu tập'"+
@@ -373,7 +376,11 @@ export async function getLiveSeriesFacet(category:string,listing:string,brandSlu
   ' AND (NOT $4::boolean OR p.is_featured=true)'+
   " AND left(so.slug,length(b.slug)+1)=b.slug||'-'"+
   ' GROUP BY so.slug,so.value,b.slug,so.sort_order ORDER BY b.slug,so.sort_order,so.value LIMIT 100',
-  [category,listing,[...brandSlugs],opts.featured===true],'listing-series-facets')
+  [category,listing,[...brandSlugs],opts.featured===true],'listing-series-facets') }
+ catch(error){
+  if(error&&typeof error==='object'&&'code' in error&&(error as {code:unknown}).code==='42501'){console.error(JSON.stringify({event:'PUBLIC_SERIES_FACET_UNAVAILABLE',sqlState:'42501'}));return none}
+  throw error
+ }
  const options=rows.flatMap(r=>SLUG.test(r.slug)&&SLUG.test(r.brand_slug)&&Number(r.sku_count)>0
   ?[{slug:r.slug,name:r.name,brandSlug:r.brand_slug,count:Number(r.sku_count),selected:selectedSeries.includes(r.slug)}]:[])
  const valid=new Set(options.map(o=>o.slug))
