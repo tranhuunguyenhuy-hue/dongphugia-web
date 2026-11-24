@@ -1,0 +1,48 @@
+{
+  "started_at_utc": "2026-11-24T02:59:42.128Z",
+  "completed_at_utc": "2026-11-24T04:22:14.644Z",
+  "inventory_total": 2381,
+  "synthetic_skipped": 0,
+  "crawl_scope": 2381,
+  "crawled_now": 2381,
+  "reused_from_checkpoint": 0,
+  "remaining": 0,
+  "halt_reason": null,
+  "by_status": {
+    "EXACT": 594,
+    "CONTACT": 146,
+    "DISCONTINUED": 126,
+    "NOT_FOUND": 5,
+    "AMBIGUOUS": 120,
+    "BLOCKED": 0,
+    "UNKNOWN": 1390
+  },
+  "exact_with_three_prices": 363,
+  "exact_with_regular_and_promotional": 594,
+  "exact_with_regular_only": 0,
+  "exact_with_voucher": 363,
+  "quarantined": 0,
+  "requests": 4476,
+  "requests_non_2xx": 2,
+  "inventory_count": 2381,
+  "active": 1773,
+  "inactive": 608,
+  "category_counts": {
+    "gach-op-lat": 209,
+    "thiet-bi-bep": 82,
+    "thiet-bi-ve-sinh": 2090
+  },
+  "unique_ids": 2381,
+  "unique_skus": 2381,
+  "csv_rows": 2381,
+  "csv_status_counts": {
+    "AMBIGUOUS": 120,
+    "CONTACT": 146,
+    "DISCONTINUED": 126,
+    "EXACT": 594,
+    "NOT_FOUND": 5,
+    "UNKNOWN": 1390
+  },
+  "exact_missing_voucher": 231,
+  "invalid_exact_price_rows": []
+}
