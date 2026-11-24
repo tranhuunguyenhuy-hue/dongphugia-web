@@ -1,0 +1,37 @@
+{
+  "group": "inax-inactive",
+  "original_csv_sha256": "217bc6a5bb9bf5f0ccee5a70e20f502368f259b0448d447d7fd6c768b1f1f9d7",
+  "candidate_sha256": "69d56924d1436d536fbeeda7a91e3e21ed1b0fcecbb4bb89abe31281a55f6636",
+  "approval_sha256": "7a8968282b1998d312561571bd6e8b05df21c49e4a27f26bfe7875a36ebbacef",
+  "count": 392,
+  "hold_count": 0,
+  "source_age_hours_at_offline_audit": [
+    5.48,
+    5.74
+  ],
+  "evidence_cut_utc": "2026-11-24T09:51:09.465000+00:00",
+  "business_decision": "OWNER_ACCEPTED_CONDITIONAL",
+  "direct_price_freshness": "NOT_RECONFIRMED",
+  "production_go": false,
+  "refs": {
+    "479": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+    "483": "83fb2b3e600f15fa9f7bbdf398e793fe557e1140",
+    "484": "24afd8341e2231c509376b80a3f27cf9bfd082e7"
+  },
+  "archived_direct_csv_sha256": "e8d7646fc5b71239968072c950905bb7ece787bf33cb545007e3dfbf89799eab",
+  "archived_direct_approval_sha256": "73272f62a36c88b269347f87b795babe05ae1620293524cafe50c59406838f6a",
+  "release_scope_counts": {
+    "UNRESOLVED": 36,
+    "candidate": 392,
+    "pass_regular_only": 400,
+    "direct_archived": 8,
+    "CONTACT": 1
+  },
+  "candidate_ledger_sha256": "0437867d33bcf5d0c597b48aff5aed557e2312242668d4793da49c6cac386f85",
+  "archived_direct_ledger_sha256": "af377878059a3dcaccc0f283f5f9f77855dfde00c7dfe1fd6ffdc6eb0ab39eb9",
+  "source_status_csv": "../../import-handoff/inax-inactive/status-review.csv",
+  "source_status_csv_sha256": "65546c08c84113fcaedd5d643d8de52aadfa0637fad49d356f6e1688696eba7c",
+  "direct_offline_contract_pass": 8,
+  "direct_freshness": "NOT_RECONFIRMED",
+  "technical_preflight_live": "NOT_RUN"
+}

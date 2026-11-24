@@ -1,0 +1,18 @@
+{
+  "approved_by": "Owner",
+  "approval_ref": "https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/448#issuecomment-7127917834",
+  "rule_ref": "https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/443#issuecomment-7127916878",
+  "csv_sha256": "e8d7646fc5b71239968072c950905bb7ece787bf33cb545007e3dfbf89799eab",
+  "approved_ids": [
+    8323,
+    8498,
+    8611,
+    8631,
+    8709,
+    8847,
+    8900,
+    9040
+  ],
+  "approved_basis": "ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION",
+  "production_go": false
+}
