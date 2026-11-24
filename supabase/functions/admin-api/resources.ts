@@ -191,13 +191,15 @@ const productHook: WriteHook = ({ mode, existing, input }) => {
   // status, so the status follows the prices: any price present => PRICE_VERIFIED (verified by the admin), none => the
   // status is cleared (price hidden, "cần liên hệ"). A non-price status combined with a price is rejected before the CHECK.
   // Fail-safe: databases without the column (TEST fixed Preview today) never see this write.
+  // The status write is collected here and returned only AFTER every legacy guard below has run (#470 TL review: no early return).
+  let statusSet: Record<string, unknown> | undefined
   if (externalColumns.has('canonical_price_status')) {
     const hasPrice = CANONICAL_PRICE_FIELDS.some((field) => final[field] !== null && final[field] !== undefined && final[field] !== '')
     const requested = input.canonical_price_status as string | null | undefined
     if (hasPrice && requested !== undefined && requested !== null && requested !== 'PRICE_VERIFIED') throw new ApiError(400, 'PRICE_STATUS_INVALID', ['canonical_price_status'])
     if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) {
       const next = hasPrice ? 'PRICE_VERIFIED' : (final.canonical_price_status === 'PRICE_VERIFIED' ? null : (final.canonical_price_status ?? null))
-      return { set: { canonical_price_status: next, canonical_price_checked_at: RAW_NOW } }
+      statusSet = { canonical_price_status: next, canonical_price_checked_at: RAW_NOW }
     }
   }
   const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
@@ -206,7 +208,7 @@ const productHook: WriteHook = ({ mode, existing, input }) => {
     if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
     if (typeof final.image_main_url !== 'string' || final.image_main_url.trim() === '') throw new ApiError(400, 'IMAGE_REQUIRED', ['image_main_url'])
   }
-  return undefined
+  return statusSet ? { set: statusSet } : undefined
 }
 
 export const RESOURCES: ResourceDef[] = [

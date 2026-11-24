@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { signEnvelope, verifyEnvelope, randomNonce, routeOf } from './envelope.mjs'
 import { handleRequest, DUMMY_HASH, type Db } from './handlers.ts'
 import { can, type AdminRole } from './permissions.ts'
+import { setExternalColumns } from './resources.ts'
 
 const root = process.cwd()
 const integrationUrl = process.env.POSTGRES_SNAPSHOT_INTEGRATION_URL
@@ -757,6 +758,43 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         for (const key of ['origins', 'colors', 'materials']) expect((await call('GET', `/r/${key}/options`, undefined, { token: sale })).json.data.items.length).toBeGreaterThan(0)
         expect(code2(await call('POST', '/r/colors', { input: { name: 'x' } }, { token: t }))).toBe('DEV_MANAGED')
       })
+    })
+
+    it('#470: Production status column — hook keeps status in step with prices through the real handler; legacy guards still apply', async () => {
+      const t = await token('admin'), sale = await token('sale')
+      // The Production 001 CHECK + 002 column grants (status/checked_at), applied to the TEST-shaped fixture (guards need the Production contract).
+      const check = /add constraint products_canonical_price_check check \(([\s\S]*?)\) not valid;/.exec(await readFile(path.join(root, 'supabase/prod-prep/470/001_canonical_price_columns.sql'), 'utf8'))![1]
+      await owner.query('alter table dpg_app.products add column if not exists canonical_price_status text, add column if not exists canonical_price_checked_at timestamptz')
+      await owner.query(`alter table dpg_app.products drop constraint if exists products_canonical_price_check, add constraint products_canonical_price_check check (${check})`)
+      await owner.query(`grant select, insert, update (canonical_price_status, canonical_price_checked_at) on dpg_app.products to ${apiRole}`)
+      setExternalColumns(['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd', 'canonical_price_status'])
+      try {
+        const made = await call('POST', '/r/products', { input: { sku: 'C470-1', name: 'TOTO canonical', slug: 'c470-1', category_id: 1, price_display: 'Liên hệ báo giá', is_active: false } }, { token: t })
+        expect(made.status).toBe(201); const id = made.json.data.id
+        const patch = (input: Record<string, unknown>, v: number, tok = t) => call('PATCH', `/r/products/${id}`, { expected_version: v, input }, { token: tok })
+        // mixed update: canonical price + an invalid legacy sale price is still rejected (no bypass), nothing is written
+        expect(code(await patch({ regular_price_vnd: 1000000, list_price: 100, sale_price: 200 }, 1))).toBe('SALE_PRICE_INVALID')
+        // activation guard still runs together with a canonical edit
+        expect(code(await patch({ regular_price_vnd: 1000000, is_active: true }, 1))).toBe('IMAGE_REQUIRED')
+        expect((await owner.query('select canonical_price_status, regular_price_vnd, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, regular_price_vnd: null, version: 1 })
+        // status is read-only for the user; sale role has no commerce:write
+        expect(code(await patch({ canonical_price_status: 'PRICE_VERIFIED' }, 1))).toBe('VALIDATION_FAILED')
+        expect(code(await patch({ regular_price_vnd: 1000000 }, 1, sale))).toBe('FORBIDDEN')
+        const ok = await patch({ regular_price_vnd: 1000000, promotional_price_vnd: 900000 }, 1)
+        expect(ok.status).toBe(200)
+        const row = (await owner.query('select canonical_price_status, canonical_price_checked_at is not null as stamped, version from dpg_app.products where id=$1', [id])).rows[0]
+        expect(row).toEqual({ canonical_price_status: 'PRICE_VERIFIED', stamped: true, version: 2 })
+        // clearing every canonical price hides the price again (status NULL), the CHECK never fires
+        expect((await patch({ regular_price_vnd: null, promotional_price_vnd: null }, 2)).status).toBe(200)
+        expect((await owner.query('select canonical_price_status, version from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: null, version: 3 })
+        const audit = (await owner.query("select action from dpg_app.audit_logs where entity_type='products' and entity_id=$1 order by id", [id])).rows.map(r => r.action)
+        expect(audit).toEqual(['products.create', 'products.update', 'products.update'])
+      } finally {
+        await owner.query(`revoke select, insert, update (canonical_price_status, canonical_price_checked_at) on dpg_app.products from ${apiRole}`)
+        await owner.query('alter table dpg_app.products drop constraint if exists products_canonical_price_check, drop column if exists canonical_price_status, drop column if exists canonical_price_checked_at')
+        // restore exactly what the handler's own probe would see now
+        setExternalColumns((await owner.query("select column_name from information_schema.columns where table_schema='dpg_app' and table_name='products' and column_name = any($1::text[])", [['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd', 'canonical_price_status']])).rows.map(r => r.column_name))
+      }
     })
 
     it('database blocks anything outside the generated grants', async () => {

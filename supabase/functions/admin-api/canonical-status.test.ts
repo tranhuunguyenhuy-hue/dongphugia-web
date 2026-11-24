@@ -34,4 +34,9 @@ describe('#470 admin price edit keeps canonical_price_status consistent', () => 
     setExternalColumns(['canonical_price_status'])
     expect(await run({ ...base, canonical_price_status: 'PRICE_VERIFIED' }, { name: 'x' })).toBeUndefined()
   })
+  it('legacy guards still run when canonical prices are edited in the same request (no early return)', async () => {
+    setExternalColumns(['regular_price_vnd', 'promotional_price_vnd', 'online_voucher_amount_vnd', 'canonical_price_status'])
+    await expect(run({ ...base, list_price: '100' }, { regular_price_vnd: 1000000, sale_price: 200 })).rejects.toMatchObject({ code: 'SALE_PRICE_INVALID' })
+    await expect(run({ ...base, stock_status: 'in_stock', image_main_url: null }, { regular_price_vnd: 1000000, is_active: true })).rejects.toMatchObject({ code: 'IMAGE_REQUIRED' })
+  })
 })
