@@ -64,6 +64,7 @@ create table dpg_commerce.orders (
   idempotency_hash text not null unique check (idempotency_hash ~ '^[0-9a-f]{64}$'),
   request_hash text not null check (request_hash ~ '^[0-9a-f]{64}$'),
   staff_note text check (staff_note is null or char_length(staff_note) <= 2000),
+  assigned_to integer,                                   -- admin_users.id (no FK across schemas); sale roles only see rows assigned to them
   version integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -94,6 +95,7 @@ create table dpg_commerce.quotes (
   idempotency_hash text not null unique check (idempotency_hash ~ '^[0-9a-f]{64}$'),
   request_hash text not null check (request_hash ~ '^[0-9a-f]{64}$'),
   staff_note text check (staff_note is null or char_length(staff_note) <= 2000),
+  assigned_to integer,
   version integer not null default 1,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -114,7 +116,7 @@ create table dpg_commerce.events (
   entity text not null check (entity in ('order', 'quote')),
   entity_id bigint not null,
   actor text not null check (char_length(actor) between 1 and 80),
-  action text not null check (action in ('created', 'status', 'note')),
+  action text not null check (action in ('created', 'status', 'note', 'assign')),
   from_status text, to_status text,
   at timestamptz not null default now()
 );
@@ -343,7 +345,7 @@ grant execute on function dpg_commerce.cart_check(jsonb, text), dpg_commerce.ord
 do $$ declare r text := current_setting('dpg.commerce_admin_role', true); begin
   execute format('grant usage on schema dpg_commerce to %I', r);
   execute format('grant select on dpg_commerce.orders, dpg_commerce.order_lines, dpg_commerce.quotes, dpg_commerce.quote_lines, dpg_commerce.events to %I', r);
-  execute format('grant update (status, staff_note, version) on dpg_commerce.orders, dpg_commerce.quotes to %I', r);
+  execute format('grant update (status, staff_note, assigned_to, version) on dpg_commerce.orders, dpg_commerce.quotes to %I', r);
   execute format('grant insert on dpg_commerce.events to %I', r);
   execute format('grant usage on sequence dpg_commerce.events_id_seq to %I', r);
 end $$;

@@ -1,6 +1,7 @@
 import { getPermissions, type AdminRole } from './permissions.ts'
 import { ApiError, type Context, type Db, type Session } from './core.ts'
 import * as commerce from './commerce-handlers.ts'
+import * as salesHandlers from './sales-handlers.ts'
 import { createResource, deleteResource, findResource, getResource, listResource, optionsResource, probeExternalColumns, resourceMeta, updateResource } from './resource-handlers.ts'
 import { routeOf, sha256Hex, verifyEnvelope, NONCE_TTL_SECONDS } from './envelope.mjs'
 import { loginSchema } from './validation.ts'
@@ -110,11 +111,11 @@ async function dispatchResource(deps: Deps, ctx: Context, method: string, key: s
 }
 
 type Routed = Promise<{ status: number; body: unknown }> | undefined
-/** Orders, quotes, assignees and dashboard (see commerce-handlers.ts). Returns undefined when the path is not one of them. */
+/** Commerce v1 inbox (sales-handlers.ts), assignees, dashboard, bulk products and variants (commerce-handlers.ts). Returns undefined when the path is not one of them. */
 function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string, search: URLSearchParams, body: string): Routed {
   const cd = { db: deps.db }
   if (method === 'GET' && path === '/assignees') return commerce.listAssignees(cd, ctx)
-  if (method === 'GET' && path === '/dashboard') return commerce.dashboard(cd, ctx, search)
+  if (method === 'GET' && path === '/dashboard') return commerce.dashboard(cd, ctx)
   if (method === 'POST' && path === '/products/bulk') return commerce.bulkProducts(cd, ctx, body)
   const variants = path.match(/^\/products\/(\d{1,9})\/variants(?:\/(\d{1,9}))?$/)
   if (variants) {
@@ -122,21 +123,14 @@ function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string
     if (variants[2] === undefined) return method === 'GET' ? commerce.listVariants(cd, ctx, pid) : method === 'POST' ? commerce.linkVariant(cd, ctx, pid, body) : undefined
     return method === 'DELETE' ? commerce.unlinkVariant(cd, ctx, pid, Number(variants[2])) : undefined
   }
-  const m = path.match(/^\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|payment|assign|complete))?$/)
-  if (!m) return undefined
-  const [, kind, rawId, action] = m
-  const id = rawId === undefined ? undefined : Number(rawId)
-  if (kind === 'orders') {
-    if (id === undefined) return method === 'GET' ? commerce.listOrders(cd, ctx, search) : undefined
-    if (!action) return method === 'GET' ? commerce.getOrder(cd, ctx, id) : method === 'PATCH' ? commerce.editOrder(cd, ctx, id, body) : undefined
-    if (method !== 'PATCH') return undefined
-    return action === 'status' ? commerce.setOrderStatus(cd, ctx, id, body) : action === 'payment' ? commerce.setPaymentStatus(cd, ctx, id, body) : action === 'assign' ? commerce.assignOrder(cd, ctx, id, body) : undefined
-  }
-  if (id === undefined) return method === 'GET' ? commerce.listQuotes(cd, ctx, search) : undefined
-  if (!action) return method === 'GET' ? commerce.getQuote(cd, ctx, id) : method === 'PATCH' ? commerce.saveQuote(cd, ctx, id, body) : undefined
-  if (action === 'complete') return method === 'POST' ? commerce.completeQuote(cd, ctx, id, body) : undefined
-  if (method !== 'PATCH') return undefined
-  return action === 'status' ? commerce.setQuoteStatus(cd, ctx, id, body) : action === 'assign' ? commerce.assignQuote(cd, ctx, id, body) : undefined
+  const sales = path.match(/^\/sales\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|note|assign))?$/)
+  if (path === '/sales/summary' && method === 'GET') return salesHandlers.salesSummary(cd, ctx)
+  if (!sales) return undefined
+  const kind = sales[1] as salesHandlers.SalesKind, id = sales[2] === undefined ? undefined : Number(sales[2]), action = sales[3]
+  if (id === undefined) return method === 'GET' && !action ? salesHandlers.listSales(cd, ctx, kind, search) : undefined
+  if (!action) return method === 'GET' ? salesHandlers.getSales(cd, ctx, kind, id) : undefined
+  if (method !== 'POST') return undefined
+  return action === 'status' ? salesHandlers.setSalesStatus(cd, ctx, kind, id, body) : action === 'note' ? salesHandlers.setSalesNote(cd, ctx, kind, id, body) : salesHandlers.assignSales(cd, ctx, kind, id, body)
 }
 
 async function recordNonce(deps: Deps, nonce: string) {

@@ -119,6 +119,8 @@ describe.skipIf(!integrationUrl || !loopback)('Production migrations (M4) on a P
     expect((await call('PATCH', `/r/products/${id}`, { expected_version: 1, input: { name: 'Stale' } }, token)).json.error.code).toBe('VERSION_CONFLICT')
     const created = await call('POST', '/r/blog-tags', { input: { name: 'Tag', slug: 'tag' } }, token); expect(created.status).toBe(201)
     expect((await call('GET', '/dashboard', undefined, token)).status).toBe(200)
+    const notReady = await call('GET', '/sales/orders', undefined, token)       // commerce schema not applied yet (its own Owner GO): 503, never a 500
+    expect([notReady.status, notReady.json.error.code]).toEqual([503, 'COMMERCE_NOT_READY'])
     const audit = (await owner.query("select new_value from dpg_app.audit_logs where entity_type='products' and entity_id=$1", [id])).rows
     expect(audit[0].new_value._meta.changed_fields).toEqual(['name'])
     // still least privilege on Production: identity/price/credential columns and tables outside the Admin scope
