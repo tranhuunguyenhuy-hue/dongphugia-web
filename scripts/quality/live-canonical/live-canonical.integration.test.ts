@@ -27,6 +27,19 @@ vi.mock('../../../apps/public/src/runtime/public-db', () => ({
 const load = async () => { vi.resetModules(); return import('../../../apps/public/src/runtime/live-public-catalogue') }
 const production = () => { vi.stubEnv('APP_ENV', 'production'); vi.stubEnv('PUBLIC_CANONICAL_PRICING', 'on') }
 const sql = (text: string) => db.query(text)
+type Mod = Awaited<ReturnType<typeof load>>
+const CANON = /regular_price_vnd|promotional_price_vnd|online_voucher_amount_vnd|canonical_price_status/
+/** Every public read path in one go; returns listing orders. Throws on any 5xx-worthy error. */
+async function sweep(m: Mod) {
+    const order = async (priceSort?: 'asc' | 'desc') => (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, priceSort ? { priceSort } : {})).products
+    const def = await order(), asc = await order('asc'), desc = await order('desc')
+    await m.getLiveProductByCategory('thiet-bi-ve-sinh', 't-promo'); await m.searchLiveProducts('T-', 1, 24)
+    await m.getLiveListingPreview('thiet-bi-ve-sinh', 'chau-lavabo'); await m.getLiveVariantSiblings('G1', 1)
+    await m.getLiveListing('gach-op-lat', 'gach-san')
+    const all = [...def, ...asc, ...desc]
+    expect(JSON.stringify(all)).not.toMatch(/:(111|222|333|444|555|50)[,}]/)    // no legacy value, no out-of-scope canonical value
+    return { def: def.map(p => p.sku), asc: asc.map(p => p.sku), desc: desc.map(p => p.sku), all }
+}
 
 run('live PostgreSQL read path with real public-role ACL (#470)', () => {
     beforeAll(async () => {
@@ -81,6 +94,30 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         expect(log.some(s => !s.includes('canonical_price_status'))).toBe(true)      // ... then the same statement without it
     })
 
+    it('PHASE 1b (old schema, flag ON): default/asc/desc keep the default order; the fallback statement references NO canonical column', async () => {
+        production(); const m = await load()
+        const r = await sweep(m)
+        expect(r.asc).toEqual(r.def); expect(r.desc).toEqual(r.def)
+        const fallbacks = log.filter(s => !CANON.test(s)); expect(fallbacks.length).toBeGreaterThan(0)
+        for (const s of fallbacks) expect(s).not.toMatch(CANON)
+    })
+
+    it('PHASE 1c (001 applied, 002 NOT yet): 42501 -> fail-safe; 60 s memory; canonical retried after the window', async () => {
+        await sql(await sqlOf(prod('001_canonical_price_columns.sql')))
+        await sql("update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=50, canonical_price_checked_at=now() where sku='I-INAX'")
+        production(); const m = await load()
+        const t0 = Date.now(); const now = vi.spyOn(Date, 'now').mockReturnValue(t0)
+        try {
+            const r = await sweep(m); expect(r.asc).toEqual(r.def)
+            expect(r.all.filter(p => p.sku.startsWith('T-')).every(p => p.price === null && p.price_display === 'Cần liên hệ xác nhận giá')).toBe(true)
+            log.length = 0; await m.getLiveListingPreview('thiet-bi-ve-sinh', 'chau-lavabo')
+            expect(log).toHaveLength(1); expect(log[0]).not.toMatch(CANON)                     // remembered: no failing round trip
+            now.mockReturnValue(t0 + 61_000); log.length = 0
+            await m.getLiveListingPreview('thiet-bi-ve-sinh', 'chau-lavabo')
+            expect(log).toHaveLength(2); expect(log[0]).toMatch(CANON); expect(log[1]).not.toMatch(CANON)   // window over: tried again
+        } finally { now.mockRestore() }
+    })
+
     it('PHASE 2: migrations 001 + 002 apply (idempotent) and the minimum grants hold', async () => {
         for (const file of ['001_canonical_price_columns.sql', '002_canonical_price_grants.sql']) { await sql(await sqlOf(prod(file))); await sql(await sqlOf(prod(file))) }
         const can = async (role: string, stmt: string) => { await db.query('begin'); await db.query(`set local role ${role}`); try { await db.query(stmt); return true } catch { return false } finally { await db.query('rollback') } }
@@ -114,15 +151,16 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         expect(await m.getLiveVariantSiblings('G1', 1)).toEqual([])   // same #432 ACL finding; sibling prices are covered by the mocked unit test
     })
 
-    it('PHASE 3b: ordering — verified prices first, price sort asc/desc only on verified values, rest last', async () => {
+    it('PHASE 3b: ordering — default unchanged; explicit sort only on VISIBLE (TOTO, PRICE_VERIFIED) prices; INAX with populated canonical columns not sorted, not shown', async () => {
         production(); const m = await load()
-        const asc = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'asc' })).products.map(p => p.sku)
-        expect(asc.slice(0, 2)).toEqual(['T-VERIFIED', 'T-PROMO'])           // 1,000,000 then 1,800,000
-        const desc = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'desc' })).products.map(p => p.sku)
-        expect(desc.slice(0, 2)).toEqual(['T-PROMO', 'T-VERIFIED'])
-        for (const order of [asc, desc]) expect(order.slice(2)).toEqual(expect.arrayContaining(['T-CONTACT', 'T-NOSTATUS', 'T-UNRESOLVED', 'I-INAX']))
-        const def = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')).products.map(p => p.sku)
-        expect(new Set(def.slice(0, 2))).toEqual(new Set(['T-VERIFIED', 'T-PROMO']))
+        const r = await sweep(m)
+        vi.unstubAllEnvs(); vi.stubEnv('APP_ENV', 'production'); const off = await load()
+        const offDef = (await off.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')).products.map(p => p.sku)
+        expect(r.def).toEqual(offDef)                                                    // default order identical to flag OFF
+        expect(r.asc.slice(0, 2)).toEqual(['T-VERIFIED', 'T-PROMO']); expect(r.desc.slice(0, 2)).toEqual(['T-PROMO', 'T-VERIFIED'])
+        const rest = r.def.filter(s => !['T-VERIFIED', 'T-PROMO'].includes(s))
+        expect(r.asc.slice(2)).toEqual(rest); expect(r.desc.slice(2)).toEqual(rest)        // everything else keeps the default order
+        expect(r.all.find(p => p.sku === 'I-INAX')).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })
     })
 
     it('PHASE 4: Admin edit -> Public read (DB layer; HTML cache TTL is 45 s, see page-cache.ts)', async () => {
@@ -143,12 +181,14 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         await sql(`update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null, canonical_price_checked_at=null`)
         await sql(await sqlOf(prod('002_canonical_price_grants_rollback.sql')))
         production(); let m = await load()
+        const swept = await sweep(m); expect(swept.asc).toEqual(swept.def); expect(swept.desc).toEqual(swept.def)
         const hidden = await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')
         expect(hidden.products.find(p => p.sku === 'T-VERIFIED')).toMatchObject({ price: null, price_display: 'Cần liên hệ xác nhận giá' })
         vi.unstubAllEnvs(); vi.stubEnv('APP_ENV', 'production'); m = await load()
         expect((await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')).totalCount).toBe(6)
         await sql(await sqlOf(prod('001_canonical_price_columns_rollback.sql')))
         production(); m = await load()
+        const after = await sweep(m); expect(after.asc).toEqual(after.def)
         expect((await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')).products.every(p => p.price === null)).toBe(true)
     })
 })

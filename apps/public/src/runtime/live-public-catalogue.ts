@@ -25,35 +25,50 @@ const COLS='p.id,p.sku,p.name,p.display_name,p.slug,p.description,p.image_main_u
 // only when PUBLIC_CANONICAL_PRICING=on (default OFF). With the flag off every statement below is byte-identical to before.
 const testPricingEnabled=()=>canonicalPricingMode()==='test'
 const productionPricingEnabled=()=>canonicalPricingMode()==='production'
-// withCanonical=false is the schema-missing fail-safe: same statement without any canonical column.
-const priceColumns=(withCanonical=true)=>testPricingEnabled()
+// Statement context. canonical=false is the schema/permission fail-safe: the statement then references NO canonical column at all
+// (SELECT, WHERE and ORDER BY), so in-scope rows become "Cần liên hệ xác nhận giá" and the default order is kept.
+type PriceCtx={canonical:boolean;brandsParam:()=>string}
+const priceColumns=(ctx:PriceCtx)=>testPricingEnabled()
  ? COLS+',p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd'
- : productionPricingEnabled()&&withCanonical
+ : productionPricingEnabled()&&ctx.canonical
   ? COLS+',p.regular_price_vnd,p.promotional_price_vnd,p.online_voucher_amount_vnd,p.canonical_price_status' : COLS
-const pricePriority=(withCanonical=true)=>testPricingEnabled()
- ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.regular_price_vnd IS NULL THEN 1 ELSE 0 END,"
- : productionPricingEnabled()&&withCanonical
-  ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.canonical_price_status IS DISTINCT FROM 'PRICE_VERIFIED' THEN 1 ELSE 0 END," : ''
-// Price sort key: only a verified price sorts; everything else goes last (never a legacy value).
-const priceSortKey=(withCanonical=true)=>productionPricingEnabled()&&withCanonical
- ? "CASE WHEN p.canonical_price_status='PRICE_VERIFIED' THEN COALESCE(p.promotional_price_vnd,p.regular_price_vnd) END "
- : 'COALESCE(p.promotional_price_vnd,p.regular_price_vnd) '
-// #470 fail-safe: if the canonical columns are missing/unreadable (42703/42501/42P01) the SAME statement runs without them, so
-// in-scope rows become "Cần liên hệ xác nhận giá" (never a legacy price) instead of a 5xx. Remembered for 60 s per isolate.
+// Default order: the TEST pilot keeps its priced-first rule; Production keeps the existing order unchanged (no price-based boost).
+const pricePriority=(_ctx:PriceCtx)=>testPricingEnabled()
+ ? "CASE WHEN c.slug='thiet-bi-ve-sinh' AND p.regular_price_vnd IS NULL THEN 1 ELSE 0 END," : ''
+// Explicit price sort (user-chosen). Production: only a VISIBLE price sorts = same scope as the mapper (sanitary x approved brands,
+// bound as a parameter, never interpolated) and PRICE_VERIFIED; every other row follows in the default order. Fail-safe: no price term.
+const priceSortTerm=(ctx:PriceCtx,dir:'asc'|'desc')=>{
+ const d=dir==='desc'?'DESC':'ASC'
+ if(testPricingEnabled())return 'COALESCE(p.promotional_price_vnd,p.regular_price_vnd) '+d+' NULLS LAST,'
+ if(!productionPricingEnabled()||!ctx.canonical)return ''
+ return "CASE WHEN c.slug='thiet-bi-ve-sinh' AND b.slug=ANY("+ctx.brandsParam()+") AND p.canonical_price_status='PRICE_VERIFIED'"+
+  ' THEN COALESCE(p.promotional_price_vnd,p.regular_price_vnd) END '+d+' NULLS LAST,'
+}
+// #470 fail-safe: if the canonical columns are missing/unreadable (42703/42501/42P01) the SAME statement runs without them.
+// Only a retry that SUCCEEDS marks canonical unavailable (60 s per isolate); otherwise the retry's own error propagates untouched.
 let canonicalUnavailableUntil=0
-async function readProductRows<T>(build:(withCanonical:boolean)=>string,values:readonly (string|number|boolean|readonly string[])[],label?:Parameters<typeof readPublicRows>[2]):Promise<T[]>{
+type QueryValue=string|number|boolean|readonly string[]
+async function readProductRows<T>(build:(ctx:PriceCtx)=>string,values:readonly QueryValue[],label?:Parameters<typeof readPublicRows>[2]):Promise<T[]>{
+ const attempt=(canonical:boolean)=>{
+  const extra:QueryValue[]=[]
+  let brands:string|null=null
+  const ctx:PriceCtx={canonical,brandsParam:()=>{if(!brands){extra.push([...canonicalProductionBrands()]);brands='$'+(values.length+extra.length)+'::text[]'}return brands}}
+  const sql=build(ctx)
+  return readPublicRows<T>(sql,[...values,...extra],label) as Promise<T[]>
+ }
  const canonical=productionPricingEnabled()&&Date.now()>=canonicalUnavailableUntil
- try{return await readPublicRows<T>(build(canonical),values,label) as T[]}
+ try{return await attempt(canonical)}
  catch(error){
   const code=error&&typeof error==='object'&&'code' in error?String((error as {code:unknown}).code):''
   if(!productionPricingEnabled()||!canonical||!['42703','42501','42P01'].includes(code))throw error
-  // Only a retry that SUCCEEDS proves the canonical columns were the problem; otherwise the retry's own error propagates untouched.
-  const rows=await readPublicRows<T>(build(false),values,label) as T[]
+  const rows=await attempt(false)
   canonicalUnavailableUntil=Date.now()+60_000
   console.error(JSON.stringify({event:'PUBLIC_CANONICAL_SCHEMA_UNAVAILABLE',sqlState:code}))
   return rows
  }
 }
+/** Test hook only: forget the remembered fail-safe window. */
+export function resetCanonicalAvailabilityForTests(){canonicalUnavailableUntil=0}
 const vnd=(input:number|string|null|undefined)=>{
  const value=Number(input)
  return Number.isSafeInteger(value)&&value>0&&value<=9_999_999_999_999?value:null
@@ -136,9 +151,7 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
  // One product (SKU) = one row = one card. Series is a filter on SKUs, never a grouping.
  const priceSort=(testPricingEnabled()||productionPricingEnabled())&&category==='thiet-bi-ve-sinh'&&filters.priceSort
  const rows=await readProductRows<PublicProductRow>(c=>{
-  const priceOrder=priceSort
-   ? priceSortKey(c)+(priceSort==='desc'?'DESC':'ASC')+' NULLS LAST,'
-   : pricePriority(c)
+  const priceOrder=priceSort?priceSortTerm(c,priceSort):pricePriority(c)
   return 'SELECT '+priceColumns(c)+',count(*) OVER() AS total_count'+FROM+
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+

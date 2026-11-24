@@ -69,15 +69,25 @@ describe('flag ON (Production)', () => {
         expect(mapLiveProduct(row({ brand_slug: 'inax', canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5' })).price).toBe(5)
         expect(mapLiveProduct(row({ brand_slug: 'american-standard' })).price_provenance).toBeUndefined()
     })
-    it('default order puts verified prices first; price sort uses only PRICE_VERIFIED values, rest last; no per-row extra queries', async () => {
+    it('default order is unchanged in Production (identical ORDER BY to flag OFF); explicit price sort is scoped and parameter-bound', async () => {
         mocks.readPublicRows.mockResolvedValue([row()])
         await getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')
-        expect(sqlOf(0)).toContain("p.canonical_price_status IS DISTINCT FROM 'PRICE_VERIFIED' THEN 1 ELSE 0 END,p.listing_priority")
+        const onDefault = sqlOf(0).slice(sqlOf(0).indexOf(' ORDER BY '))
+        vi.stubEnv('PUBLIC_CANONICAL_PRICING', 'off'); await getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo')
+        expect(onDefault).toBe(sqlOf(1).slice(sqlOf(1).indexOf(' ORDER BY ')))
+        expect(onDefault).not.toMatch(/canonical_price_status|regular_price_vnd/)
+        vi.stubEnv('PUBLIC_CANONICAL_PRICING', 'on')
         await getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'asc' })
-        expect(sqlOf(1)).toContain("CASE WHEN p.canonical_price_status='PRICE_VERIFIED' THEN COALESCE(p.promotional_price_vnd,p.regular_price_vnd) END ASC NULLS LAST,p.listing_priority")
-        await getLiveListing('thiet-bi-bep', 'voi', 1, 48, { priceSort: 'desc' })
-        expect(sqlOf(2)).not.toContain("canonical_price_status='PRICE_VERIFIED' THEN")   // a sort request on another category falls back to the default order
-        expect(mocks.readPublicRows).toHaveBeenCalledTimes(3)
+        expect(sqlOf(2)).toContain("CASE WHEN c.slug='thiet-bi-ve-sinh' AND b.slug=ANY($8::text[]) AND p.canonical_price_status='PRICE_VERIFIED' THEN COALESCE(p.promotional_price_vnd,p.regular_price_vnd) END ASC NULLS LAST,p.listing_priority")
+        expect(mocks.readPublicRows.mock.calls[2][1]).toHaveLength(8); expect(mocks.readPublicRows.mock.calls[2][1][7]).toEqual(['toto'])
+        await getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'desc' })
+        expect(sqlOf(3)).toContain('END DESC NULLS LAST,p.listing_priority')
+        vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', "toto,x'); drop table y;--")      // unsafe values are dropped, never interpolated
+        await getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'asc' })
+        expect(sqlOf(4)).not.toContain('drop table'); expect(mocks.readPublicRows.mock.calls[4][1][7]).toEqual(['toto'])
+        await getLiveListing('thiet-bi-bep', 'voi', 1, 48, { priceSort: 'desc' })      // other category: sort ignored, default order, no extra param
+        expect(sqlOf(5)).not.toContain('canonical_price_status=\'PRICE_VERIFIED\''); expect(mocks.readPublicRows.mock.calls[5][1]).toHaveLength(7)
+        expect(mocks.readPublicRows).toHaveBeenCalledTimes(6)
     })
     it('?sort= is supported for sanitary only', () => {
         expect(supportedListingKeys('thiet-bi-ve-sinh')).toContain('sort'); expect(supportedListingKeys('thiet-bi-bep')).not.toContain('sort')
