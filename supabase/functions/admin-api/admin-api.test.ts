@@ -787,17 +787,14 @@ describe.skipIf(!integrationUrl || !loopback)('admin-api against PostgreSQL with
         expect(ok.status).toBe(200)
         const row = (await owner.query('select canonical_price_status, canonical_price_checked_at is not null as stamped, version from dpg_app.products where id=$1', [id])).rows[0]
         expect(row).toEqual({ canonical_price_status: 'PRICE_VERIFIED', stamped: true, version: 2 })
-        // #470 2C: re-activation is ALWAYS allowed. A verified price older than the threshold is kept (history) but stops being PRICE_VERIFIED in the SAME write:
-        // status REVERIFY_REQUIRED, prices untouched, canonical_price_checked_at NOT raised. Public/orders then treat it as unverified.
-        await owner.query("update dpg_app.products set canonical_price_checked_at = now() - interval '30 days', image_main_url = $2 where id=$1", [id, `${MEDIA}/products/a.webp`])
+        // #470 (Owner 24/11): approved prices are DPG's official prices. Re-activating never hides/downgrades a price because of its age.
+        await owner.query("update dpg_app.products set canonical_price_checked_at = now() - interval '300 days', image_main_url = $2 where id=$1", [id, `${MEDIA}/products/a.webp`])
         const reactivated = await patch({ is_active: true }, 2)
         expect(reactivated.status).toBe(200)
-        const stale = (await owner.query("select is_active, canonical_price_status, regular_price_vnd, promotional_price_vnd, extract(epoch from now() - canonical_price_checked_at) / 86400 as age_days, version from dpg_app.products where id=$1", [id])).rows[0]
-        expect({ is_active: stale.is_active, status: stale.canonical_price_status, regular: stale.regular_price_vnd, promo: stale.promotional_price_vnd, version: stale.version }).toEqual({ is_active: true, status: 'REVERIFY_REQUIRED', regular: '1000000', promo: '900000', version: 3 })
-        expect(Number(stale.age_days)).toBeGreaterThan(29)                                   // checked-at never raised
-        // the Admin sees the reason + the historical price in the same row, and verifies again by saving the prices
-        const row3 = (await call('GET', `/r/products/${id}`, undefined, { token: t })).json.data
-        expect(row3).toMatchObject({ canonical_price_status: 'REVERIFY_REQUIRED', regular_price_vnd: '1000000' })
+        const kept = (await owner.query("select is_active, canonical_price_status, regular_price_vnd, promotional_price_vnd, extract(epoch from now() - canonical_price_checked_at) / 86400 as age_days, version from dpg_app.products where id=$1", [id])).rows[0]
+        expect({ is_active: kept.is_active, status: kept.canonical_price_status, regular: kept.regular_price_vnd, promo: kept.promotional_price_vnd, version: kept.version }).toEqual({ is_active: true, status: 'PRICE_VERIFIED', regular: '1000000', promo: '900000', version: 3 })
+        expect(Number(kept.age_days)).toBeGreaterThan(299)                                   // checked-at kept as is: the source age is evidence, not a deadline
+        // an Admin edit of the prices re-stamps the check time (PRICE_VERIFIED + fresh checked-at)
         expect((await patch({ regular_price_vnd: 1000000, promotional_price_vnd: 900000 }, 3)).status).toBe(200)
         expect((await owner.query('select canonical_price_status, extract(epoch from now() - canonical_price_checked_at) < 60 as fresh from dpg_app.products where id=$1', [id])).rows[0]).toEqual({ canonical_price_status: 'PRICE_VERIFIED', fresh: true })
         expect((await patch({ is_active: false }, 4)).status).toBe(200)

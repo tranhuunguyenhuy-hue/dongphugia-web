@@ -98,8 +98,8 @@ describe('547 INAX active baseline lane (Owner decision inax-baseline-owner-deci
     for (const patch of [{ brand_id: 1 }, { is_active: false }, { category_id: 5 }, { sku: 'OTHER' }]) expect(baseline({ db: base.map(r => (r.id === 248 ? { ...r, ...patch } : r)) }).stopReasons.join()).toContain('IDENTITY_MISMATCH id=248')
     expect(baseline({ db: base.filter(r => r.id !== 248) }).stopReasons.join()).toContain('IDENTITY_MISMATCH id=248')
   })
-  it('offer validity passed => HOLD (stops); the lane is INAX-active only; never overwrites a stored price or a newer Admin edit', () => {
-    expect(baseline({ now: new Date('2026-12-02T00:00:00Z') }).stopReasons.join()).toContain('BASELINE_OFFER_EXPIRED_HOLD')
+  it('the Hita Offer date does not block the pinned rows (DPG official prices); the lane is INAX-active only; never overwrites a stored price or a newer Admin edit', () => {
+    const later = baseline({ now: new Date('2027-03-01T00:00:00Z') }); expect(later.stopReasons).toEqual([]); expect(later.rows).toHaveLength(547)
     expect(buildBaselinePlan({ csvText: read('inax-active/inax-baseline-hold.csv'), expectedCsvSha256: sha256(read('inax-active/inax-baseline-hold.csv')), decision: json('inax-active/inax-baseline-owner-decision.json'), candidateSha: SHA, db: snapshot(2, true), dbSizeBytes: DB_SIZE, now: NOW, brand: 'toto', state: 'active' }).stopReasons).toContain('BASELINE_LANE_IS_INAX_ACTIVE_ONLY')
     const stored = snapshot(2, true, { 248: { canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: 9, canonical_price_checked_at: '2026-11-24T09:00:00Z' }, 249: { canonical_price_checked_at: '2026-11-24T12:00:00Z' } })
     const p = baseline({ db: stored }); expect(p.stopReasons).toEqual([]); expect(p.rows.map(r => r.id)).not.toContain(248); expect(p.rows.map(r => r.id)).not.toContain(249); expect(p.rows).toHaveLength(545)
@@ -127,8 +127,9 @@ describe('freshness is fail-closed: no blanket disable', () => {
     const edited = tamper(csv, 207, 'regular_price_vnd', '1')
     expect(direct(cohort, brand, state, brandId, { csv: edited }).stopReasons).toContain('FRESHNESS_EXCEPTION_FOR_A_DIFFERENT_CSV')
   })
-  it('an expired Offer stops even with the exception; a voucher in an exception row stops', () => {
-    expect(direct(cohort, brand, state, brandId, { now: new Date('2026-12-03T00:00:00Z') }).stopReasons.some(s => s.startsWith('PRICE_OFFER_EXPIRED'))).toBe(true)
+  it('an expired Offer does NOT block a pinned row, but still stops an UNPINNED stale/expired row; a voucher in an exception row stops', () => {
+    const late = direct(cohort, brand, state, brandId, { now: new Date('2027-03-01T00:00:00Z') }); expect(late.stopReasons).toEqual([]); expect(late.rows).toHaveLength(1543)
+    expect(direct(cohort, brand, state, brandId, { exc: null, now: new Date('2027-03-01T00:00:00Z') }).stopReasons.some(s => /^(PRICE_OFFER_EXPIRED|CHECKED_STALE_NOT_APPROVED)/.test(s))).toBe(true)
     const csv = tamper(tamper(read(`${cohort}/archived-direct.csv`), 207, 'online_voucher_amount_vnd', '1000'), 207, 'voucher_condition', 'Ưu đãi online')
     const exc = { ...json<FreshnessException>(`${cohort}/archived-direct-approval.json`), csv_sha256: sha256(csv) }
     expect(direct(cohort, brand, state, brandId, { csv, exc }).stopReasons.some(s => s.startsWith('EXCEPTION_ROW_HAS_VOUCHER'))).toBe(true)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { CANONICAL_ADMIN_BRANDS, CANONICAL_REACTIVATION_MAX_AGE_MS, resourceByKey, setExternalColumns } from './resources.ts'
+import { CANONICAL_ADMIN_BRANDS, resourceByKey, setExternalColumns } from './resources.ts'
 import { CANONICAL_APPROVED_BRANDS } from '../../../src/lib/canonical-price'
 
 // #470: the product write hook keeps `canonical_price_status` consistent with the three canonical prices so the Production
@@ -60,30 +60,17 @@ describe('#470 canonical prices only for approved brands (other sanitary brands 
   })
 })
 
-describe('#470 2C re-activation: always allowed; a stale/unknown verified price becomes REVERIFY_REQUIRED in the same write (history kept, nothing auto-raised)', () => {
-  const stale = new Date(Date.now() - CANONICAL_REACTIVATION_MAX_AGE_MS - 3600_000).toISOString(), fresh = new Date(Date.now() - 3600_000).toISOString()
+describe('#470 re-activation (Owner 24/11): approved prices are DPG official prices — activation never hides or downgrades them', () => {
+  const stale = new Date(Date.now() - 400 * 24 * 3600_000).toISOString()
   const inactive = (extra: Record<string, unknown>) => ({ ...base, stock_status: 'contact', image_main_url: 'https://dpg-products.b-cdn.net/a.webp', brand_id: 1, category_id: 1, ...extra })
-  it.each([['toto'], ['inax']])('%s: stale / unknown check time => activation allowed, status REVERIFY_REQUIRED, prices + checked-at NOT written; fresh => untouched', async brand => {
+  it.each([['toto'], ['inax']])('%s: a year-old / unknown-age verified price is untouched on activation (no status write, price and checked-at kept)', async brand => {
     setExternalColumns(ON); scope = { brand, category: 'thiet-bi-ve-sinh' }
-    for (const checked of [stale, null]) {
-      const r = await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: checked }), { is_active: true })
-      expect(r?.set).toEqual({ canonical_price_status: 'REVERIFY_REQUIRED' })      // no price column, no canonical_price_checked_at => history intact, never raised
-    }
-    expect(await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: fresh }), { is_active: true })).toBeUndefined()
+    for (const checked of [stale, null]) expect(await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: checked }), { is_active: true })).toBeUndefined()
   })
-  it('a price entered in the same request wins: PRICE_VERIFIED with a fresh check time', async () => {
+  it('a price entered in the same request is verified with a fresh check time', async () => {
     setExternalColumns(ON)
     const r = await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: stale }), { is_active: true, regular_price_vnd: 6 })
     expect(r?.set?.canonical_price_status).toBe('PRICE_VERIFIED'); expect(r?.set).toHaveProperty('canonical_price_checked_at')
-  })
-  it('does not apply to other states, other brands, already-active rows, or edits that do not activate (no automatic expiry)', async () => {
-    setExternalColumns(ON)
-    expect(await run(inactive({ canonical_price_status: 'CONTACT_VERIFIED', canonical_price_checked_at: stale }), { is_active: true })).toBeUndefined()
-    expect(await run(inactive({ canonical_price_status: null }), { is_active: true })).toBeUndefined()
-    expect(await run({ ...inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: stale }), is_active: true }, { is_active: true })).toBeUndefined()
-    expect(await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: stale }), { name: 'x' })).toBeUndefined()
-    scope = { brand: 'american-standard', category: 'thiet-bi-ve-sinh' }
-    expect(await run(inactive({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '5', canonical_price_checked_at: stale }), { is_active: true })).toBeUndefined()
   })
   it('a price is not required to activate an in-scope SKU (legacy PRICE_REQUIRED stays for out-of-scope products)', async () => {
     setExternalColumns(ON)
@@ -92,7 +79,7 @@ describe('#470 2C re-activation: always allowed; a stale/unknown verified price 
     scope = { brand: 'american-standard', category: 'thiet-bi-ve-sinh' }
     await expect(run(noPrice, { is_active: true })).rejects.toMatchObject({ code: 'PRICE_REQUIRED' })
   })
-  it('clearing the prices of a REVERIFY_REQUIRED row hides them completely (status cleared), editing them verifies again', async () => {
+  it('clearing the prices of an explicitly marked REVERIFY_REQUIRED row hides them completely (status cleared), editing them verifies again', async () => {
     setExternalColumns(ON)
     const row = { ...base, canonical_price_status: 'REVERIFY_REQUIRED', regular_price_vnd: '5', canonical_price_checked_at: stale }
     expect((await run(row, { regular_price_vnd: null }))?.set?.canonical_price_status).toBeNull()

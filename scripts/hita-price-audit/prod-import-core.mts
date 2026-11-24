@@ -27,8 +27,8 @@ export const BRANDS = { toto: { id: 1, slug: 'toto' }, inax: { id: 2, slug: 'ina
 export type BrandKey = keyof typeof BRANDS
 export type PlanState = 'active' | 'inactive'
 export type PlanSource = 'HITA_REVIEW' | 'OWNER_ACCEPTED_CANDIDATE' | 'HITA_ARCHIVED_DIRECT_OWNER_EXCEPTION' | 'OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE'
-/** Owner decision that lets rows of ONE pinned CSV be planned although their source time is older than the 24 h gate (no re-crawl). Never a blanket switch:
- * the CSV sha256 and the exact id set are pinned (set equality, both directions), an expired Offer still stops the plan, vouchers must be empty, timestamps are never touched. */
+/** Owner decision that lets rows of ONE pinned CSV be planned although their source time is older than the 24 h gate and their Hita Offer date has passed (no re-crawl, no price tracking: the pinned prices are DPG's own).
+ * Never a blanket switch: the CSV sha256 and the exact id set are pinned (set equality, both directions), vouchers must be empty, timestamps are never touched. Rows outside a pin still stop when stale/expired. */
 export type FreshnessException = { approved_by: 'Owner'; approval_ref: string; rule_ref: string; csv_sha256: string; approved_ids: number[]; approved_basis: 'ARCHIVED_EVIDENCE_DIRECT_REFRESH_EXCEPTION' }
 export type Plan = {
   csvSha256: string; candidateSha: string; planSha: string; batchSize: number; brandId: number; brand: BrandKey; state: PlanState
@@ -121,7 +121,7 @@ export function buildPlan(input: PlanInput): Plan {
     const line = idx + 2, covered = !!exc && excIds.has(id) && !stop.some(s => s.startsWith('FRESHNESS_EXCEPTION_'))
     // Freshness guards protect MONEY: they apply to rows that would store a price. Status-only rows (CONTACT/DISCONTINUED/UNRESOLVED/NOT_FOUND) carry no price and keep the warn-only behaviour.
     if (status === 'PRICE_VERIFIED') {
-      if (expiredLines.has(line)) { stop.push(`PRICE_OFFER_EXPIRED id=${id}`); return }                // never importable, exception or not
+      if (expiredLines.has(line) && !covered) { stop.push(`PRICE_OFFER_EXPIRED id=${id}`); return }  // an Owner-pinned row is DPG's official price: the Hita Offer date never blocks it (Owner 24/11)
       if (staleLines.has(line) && !covered) { stop.push(`CHECKED_STALE_NOT_APPROVED id=${id}`); return }
       if (covered && num(r.online_voucher_amount_vnd) !== null) { stop.push(`EXCEPTION_ROW_HAS_VOUCHER id=${id}`); return }   // voucher policy: held, never imported here
     }

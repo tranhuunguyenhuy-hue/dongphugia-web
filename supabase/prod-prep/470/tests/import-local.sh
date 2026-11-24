@@ -199,8 +199,8 @@ base4() { npx tsx scripts/hita-price-audit/prod-import.mts $T4/baseline.csv --cs
 snap4
 if base4 $T4/decision-short.json --out $T4/bshort > $T4/bshort.out 2>&1; then echo "FAIL: baseline with a missing id accepted"; exit 1; fi; grep -q OWNER_DECISION_SCOPE_MISMATCH $T4/bshort.out; [ ! -e $T4/bshort ]
 if npx tsx scripts/hita-price-audit/prod-import.mts $T4/baseline.csv --csv-sha256 "$BS" --candidate-sha "$CAND" --db-snapshot $T4/snap.json --now 2026-11-26T01:00:00Z --brand toto --state active --inax-baseline-decision $T4/decision.json > $T4/bwrong.out 2>&1; then echo "FAIL: baseline lane accepted another brand"; exit 1; fi; grep -q BASELINE_LANE_IS_INAX_ACTIVE_ONLY $T4/bwrong.out
-if base4 $T4/decision.json --now 2026-12-03T00:00:00Z --out $T4/bexp > $T4/bexp.out 2>&1; then echo "FAIL: expired baseline planned"; exit 1; fi
-echo "PASS baseline lane stops on a decision with a different id set, on another brand, and (HOLD) once the Offer validity has passed"
+base4 $T4/decision.json --now 2027-03-01T00:00:00Z --out $T4/bexp > $T4/bexp.json; node -e 'if(require(process.argv[1]).to_change!==2)process.exit(1)' $T4/bexp.json
+echo "PASS baseline lane stops on a decision with a different id set and on another brand; the Hita Offer date no longer blocks the pinned rows"
 base4 $T4/decision.json --out $T4/bplan > $T4/bplan.json; PB=$(node -p "require('$T4/bplan.json').plan_sha")
 node -e 'const r=require(process.argv[1]); if(r.to_change!==2||r.regular_only!==1||r.regular_and_promo!==1||r.price_basis!=="OWNER_ACCEPTED_ARCHIVED_INAX_BASELINE")process.exit(1)' $T4/bplan.json
 "${B4[@]}" -v approved_sha=$PB -f $T4/bplan/batch-0001-apply.sql >/dev/null

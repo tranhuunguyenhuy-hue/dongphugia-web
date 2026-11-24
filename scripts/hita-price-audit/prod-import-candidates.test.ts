@@ -56,11 +56,15 @@ describe('Owner-accepted historical candidates (#470 TL note 7127074691)', () =>
     ['CANDIDATE_REVIEW_STATUS', { review_status: 'FRESH_CRAWL_PENDING_OWNER_REVIEW' }],
     ['CANDIDATE_PRICE_INVALID', { historical_regular_price_vnd: '0' }],
     ['CANDIDATE_PRICE_INVALID', { currency: 'USD' }],
-    ['CANDIDATE_STALE_REFRESH_BEFORE_USE', { source_checked_at_utc: '2026-11-10T00:00:00.000Z' }],
     ['CANDIDATE_CHECKED_AT_INVALID', { source_checked_at_utc: 'yesterday' }],
+    ['CANDIDATE_CHECKED_AT_IN_FUTURE', { source_checked_at_utc: '2027-01-01T00:00:00.000Z' }],
   ] as [string, Row][])('rejects the row with %s (%j) and writes nothing', (code, over) => {
     const p = run([base(1, over)], [dbRow(1)])
     expect(p.rows).toEqual([]); expect(p.summary.skipped_by_reason).toMatchObject({ [code]: 1 })
+  })
+  it('source age never blocks an approved pinned id (DPG official price): a months-old candidate is planned and keeps its source timestamp', () => {
+    const p = run([base(1, { source_checked_at_utc: '2026-06-01T00:00:00.000Z' })], [dbRow(1)])
+    expect(p.stopReasons).toEqual([]); expect(p.rows[0].checkedAt).toBe('2026-06-01T00:00:00.000Z')
   })
   it('a Hita page id shared by two SKUs is a collision: neither is imported', () => {
     const p = run([base(1, { matched_hita_product_id: '777' }), base(2, { matched_hita_product_id: '777' }), base(3)], [dbRow(1), dbRow(2), dbRow(3)])

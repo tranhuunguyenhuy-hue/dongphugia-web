@@ -5,7 +5,7 @@
 //   * evidence must be the stored one (status/baseline_status EXACT, price_source HITA_BASELINE_448, direct_freshness NOT_RECONFIRMED, exact Hita SKU = DPG SKU, PDP URL, VND);
 //   * what is written is the Owner-proposed value: regular = baseline regular, promotion = baseline promotion (545 rows), or NONE for the 2 deep-discount rows whose promotion terms
 //     are not confirmed (regular only); the online voucher is always NULL;
-//   * the source timestamp is kept as is (never re-stamped, never "now"); an Offer validity that has passed => HOLD (the plan stops);
+//   * the source timestamp is kept as is (never re-stamped, never "now"); the Hita Offer date does not block the pinned rows (they are DPG's official prices, Owner 24/11);
 //   * stored prices, newer Admin edits and any state other than the pinned live identity are never overwritten.
 import { parseCsv } from './quality-gate-core.mts'
 import { BRANDS, BYTES_PER_CHANGED_ROW, DB_CEILING_BYTES, DEFAULT_BATCH_SIZE, ISO, PRODUCTION_TARGET, SAFETY_MARGIN_BYTES, SANITARY_CATEGORY_ID, SKU_SAFE, canonOf, same, sha256,
@@ -61,8 +61,6 @@ export function buildBaselinePlan(input: BaselineInput): Plan {
     if (r.proposed_promotional_price_vnd !== '' && proposedPromo !== promo) { bad('BASELINE_PROPOSAL_MISMATCH'); continue }
     if (proposedPromo === null && promo !== null && r.exception_reason !== NO_PROMO_REASON) { bad('BASELINE_PROMO_DROPPED_WITHOUT_REASON'); continue }   // only the 2 documented rows may lose the promotion
     if (!ISO.test(r.source_checked_at_utc) || Date.parse(r.source_checked_at_utc) > input.now.getTime() + 60_000) { bad('BASELINE_CHECKED_AT_INVALID'); continue }
-    const until = /^\d{4}-\d{2}-\d{2}$/.test(r.price_valid_until) ? Date.parse(r.price_valid_until + 'T23:59:59Z') : NaN
-    if (!Number.isFinite(until) || until < input.now.getTime()) { bad('BASELINE_OFFER_EXPIRED_HOLD'); continue }          // expired/unknown validity: HOLD, never imported
     const before = canonOf(cur)
     if (before.status === 'PRICE_VERIFIED' || before.regular !== null) { skip('BASELINE_DOES_NOT_OVERRIDE_STORED_PRICE'); continue }
     const beforeCheckedAt = cur.canonical_price_checked_at ? new Date(cur.canonical_price_checked_at).toISOString() : null

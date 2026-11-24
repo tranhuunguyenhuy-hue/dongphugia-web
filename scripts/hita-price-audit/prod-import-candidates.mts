@@ -3,7 +3,7 @@
 //   * an Owner approval document pins the candidate CSV sha256 and lists the exact approved dpg_ids (no approval => nothing is planned, the plan STOPS);
 //   * exact full SKU (dpg_sku = source_sku = search_sku), VND, one price only (no promotion / voucher), PDP price = Offer price = CSV price;
 //   * no Hita page id shared with another SKU (collision), brand/state/category identity equals the live row;
-//   * the price is still fresh for use (default 7 days, the same threshold as Admin re-activation) — the source timestamp is NEVER changed or extended;
+//   * the source timestamp is NEVER changed or extended; its age does not block an approved, pinned id (Owner 24/11: these are DPG's official prices);
 //   * it never overwrites a direct Hita-verified price and never an Admin edit made after the source timestamp.
 // The price goes ONLY to regular_price_vnd (promotion/voucher NULL) with status PRICE_VERIFIED and canonical_price_checked_at = the SOURCE time.
 // Provenance (basis OWNER_ACCEPTED_CANDIDATE, source URL/time, match class/confidence/rule, approval reference) lives in the plan, ledger and manifest — never as a
@@ -23,9 +23,8 @@ type CandRow = Record<(typeof CANDIDATE_COLUMNS)[number], string>
 export type CandidateApproval = { approved_by: 'Owner'; approval_ref: string; rule_ref: string; candidate_csv_sha256: string; approved_ids: number[] }
 export type CandidateInput = {
   csvText: string; expectedCsvSha256: string; approval: CandidateApproval | null; candidateSha: string; db: DbRow[]; dbSizeBytes: number
-  brand: BrandKey; state: PlanState; now: Date; maxAgeHours?: number; batchSize?: number
+  brand: BrandKey; state: PlanState; now: Date; batchSize?: number
 }
-export const CANDIDATE_MAX_AGE_HOURS = 7 * 24
 
 const money = (s: string) => { const digits = s.replace(/[^\d]/g, ''); return /^[1-9]\d{0,12}$/.test(digits) ? Number(digits) : null }
 const decimalOffer = (s: string) => (/^\d+(\.0+)?$/.test(s) ? money(s.split('.')[0]) : null)
@@ -48,7 +47,6 @@ export function buildCandidatePlan(input: CandidateInput): Plan {
   const brand = input.brand, state = input.state, brandId = BRANDS[brand]?.id ?? 0, wantActive = state === 'active'
   if (!(brand in BRANDS)) stop.push('BRAND_NOT_APPROVED')
   const batchSize = input.batchSize ?? DEFAULT_BATCH_SIZE
-  const maxAgeMs = (input.maxAgeHours ?? CANDIDATE_MAX_AGE_HOURS) * 3600_000
 
   const table = parseCsv(input.csvText)
   const header = table[0] ?? []
@@ -88,8 +86,8 @@ export function buildCandidatePlan(input: CandidateInput): Plan {
     if (money(r.pdp_selling) !== regular || decimalOffer(r.offer_price) !== regular) { skip('CANDIDATE_PRICE_SOURCES_DISAGREE'); continue }
     if ((hitaIdOwners.get(r.matched_hita_product_id)?.size ?? 0) !== 1 || !/^\d+$/.test(r.matched_hita_product_id)) { skip('CANDIDATE_HITA_ID_COLLISION'); continue }
     if (!ISO.test(r.source_checked_at_utc)) { skip('CANDIDATE_CHECKED_AT_INVALID'); continue }
-    const age = input.now.getTime() - Date.parse(r.source_checked_at_utc)
-    if (!(age >= 0) || age > maxAgeMs) { skip('CANDIDATE_STALE_REFRESH_BEFORE_USE'); continue }   // never re-stamped: it must be refreshed at the source
+    // The Owner approval pins this id and CSV: the price is DPG's official price, so the source age never blocks it (the source timestamp is kept, never re-stamped).
+    if (Date.parse(r.source_checked_at_utc) > input.now.getTime() + 60_000) { skip('CANDIDATE_CHECKED_AT_IN_FUTURE'); continue }
     const before = canonOf(cur)
     // A direct Hita-verified price (or any price) already stored is never replaced by an indirect candidate.
     if (before.status === 'PRICE_VERIFIED' || before.regular !== null) { skip('CANDIDATE_DOES_NOT_OVERRIDE_STORED_PRICE'); continue }
@@ -109,9 +107,9 @@ export function buildCandidatePlan(input: CandidateInput): Plan {
   const batches: PlanRow[][] = []
   for (let i = 0; i < rows.length; i += batchSize) batches.push(rows.slice(i, i + batchSize))
   const planSha = sha256(JSON.stringify({ source: 'OWNER_ACCEPTED_CANDIDATE', csvSha256, approval: a?.approval_ref, approvedIds: [...approvedIds].sort((x, y) => x - y), candidateSha: input.candidateSha, batchSize, brand, brandId, state,
-    target: PRODUCTION_TARGET, maxAgeMs, rows: rows.map(r => [r.id, r.sku, r.version, r.before, r.beforeCheckedAt, r.after, r.checkedAt]) }))
+    target: PRODUCTION_TARGET, rows: rows.map(r => [r.id, r.sku, r.version, r.before, r.beforeCheckedAt, r.after, r.checkedAt]) }))
   const summary = { ...counts, skipped_by_reason: skipped, brand, brand_id: brandId, state, price_basis: 'OWNER_ACCEPTED_CANDIDATE', approval_ref: a?.approval_ref ?? null, batches: batches.length, batch_size: batchSize,
-    max_age_hours: maxAgeMs / 3600_000, db_size_bytes: input.dbSizeBytes, est_growth_bytes: growth, projected_db_bytes: projected, headroom_after_bytes: DB_CEILING_BYTES - projected }
+    db_size_bytes: input.dbSizeBytes, est_growth_bytes: growth, projected_db_bytes: projected, headroom_after_bytes: DB_CEILING_BYTES - projected }
   return { csvSha256, candidateSha: input.candidateSha, planSha, batchSize, brandId, brand, state, releaseBinding: `${input.candidateSha}:${csvSha256}:${planSha}`, summary, stopReasons: [...new Set(stop)], rows, batches,
     source: 'OWNER_ACCEPTED_CANDIDATE', approvalRef: a?.approval_ref }
 }

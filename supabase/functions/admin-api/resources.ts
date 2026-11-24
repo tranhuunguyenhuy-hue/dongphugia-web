@@ -187,8 +187,6 @@ export function assertCanonicalPrices(final: Record<string, unknown>): void {
  * Other brands/categories keep managing prices exactly as before (legacy fields). */
 export const CANONICAL_ADMIN_BRANDS = ['toto', 'inax'] as const
 const CANONICAL_ADMIN_CATEGORY = 'thiet-bi-ve-sinh'
-/** Policy constant (Owner to confirm): a verified price older than this must be re-verified/re-entered before the SKU is re-activated. */
-export const CANONICAL_REACTIVATION_MAX_AGE_MS = 7 * 24 * 3600_000
 async function inCanonicalAdminScope(tx: Db, final: Row): Promise<boolean> {
   const rows = await tx.query<{ brand: string | null; category: string | null }>(
     'select (select slug from dpg_app.brands where id = $1) as brand, (select slug from dpg_app.categories where id = $2) as category', [final.brand_id ?? null, final.category_id ?? null])
@@ -210,23 +208,13 @@ const productHook: WriteHook = async ({ tx, mode, existing, input }) => {
     const priceInRequest = CANONICAL_PRICE_FIELDS.some((field) => field in input)
     // Canonical prices are only for approved brands: any other sanitary brand keeps the legacy price management untouched.
     if (hasPrice && priceInRequest && !(await inCanonicalAdminScope(tx, final))) throw new ApiError(400, 'PRICE_SCOPE_INVALID', ['brand_id'])
-    // #470 2C: re-activating a SKU is ALWAYS allowed (Admin decision; nothing is activated automatically). If its verified canonical price is older than
-    // the threshold (or has no check time) and the request brings no new price, the SKU is activated with status REVERIFY_REQUIRED in the SAME
-    // transaction: Public/PDP/listing/search/JSON-LD/sort/orders see a non-verified status ("Cần liên hệ xác nhận giá"), while the historical prices and
-    // canonical_price_checked_at stay untouched (never raised, never lost) until an Admin verifies/edits the price. No expiry is applied to rows that stay active.
-    const activating = input.is_active === true && existing?.is_active !== true
-    let staleOnActivation = false
-    if (activating && !priceInRequest && final.canonical_price_status === 'PRICE_VERIFIED' && await inCanonicalAdminScope(tx, final)) {
-      const checked = Date.parse(String(final.canonical_price_checked_at ?? ''))
-      staleOnActivation = !Number.isFinite(checked) || Date.now() - checked > CANONICAL_REACTIVATION_MAX_AGE_MS
-    }
+    // #470 (Owner 24/11): approved canonical prices are DPG's official prices. Re-activating a SKU never hides or downgrades its price because of the age of the
+    // Hita source; nothing is activated automatically. A row an Admin has explicitly marked REVERIFY_REQUIRED stays hidden until it is verified/edited again.
     const requested = input.canonical_price_status as string | null | undefined
     if (hasPrice && requested !== undefined && requested !== null && requested !== 'PRICE_VERIFIED') throw new ApiError(400, 'PRICE_STATUS_INVALID', ['canonical_price_status'])
     if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) {
       const next = hasPrice ? 'PRICE_VERIFIED' : (['PRICE_VERIFIED', 'REVERIFY_REQUIRED'].includes(String(final.canonical_price_status)) ? null : (final.canonical_price_status ?? null))
       statusSet = { canonical_price_status: next, canonical_price_checked_at: RAW_NOW }
-    } else if (staleOnActivation) {
-      statusSet = { canonical_price_status: 'REVERIFY_REQUIRED' }   // prices and canonical_price_checked_at deliberately NOT written
     }
   }
   const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
