@@ -15,7 +15,7 @@ create table dpg_app.categories(id serial primary key, slug varchar(100) not nul
 create table dpg_app.subcategories(id serial primary key, category_id int not null references dpg_app.categories(id), slug varchar(100) not null, name varchar(200) not null, is_active bool not null default true, unique(category_id, slug));
 create table dpg_app.brands(id serial primary key, slug varchar(100) not null unique, name varchar(200) not null, is_active bool not null default true);
 create table dpg_app.spec_definitions(id serial primary key, key varchar(120) not null unique, label varchar(200) not null, is_pdp_visible bool not null default true, sort_order int not null default 0);
-create table dpg_app.spec_options(id serial primary key, spec_definition_id int not null references dpg_app.spec_definitions(id), value varchar(200) not null, slug varchar(200), is_active bool not null default true);
+create table dpg_app.spec_options(id serial primary key, spec_definition_id int not null references dpg_app.spec_definitions(id), value varchar(200) not null, slug varchar(200), sort_order int not null default 0, is_active bool not null default true);
 create table dpg_app.products(
   id serial primary key, sku varchar(100) not null unique, name varchar(500) not null, slug varchar(500) not null, category_id int not null references dpg_app.categories(id),
   subcategory_id int references dpg_app.subcategories(id), brand_id int references dpg_app.brands(id), description text, image_main_url varchar(1000),

@@ -81,6 +81,7 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         expect((await m.getLiveListingPreview('gach-op-lat', 'gach-san')).length).toBe(1)
         // Finding: the Production public role cannot read spec_definitions.key / spec_options.slug (#432 grants not applied) -> siblings degrade to none, no 5xx.
         expect(await m.getLiveVariantSiblings('G1', 1)).toEqual([])
+        expect(await m.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau-lavabo', ['toto'], ['toto-x'])).toMatchObject({ applicable: false, dropped: ['toto-x'] })
     })
 
     it('PHASE 1 (old schema, flag ON): fail-safe, no 5xx, in-scope SKUs show "Cần liên hệ xác nhận giá", never the legacy price', async () => {

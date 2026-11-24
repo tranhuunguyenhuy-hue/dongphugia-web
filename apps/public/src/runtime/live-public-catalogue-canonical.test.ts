@@ -143,4 +143,12 @@ describe('schema/permission fail-safe (flag ON)', () => {
         mocks.readPublicRows.mockReset(); mocks.readPublicRows.mockRejectedValue(Object.assign(new Error('boom'), { code: '57014' }))
         await expect(mod.getLiveVariantSiblings('G', 1)).rejects.toThrow('boom')
     })
+    it('series facet: 42501 (#432 grants missing in Production) degrades to "no facet" with every selection dropped; other errors propagate', async () => {
+        vi.resetModules(); mocks.readPublicRows.mockReset()
+        mocks.readPublicRows.mockRejectedValue(Object.assign(new Error('permission denied'), { code: '42501' }))
+        const mod = await import('./live-public-catalogue')
+        expect(await mod.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau', ['toto'], ['toto-x'])).toEqual({ applicable: false, options: [], selected: [], dropped: ['toto-x'] })
+        mocks.readPublicRows.mockReset(); mocks.readPublicRows.mockRejectedValue(Object.assign(new Error('boom'), { code: '57014' }))
+        await expect(mod.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau', ['toto'])).rejects.toThrow('boom')
+    })
 })
