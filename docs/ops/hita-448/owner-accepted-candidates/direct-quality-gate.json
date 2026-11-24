@@ -1,0 +1,67 @@
+{
+  "contract_head": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+  "mode": "OFFLINE_CONTRACT_CHECK",
+  "checked_at_utc": "2026-11-24T09:51:09.878746+00:00",
+  "snapshot": "fixture from saved inventory, no live state or headroom verification",
+  "direct_freshness": "NOT_RECONFIRMED",
+  "results": [
+    {
+      "group": "toto-active",
+      "approved_offline": 1543,
+      "blocked_identity": 0,
+      "quality": {
+        "rows_with_fail": 0,
+        "rows_with_warn": 0,
+        "warn_by_code": {},
+        "fail_by_code": {}
+      }
+    },
+    {
+      "group": "toto-inactive",
+      "approved_offline": 926,
+      "blocked_identity": 0,
+      "quality": {
+        "rows_with_fail": 0,
+        "rows_with_warn": 0,
+        "warn_by_code": {},
+        "fail_by_code": {}
+      }
+    },
+    {
+      "group": "inax-active",
+      "approved_offline": 305,
+      "blocked_identity": 0,
+      "quality": {
+        "rows_with_fail": 0,
+        "rows_with_warn": 0,
+        "warn_by_code": {},
+        "fail_by_code": {}
+      }
+    },
+    {
+      "group": "inax-active-baseline",
+      "accepted_by_planner": 0,
+      "held_unverified": 547,
+      "quality": {
+        "rows_with_fail": 0,
+        "rows_with_warn": 2,
+        "warn_by_code": {
+          "DEEP_DISCOUNT_REVIEW": 2
+        },
+        "fail_by_code": {}
+      },
+      "reason": "STALE_LABEL_NO_ARCHIVED_BASELINE_EXCEPTION_IN_PINNED_CONTRACT"
+    },
+    {
+      "group": "inax-inactive",
+      "approved_offline": 8,
+      "blocked_identity": 0,
+      "quality": {
+        "rows_with_fail": 0,
+        "rows_with_warn": 0,
+        "warn_by_code": {},
+        "fail_by_code": {}
+      }
+    }
+  ]
+}

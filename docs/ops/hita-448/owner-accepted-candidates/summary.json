@@ -1,0 +1,69 @@
+{
+  "scope": 6531,
+  "source_484": "24afd8341e2231c509376b80a3f27cf9bfd082e7",
+  "contract_head": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+  "approval_ref": "https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/448#issuecomment-7127917834",
+  "rule_ref": "https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/443#issuecomment-7127916878",
+  "direct_source_reconfirmed": 0,
+  "hita_requests": 0,
+  "cohorts": {
+    "toto-active": {
+      "rows": 2057,
+      "direct_archived": 1543,
+      "voucher_held": 771,
+      "pass_regular_promo": 1543,
+      "CONTACT": 283,
+      "UNRESOLVED": 114,
+      "DISCONTINUED": 49,
+      "NOT_FOUND": 1,
+      "candidate": 67,
+      "pass_regular_only": 67
+    },
+    "toto-inactive": {
+      "rows": 2384,
+      "direct_archived": 926,
+      "pass_regular_promo": 926,
+      "candidate": 393,
+      "pass_regular_only": 393,
+      "UNRESOLVED": 129,
+      "CONTACT": 677,
+      "DISCONTINUED": 258,
+      "voucher_held": 3,
+      "NOT_FOUND": 1
+    },
+    "inax-active": {
+      "rows": 1653,
+      "baseline_hold": 547,
+      "voucher_held": 358,
+      "held_regular_promo": 545,
+      "direct_archived": 305,
+      "pass_regular_only": 772,
+      "deep_promo_held": 2,
+      "held_regular_only": 2,
+      "UNRESOLVED": 316,
+      "NOT_FOUND": 2,
+      "DISCONTINUED": 8,
+      "CONTACT": 8,
+      "candidate": 467
+    },
+    "inax-inactive": {
+      "rows": 437,
+      "UNRESOLVED": 36,
+      "candidate": 392,
+      "pass_regular_only": 400,
+      "direct_archived": 8,
+      "CONTACT": 1
+    }
+  },
+  "by_class": {
+    "OFFLINE_CONTRACT_PASS": 4101,
+    "CONTACT": 969,
+    "UNRESOLVED": 595,
+    "DISCONTINUED": 315,
+    "NOT_FOUND": 4,
+    "HOLD_CONTRACT_STALE_BASELINE": 547
+  },
+  "output_voucher_policy": "ALL_VOUCHERS_NULL_OR_HELD_NO_DPG_TERMS",
+  "baseline_technical_hold": 547,
+  "production_go": false
+}

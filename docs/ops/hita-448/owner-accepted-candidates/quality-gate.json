@@ -1,0 +1,40 @@
+{
+  "contract_head": "c76ea39f19593bf38754ea9c3328c62d0ecd1db8",
+  "mode": "offline_candidate_contract",
+  "checked_at_utc": "2026-11-24T09:51:09.465000+00:00",
+  "identity_source": "saved_catalogue_inventory",
+  "database_state": "fixture version and null price, not a hosted snapshot",
+  "production_preflight": "NOT_RUN",
+  "direct_freshness": "NOT_RECONFIRMED",
+  "pass": 1319,
+  "results": [
+    {
+      "group": "toto-active",
+      "passed": 67,
+      "holds": 0,
+      "blocked_identity": 0,
+      "skips": {}
+    },
+    {
+      "group": "toto-inactive",
+      "passed": 393,
+      "holds": 0,
+      "blocked_identity": 0,
+      "skips": {}
+    },
+    {
+      "group": "inax-active",
+      "passed": 467,
+      "holds": 0,
+      "blocked_identity": 0,
+      "skips": {}
+    },
+    {
+      "group": "inax-inactive",
+      "passed": 392,
+      "holds": 0,
+      "blocked_identity": 0,
+      "skips": {}
+    }
+  ]
+}
