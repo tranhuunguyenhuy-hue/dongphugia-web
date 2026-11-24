@@ -47,6 +47,12 @@ describe('Production Public isolation', () => {
     expect(Object.keys(productionPublicEnvironment(env)).some((name) => /SECRET|KEY|IMAGES|ADMIN/.test(name))).toBe(false)
   })
 
+  it('forwards the reviewed #470 release flags and the order-intake binding (and nothing Admin-like) to Public', () => {
+    const intake = { connectionString: 'y' }
+    const forwarded = productionPublicEnvironment({ APP_ENV: 'production', PUBLIC_CANONICAL_PRICING: 'on', PUBLIC_CANONICAL_PRICE_BRANDS: 'toto,inax', PUBLIC_COMMERCE: 'on', ORDER_INTAKE_DB: intake, ADMIN_API_HMAC_SECRET: 'z', IMAGES: {} })
+    expect(forwarded).toEqual({ APP_ENV: 'production', PUBLIC_CANONICAL_PRICING: 'on', PUBLIC_CANONICAL_PRICE_BRANDS: 'toto,inax', PUBLIC_COMMERCE: 'on', ORDER_INTAKE_DB: intake })
+  })
+
   it('passes Public requests through untouched when no Admin cookie exists', async () => {
     const { worker, publicWorker, env } = fixture({})
     const request = new Request('https://www.dongphugia.vn/', { headers: { cookie: 'a=1' } })

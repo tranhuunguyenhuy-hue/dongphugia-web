@@ -14,13 +14,15 @@ interface ProductPriceProps {
     salePrice?: number | null | undefined
     priceDisplay: string | null | undefined
     displayVoucherOnly?: boolean
+    /** #470: Production keeps the cart OFF, so the voucher note must not promise a cart step. Defaults to the pilot wording. */
+    voucherCartNote?: boolean
     onlineDiscountAmount?: number | null | undefined
     stockStatus?: string | null | undefined
     className?: string
     children?: React.ReactNode
 }
 
-export function ProductPrice({ price, originalPrice, listPrice, salePrice, priceDisplay, onlineDiscountAmount, displayVoucherOnly = false, stockStatus, className, children }: ProductPriceProps) {
+export function ProductPrice({ price, originalPrice, listPrice, salePrice, priceDisplay, onlineDiscountAmount, displayVoucherOnly = false, voucherCartNote = true, stockStatus, className, children }: ProductPriceProps) {
     const [installOption, setInstallOption] = useState<InstallOption>('none')
 
     const installationFee = getInstallationFee(installOption)
@@ -105,7 +107,7 @@ export function ProductPrice({ price, originalPrice, listPrice, salePrice, price
                                     <span className="text-[16px] font-black text-[#d64a25] tracking-tight">
                                         {new Intl.NumberFormat('vi-VN').format(numOnlineDiscount)}đ
                                     </span>
-                                    <span className="text-[13px] font-medium text-stone-600">{displayVoucherOnly ? "/ sản phẩm khi thêm vào giỏ" : "khi đặt Online"}</span>
+                                    <span className="text-[13px] font-medium text-stone-600">{displayVoucherOnly ? (voucherCartNote ? "/ sản phẩm khi thêm vào giỏ" : "/ sản phẩm (ưu đãi khi đặt online)") : "khi đặt Online"}</span>
                                 </div>
                                 {!displayVoucherOnly && finalOnlinePrice !== null && <div className="text-[14px] font-bold text-emerald-800">Giá cuối online: {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(finalOnlinePrice)}</div>}
                             </div>

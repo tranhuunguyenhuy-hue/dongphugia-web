@@ -43,7 +43,9 @@ export const PUBLIC_ROUTE_OWNERSHIP = [
     purpose: 'catalogue-listing-snapshot-readonly',
   },
   { path: '/api/health', owner: 'public', purpose: 'runtime-probe' },
-  { path: '/api/orders', owner: 'public', purpose: 'guest-order-intake-isolated-test-only' },
+  { path: '/api/commerce/cart', owner: 'public', purpose: 'commerce-cart-check' },
+  { path: '/api/commerce/orders', owner: 'public', purpose: 'commerce-order-intake' },
+  { path: '/api/commerce/quotes', owner: 'public', purpose: 'commerce-quote-intake' },
 ] as const
 
 export const ADMIN_ROUTE_OWNERSHIP = [

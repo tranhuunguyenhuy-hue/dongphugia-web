@@ -161,7 +161,7 @@ async function fetchProductionCatalogueAsset(path:string,knownManifest?:Manifest
   return response
 }
 export const readSnapshotManifest=cache(async()=>readAsset<Manifest>('manifest.json'))
-export type SnapshotSearchProduct={id:number;sku:string;name:string;slug:string;url:string;price:number|null;original_price:number|null;list_price:number|null;sale_price:number|null;online_discount_amount:number|null;final_online_price:number|null;price_display:string|null;image_main_url:string|null;category_slug:string;subcategory_slug:string;brand_name:string|null;product_feature_values:{product_features:{name:string}}[];colors:{name:string;hex_code:string|null}|null}
+export type SnapshotSearchProduct={id:number;sku:string;name:string;slug:string;url:string;price:number|null;original_price:number|null;list_price:number|null;sale_price:number|null;online_discount_amount:number|null;final_online_price:number|null;price_provenance?:string|null;price_display:string|null;image_main_url:string|null;category_slug:string;subcategory_slug:string;brand_name:string|null;product_feature_values:{product_features:{name:string}}[];colors:{name:string;hex_code:string|null}|null}
 export async function getSnapshotSearchProducts(){
  if(publicPostgresEnabled()) throw new Error('USE_PARAMETERIZED_DATABASE_SEARCH');
  const manifest=await readSnapshotManifest()

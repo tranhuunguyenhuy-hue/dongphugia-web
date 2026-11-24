@@ -54,6 +54,8 @@ describe('M3 fixed Preview configuration', () => {
     expect(without.previews.hyperdrive.map((h) => h.binding)).toEqual(['PUBLIC_DB', 'HYPERDRIVE_ADMIN_NO_CACHE'])
     const withIntake = create({ orderIntakeHyperdriveId: intakeId })
     expect(withIntake.previews.hyperdrive.at(-1)).toEqual({ binding: 'ORDER_INTAKE_DB', id: intakeId })
+    expect(withIntake.previews.vars.PUBLIC_COMMERCE).toBe('on')                       // #470 commerce v1: the flag exists only together with the intake binding
+    expect(create({}).previews.vars.PUBLIC_COMMERCE).toBeUndefined()
     expect(validateM3FixedPreviewConfig(withIntake, { sourceSha, publicHyperdriveId: publicId, adminHyperdriveId: adminId, orderIntakeHyperdriveId: intakeId })).toBe(true)
     expect(() => validateM3FixedPreviewConfig(withIntake, { sourceSha, publicHyperdriveId: publicId, adminHyperdriveId: adminId })).toThrow()
     expect(withIntake).not.toHaveProperty('hyperdrive')

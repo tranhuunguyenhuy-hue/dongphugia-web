@@ -70,23 +70,26 @@ describe('public Worker API route ownership', () => {
         expect(mocks.vinextFetch).not.toHaveBeenCalled()
     })
 
-    describe('POST /api/orders (#446) reaches the app only on the isolated TEST Preview', () => {
+    describe('POST /api/commerce/* (#470) reaches the app only where PUBLIC_COMMERCE=on and the intake binding exist', () => {
         const origin = 'https://staging-dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev'
-        // Same shape as the deployed Fixed Staging (see m3-fixed-preview-config): TEST read DB + dedicated order-intake binding.
         const stagingTest = {
             APP_ENV: 'staging', APP_BUILD_TARGET: 'public', APP_ORIGIN: origin, PREVIEW_NOINDEX: 'true',
-            PUBLIC_CATALOGUE_SOURCE: 'postgresql', PREVIEW_TEST_DATABASE_ISOLATED: 'true',
+            PUBLIC_CATALOGUE_SOURCE: 'postgresql', PREVIEW_TEST_DATABASE_ISOLATED: 'true', PUBLIC_COMMERCE: 'on',
             PUBLIC_DB: { connectionString: 'postgres://read.invalid' }, ORDER_INTAKE_DB: { connectionString: 'postgres://intake.invalid' },
         }
-        const post = (method = 'POST') => new Request(`${origin}/api/orders`, { method, body: method === 'POST' ? '{}' : undefined })
+        const post = (method = 'POST', path = 'orders') => new Request(`${origin}/api/commerce/${path}`, { method, body: method === 'POST' ? '{}' : undefined })
 
         it('forwards the POST through Worker fetch to the app handler', async () => {
-            const response = await worker.fetch(post(), stagingTest as never, {} as ExecutionContext)
-            expect(response.status).toBe(200)
-            expect(mocks.vinextFetch).toHaveBeenCalledTimes(1)
-            expect(response.headers.get('cache-control')).toBe('private, no-store')
+            for (const path of ['cart', 'orders', 'quotes']) {
+                mocks.vinextFetch.mockClear()
+                const response = await worker.fetch(post('POST', path), stagingTest as never, {} as ExecutionContext)
+                expect(response.status, path).toBe(200)
+                expect(mocks.vinextFetch).toHaveBeenCalledTimes(1)
+                expect(response.headers.get('cache-control')).toBe('private, no-store')
+            }
         })
         it('answers 405 with Allow: POST for other methods without reaching the app', async () => {
+            mocks.vinextFetch.mockClear()
             for (const method of ['GET', 'PUT', 'DELETE']) {
                 const response = await worker.fetch(post(method), stagingTest as never, {} as ExecutionContext)
                 expect(response.status, method).toBe(405)
@@ -94,16 +97,19 @@ describe('public Worker API route ownership', () => {
             }
             expect(mocks.vinextFetch).not.toHaveBeenCalled()
         })
-        it('is 404 without the order-intake binding and never reaches the app outside the isolated TEST Preview', async () => {
+        it('is 404 without the flag or the binding, and never reaches the app outside Production / the isolated TEST Preview; the legacy /api/orders is closed everywhere', async () => {
+            mocks.vinextFetch.mockClear()
             const { ORDER_INTAKE_DB: _binding, ...withoutBinding } = stagingTest
-            const response = await worker.fetch(post(), withoutBinding as never, {} as ExecutionContext)
-            expect(response.status).toBe(404)
-            // Local preview env (no flag/binding) is 404 too.
-            const local = await worker.fetch(new Request('http://127.0.0.1:8787/api/orders', { method: 'POST', body: '{}' }), environment as never, {} as ExecutionContext)
+            const { PUBLIC_COMMERCE: _flag, ...withoutCommerceFlag } = stagingTest
+            for (const environmentCase of [withoutBinding, withoutCommerceFlag, { ...stagingTest, PUBLIC_COMMERCE: 'off' }]) {
+                expect((await worker.fetch(post(), environmentCase as never, {} as ExecutionContext)).status).toBe(404)
+            }
+            const local = await worker.fetch(new Request('http://127.0.0.1:8787/api/commerce/orders', { method: 'POST', body: '{}' }), environment as never, {} as ExecutionContext)
             expect(local.status).toBe(404)
-            // Binding supplied without the isolation flag, or on a non-staging env: the Worker refuses (404/503), never the app.
-            const { PREVIEW_TEST_DATABASE_ISOLATED: _flag, ...withoutFlag } = stagingTest
-            for (const environmentCase of [withoutFlag, { ...stagingTest, PREVIEW_TEST_DATABASE_ISOLATED: 'false' }, { ...stagingTest, APP_ENV: 'preview' }]) {
+            const legacy = await worker.fetch(new Request(`${origin}/api/orders`, { method: 'POST', body: '{}' }), stagingTest as never, {} as ExecutionContext)
+            expect(legacy.status).toBe(404)
+            const { PREVIEW_TEST_DATABASE_ISOLATED: _isolated, ...withoutIsolation } = stagingTest
+            for (const environmentCase of [withoutIsolation, { ...stagingTest, PREVIEW_TEST_DATABASE_ISOLATED: 'false' }, { ...stagingTest, APP_ENV: 'preview' }]) {
                 const refused = await worker.fetch(post(), environmentCase as never, {} as ExecutionContext)
                 expect([404, 503], JSON.stringify(Object.keys(environmentCase))).toContain(refused.status)
             }

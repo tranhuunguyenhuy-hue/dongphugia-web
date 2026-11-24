@@ -1,4 +1,7 @@
 export const SANITARY_CATEGORY_SLUG = 'thiet-bi-ve-sinh'
+/** #470: canonical (exact-SKU) price fields are only for these brands; every other sanitary brand keeps the legacy price fields.
+ * Equals CANONICAL_APPROVED_BRANDS (src/lib/canonical-price.ts) and CANONICAL_ADMIN_BRANDS (admin-api); asserted by a test. */
+export const CANONICAL_ADMIN_BRANDS = ['toto', 'inax'] as const
 
 export const CANONICAL_PRICE_FIELDS = [
     'regular_price_vnd',

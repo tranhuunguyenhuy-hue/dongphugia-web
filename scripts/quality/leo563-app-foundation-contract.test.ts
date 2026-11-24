@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
@@ -61,25 +61,30 @@ describe('LEO-563 application foundation contract', () => {
     const pgImportSources = publicSources.filter((filePath) =>
       /(?:from\s+|import\s*\()(['\"])pg\1/.test(readFileSync(filePath, 'utf8')),
     )
-    // #446 (Owner-approved 23/11/2026): exactly one additional sanctioned writer, isolated to TEST Preview order intake.
+    // #470 commerce v1 (Owner 24/11/2026): exactly one sanctioned writer, the guest commerce intake (replaces the #446 pilot intake).
     expect(pgImportSources.sort()).toEqual([
-      resolve(root, 'apps/public/src/runtime/order-intake.ts'),
+      resolve(root, 'apps/public/src/runtime/commerce-intake.ts'),
       resolve(root, 'apps/public/src/runtime/public-db.ts'),
     ])
-    const intake = readFileSync(resolve(root, 'apps/public/src/runtime/order-intake.ts'), 'utf8')
+    const intake = readFileSync(resolve(root, 'apps/public/src/runtime/commerce-intake.ts'), 'utf8')
     expect(intake).toContain('ORDER_INTAKE_DB')
     expect(intake).not.toMatch(/PUBLIC_DB|HYPERDRIVE_ADMIN|PUBLIC_CATALOGUE/)
-    // The ONLY SQL it may run is the reviewed guest-order RPC (no table access, no dynamic SQL)
+    // The ONLY SQL it may run is the three reviewed intake functions (static strings, no table access, no dynamic SQL)
     // plus the transaction wrapper that assumes the intake role (the login role holds SET only, never INHERIT).
     expect([...intake.matchAll(/\.query\(\s*['"`]([^'"`]+)['"`]/g)].map((m) => m[1])).toEqual([
       'BEGIN',
-      'SET LOCAL ROLE dpg_order_intake',
-      'SELECT public.guest_order_request_create($1::jsonb, $2::text, $3::uuid) AS result',
+      'SET LOCAL ROLE dpg_commerce_intake',
       'COMMIT',
       'ROLLBACK',
     ])
-    expect(intake).toContain('orderIntakeEnabled')
-    expect(readFileSync(resolve(root, 'apps/public/app/api/orders/route.ts'), 'utf8')).toContain('createGuestOrder')
+    expect([...intake.matchAll(/^\s+(?:cart|orders|quotes): '(SELECT [^']+)',?$/gm)].map((m) => m[1])).toEqual([
+      'SELECT dpg_commerce.cart_check($1::jsonb, $2::text) AS result',
+      'SELECT dpg_commerce.order_submit($1::jsonb, $2::text, $3::text) AS result',
+      'SELECT dpg_commerce.quote_submit($1::jsonb, $2::text, $3::text) AS result',
+    ])
+    expect(intake).toContain('commerceIntakeEnabled')
+    for (const route of ['cart', 'orders', 'quotes']) expect(readFileSync(resolve(root, `apps/public/app/api/commerce/${route}/route.ts`), 'utf8')).toContain('handleCommerce')
+    expect(existsSync(resolve(root, 'apps/public/app/api/orders/route.ts')), 'the legacy /api/orders route must stay deleted').toBe(false)
     expect(readFileSync(resolve(root, 'apps/public/src/runtime/public-db.ts'), 'utf8'))
       .toContain('PUBLIC_DATABASE_READ_ONLY_REQUIRED')
     expect(sourceImports(resolve(root, 'apps/admin'))).not.toEqual(expect.arrayContaining([

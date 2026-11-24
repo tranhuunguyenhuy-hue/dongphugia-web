@@ -10,6 +10,7 @@ const money = (name: string, label: string): FieldMeta => ({ ...editable, kind: 
 const [regularLabel, promoLabel, voucherLabel] = ['Giá gốc (VNĐ)', 'Giá khuyến mãi (VNĐ)', 'Voucher online']
 const legacyFields: FieldMeta[] = [
   { ...editable, kind: 'ref', name: 'category_id', label: 'Danh mục', ref: 'categories' },
+  { ...editable, kind: 'ref', name: 'brand_id', label: 'Thương hiệu', ref: 'brands' },
   money('price', 'Giá bán cũ'),
 ]
 const meta: ResourceMeta = {
@@ -18,11 +19,13 @@ const meta: ResourceMeta = {
   fields: [...legacyFields, ...CANONICAL_PRICE_FIELDS.map((name, index) => money(name, [regularLabel, promoLabel, voucherLabel][index]))],
 }
 
-const sanitary = { id: 207, category_id: 18, price: '3500000', regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }
+const sanitary = { id: 207, category_id: 18, brand_id: 3, price: '3500000', regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }
 const productPath = '/admin-next/api/r/products/207'
 
 beforeEach(() => {
-  vi.spyOn(api, 'options').mockResolvedValue([{ id: 18, label: 'Thiết Bị Vệ Sinh' }, { id: 19, label: 'Thiết bị bếp' }])
+  vi.spyOn(api, 'options').mockImplementation(async ref => ref === 'brands'
+    ? [{ id: 3, label: 'TOTO' }, { id: 4, label: 'INAX' }, { id: 5, label: 'American Standard' }]
+    : [{ id: 18, label: 'Thiết Bị Vệ Sinh' }, { id: 19, label: 'Thiết bị bếp' }])
   vi.spyOn(api, 'get').mockResolvedValue(sanitary)
 })
 afterEach(() => {
@@ -103,6 +106,20 @@ describe('Admin product pricing', () => {
     expect(screen.getByLabelText(promoLabel)).toHaveValue(800_000)
   })
 
+  it.each([[3, 'TOTO'], [4, 'INAX']])('approved sanitary brand %s (%s) uses the canonical controls', async brandId => {
+    vi.mocked(api.get).mockResolvedValue({ ...sanitary, brand_id: brandId })
+    await openPricing()
+    expect(await screen.findByLabelText(regularLabel)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Giá bán cũ')).not.toBeInTheDocument()
+  })
+
+  it.each([[5, 'another sanitary brand'], [null, 'no brand yet']])('%s keeps the legacy price controls (canonical hidden)', async brandId => {
+    vi.mocked(api.get).mockResolvedValue({ ...sanitary, brand_id: brandId })
+    await openPricing()
+    expect(await screen.findByLabelText('Giá bán cũ')).toBeInTheDocument()
+    for (const label of [regularLabel, promoLabel, voucherLabel]) expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+  })
+
   it('keeps the existing price controls for other categories', async () => {
     vi.mocked(api.get).mockResolvedValue({ ...sanitary, category_id: 19 })
     await openPricing()
@@ -116,3 +133,27 @@ describe('Admin product pricing', () => {
     expect(screen.queryByLabelText(regularLabel)).not.toBeInTheDocument()
   })
 })
+
+describe('Admin product pricing — REVERIFY_REQUIRED (#470 2C)', () => {
+  const reverify = { ...sanitary, canonical_price_status: 'REVERIFY_REQUIRED', canonical_price_checked_at: '2026-10-01T00:00:00.000Z' }
+  it('tells the Admin why the price is hidden, keeps the historical values visible, and verifies by sending the three prices', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue(reverify)
+    const request = mockPatch(Response.json({ data: { ...reverify, canonical_price_status: 'PRICE_VERIFIED' } }))
+    await openPricing()
+    expect(await screen.findByText(/Giá đang ẩn trên website/)).toBeInTheDocument()
+    expect(screen.getByText(/Cần liên hệ xác nhận giá/)).toBeInTheDocument()
+    expect(screen.getByLabelText(regularLabel)).toHaveValue(1_000_000)
+    fireEvent.click(screen.getByRole('button', { name: 'Xác minh giá' }))
+    await waitFor(() => expect(request).toHaveBeenCalledOnce())
+    const [url, init] = request.mock.calls[0]
+    expect(String(url)).toBe(productPath)
+    expect(JSON.parse(String(init?.body))).toMatchObject({ input: { regular_price_vnd: 1_000_000, promotional_price_vnd: 900_000, online_voucher_amount_vnd: 50_000 } })
+  })
+  it('shows no notice for a normally verified price', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ ...sanitary, canonical_price_status: 'PRICE_VERIFIED' })
+    await openPricing()
+    await screen.findByLabelText(regularLabel)
+    expect(screen.queryByText(/Giá đang ẩn trên website/)).not.toBeInTheDocument()
+  })
+})
+

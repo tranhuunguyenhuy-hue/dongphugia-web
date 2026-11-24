@@ -183,17 +183,49 @@ export function assertCanonicalPrices(final: Record<string, unknown>): void {
   if (promo !== null && (regular === null || promo >= regular)) throw new ApiError(400, 'PRICE_RELATION_INVALID', ['promotional_price_vnd', 'regular_price_vnd'])
   if (voucher !== null && (regular === null || voucher >= (promo ?? regular))) throw new ApiError(400, 'VOUCHER_INVALID', ['online_voucher_amount_vnd'])
 }
-const productHook: WriteHook = ({ mode, existing, input }) => {
+/** #470 scope of the canonical price rules: sanitary x approved brands (equals CANONICAL_APPROVED_BRANDS in src/lib/canonical-price.ts; asserted by a test).
+ * Other brands/categories keep managing prices exactly as before (legacy fields). */
+export const CANONICAL_ADMIN_BRANDS = ['toto', 'inax'] as const
+const CANONICAL_ADMIN_CATEGORY = 'thiet-bi-ve-sinh'
+async function inCanonicalAdminScope(tx: Db, final: Row): Promise<boolean> {
+  const rows = await tx.query<{ brand: string | null; category: string | null }>(
+    'select (select slug from dpg_app.brands where id = $1) as brand, (select slug from dpg_app.categories where id = $2) as category', [final.brand_id ?? null, final.category_id ?? null])
+  const row = rows[0]
+  return Boolean(row && row.category === CANONICAL_ADMIN_CATEGORY && row.brand && (CANONICAL_ADMIN_BRANDS as readonly string[]).includes(row.brand))
+}
+const productHook: WriteHook = async ({ tx, mode, existing, input }) => {
   if (mode === 'delete') return undefined
   const final: Record<string, unknown> = { ...(existing ?? {}), ...input }
-  if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) assertCanonicalPrices(final)
+  if (CANONICAL_PRICE_FIELDS.some((field) => field in input) || 'canonical_price_status' in input) assertCanonicalPrices(final)
+  // #470: Production adds `canonical_price_status` with a CHECK (prices only with PRICE_VERIFIED). Admins edit prices, not the
+  // status, so the status follows the prices: any price present => PRICE_VERIFIED (verified by the admin), none => the
+  // status is cleared (price hidden, "cần liên hệ"). A non-price status combined with a price is rejected before the CHECK.
+  // Fail-safe: databases without the column (TEST fixed Preview today) never see this write.
+  // The status write is collected here and returned only AFTER every legacy guard below has run (#470 TL review: no early return).
+  let statusSet: Record<string, unknown> | undefined
+  if (externalColumns.has('canonical_price_status')) {
+    const hasPrice = CANONICAL_PRICE_FIELDS.some((field) => final[field] !== null && final[field] !== undefined && final[field] !== '')
+    const priceInRequest = CANONICAL_PRICE_FIELDS.some((field) => field in input)
+    // Canonical prices are only for approved brands: any other sanitary brand keeps the legacy price management untouched.
+    if (hasPrice && priceInRequest && !(await inCanonicalAdminScope(tx, final))) throw new ApiError(400, 'PRICE_SCOPE_INVALID', ['brand_id'])
+    // #470 (Owner 24/11): approved canonical prices are DPG's official prices. Re-activating a SKU never hides or downgrades its price because of the age of the
+    // Hita source; nothing is activated automatically. A row an Admin has explicitly marked REVERIFY_REQUIRED stays hidden until it is verified/edited again.
+    const requested = input.canonical_price_status as string | null | undefined
+    if (hasPrice && requested !== undefined && requested !== null && requested !== 'PRICE_VERIFIED') throw new ApiError(400, 'PRICE_STATUS_INVALID', ['canonical_price_status'])
+    if (CANONICAL_PRICE_FIELDS.some((field) => field in input)) {
+      const next = hasPrice ? 'PRICE_VERIFIED' : (['PRICE_VERIFIED', 'REVERIFY_REQUIRED'].includes(String(final.canonical_price_status)) ? null : (final.canonical_price_status ?? null))
+      statusSet = { canonical_price_status: next, canonical_price_checked_at: RAW_NOW }
+    }
+  }
   const list = asNumber(final.list_price), sale = asNumber(final.sale_price)
   if (sale !== null && (list === null || sale >= list)) throw new ApiError(400, 'SALE_PRICE_INVALID', ['sale_price', 'list_price'])
   if (final.is_active === true && (mode === 'create' || PRICE_FIELDS.some((field) => field in input))) {
-    if (final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
+    // #470 2C (Owner): a TOTO/INAX sanitary SKU can be activated without a price — it then shows "Cần liên hệ xác nhận giá"; no price is demanded.
+    const canonicalScope = externalColumns.has('canonical_price_status') && await inCanonicalAdminScope(tx, final)
+    if (!canonicalScope && final.stock_status !== 'contact' && !asNumber(final.price) && !list && !sale && !asNumber(final.regular_price_vnd)) throw new ApiError(400, 'PRICE_REQUIRED', ['price'])
     if (typeof final.image_main_url !== 'string' || final.image_main_url.trim() === '') throw new ApiError(400, 'IMAGE_REQUIRED', ['image_main_url'])
   }
-  return undefined
+  return statusSet ? { set: statusSet } : undefined
 }
 
 export const RESOURCES: ResourceDef[] = [
@@ -491,6 +523,8 @@ export const RESOURCES: ResourceDef[] = [
       { name: 'regular_price_vnd', label: 'Giá gốc (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'promotional_price_vnd', label: 'Giá khuyến mãi (VNĐ)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
       { name: 'online_voucher_amount_vnd', label: 'Voucher online (VNĐ/sản phẩm)', kind: 'money', min: 1, max: 9_999_999_999_999, nullable: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'canonical_price_checked_at', label: 'Giá kiểm lúc', kind: 'datetime', nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
+      { name: 'canonical_price_status', label: 'Trạng thái giá (Hita)', kind: 'enum', options: ['PRICE_VERIFIED', 'CONTACT_VERIFIED', 'UNRESOLVED', 'NOT_FOUND', 'DISCONTINUED', 'REVERIFY_REQUIRED'], nullable: true, readOnly: true, permission: 'commerce:write', externalGrant: true },
       { name: 'stock_status', label: 'Tồn kho', kind: 'enum', options: ['in_stock', 'out_of_stock', 'discontinued', 'pre_order', 'contact'], initial: 'in_stock' },
       { name: 'warranty_months', label: 'Bảo hành (tháng)', kind: 'int', min: 1, max: 600, nullable: true },
       { name: 'image_main_url', label: 'Ảnh chính', kind: 'media', max: 1000, upload: { folder: 'products', profile: 'product' } },
