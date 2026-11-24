@@ -21,7 +21,8 @@ copied from `supabase/m3-test/006–009`:
 |---|---|---|
 | `001_canonical_price_columns.sql` | 3 canonical VND columns, `canonical_price_status`, `canonical_price_checked_at`, one CHECK | `001_…_rollback.sql` (refuses if any value is populated) |
 | `002_canonical_price_grants.sql` | minimum column-level grants | `002_…_rollback.sql` |
-| `003_runtime_order_quote_canonical.sql` | sanitary-only canonical branch in `runtime_order_create` / `runtime_quote_create` | `003_…_rollback.sql` (restores the live baseline text, md5-asserted) |
+| `003_runtime_order_quote_canonical.sql` | canonical branch (sanitary × TOTO/INAX brand ids 1/2 only; other brands/categories stay legacy) in `runtime_order_create` / `runtime_quote_create` | `003_…_rollback.sql` (restores the live baseline text, md5-asserted) |
+| `004_commerce_direct_access_lock.sql` | commerce lock: revokes every direct create/update/delete path of `authenticated` (6 RPCs, 5 order/quote tables, audit insert, sequences) while commerce is OFF; independent of 001-003 | `004_…_rollback.sql` (re-grants exactly the baseline ACL) |
 | `tests/run-local.sh` | proof on an **isolated local** PostgreSQL fixture shaped like Production | — |
 
 Approval GUC (set per session by the operator after Owner GO, never in a file):
@@ -29,8 +30,8 @@ Approval GUC (set per session by the operator after Owner GO, never in a file):
 and equals the value passed to `-v approved_sha`.
 
 Status model (`canonical_price_status`, NULL = never crawled / unverified → price hidden, "cần liên hệ"):
-`PRICE_VERIFIED` (regular price present), `CONTACT_VERIFIED` (Hita page really says "Liên hệ"), `UNRESOLVED`,
-`NOT_FOUND`, `DISCONTINUED`. Prices exist **only** with `PRICE_VERIFIED`; the CHECK enforces it. Legacy `price_state`
+`PRICE_VERIFIED` (regular price present), `REVERIFY_REQUIRED` (Admin re-activated a SKU whose verified price is older than 7 days: historical prices + checked-at kept, never displayed or ordered until verified again), `CONTACT_VERIFIED` (Hita page really says "Liên hệ"), `UNRESOLVED`,
+`NOT_FOUND`, `DISCONTINUED`. Prices exist **only** with `PRICE_VERIFIED` or `REVERIFY_REQUIRED`; the CHECK enforces it. Legacy `price_state`
 is not reused or modified.
 
-Local proof: `bash supabase/prod-prep/470/tests/run-local.sh <socket-dir> <port> <superuser>` (isolated PostgreSQL ≥ 15, never a hosted project). It installs the live baseline function text, asserts its md5 equals Production's, applies 001→003, asserts CHECK/ACL/behaviour, then rolls everything back and re-asserts the baseline.
+Local proof: `bash supabase/prod-prep/470/tests/run-local.sh <socket-dir> <port> <superuser>` (isolated PostgreSQL ≥ 15, never a hosted project). It installs the live baseline function text, asserts its md5 equals Production's, applies 001→003, asserts CHECK/ACL/behaviour, proves (as role `authenticated`) that the direct RPC/table entrypoints are open on the baseline ACL and closed after 004, that the 004 rollback restores the baseline ACL byte-for-byte, then rolls everything back and re-asserts the baseline.

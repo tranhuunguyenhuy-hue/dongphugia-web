@@ -32,7 +32,8 @@ Còn lại 3 nhóm ngành khác + thương hiệu sanitary khác giữ nguyên l
 | 0 | Sao lưu (mục 5) + đọc headroom | — | — |
 | 1 | Cột + CHECK | `001_canonical_price_columns.sql` | `001_…_rollback.sql` (từ chối nếu còn dữ liệu) |
 | 2 | Grants cột tối thiểu | `002_canonical_price_grants.sql` | `002_…_rollback.sql` |
-| 3 | **HOÃN (không thuộc release)** — hàm order/quote sanitary-only (guard md5 baseline) | `003_runtime_order_quote_canonical.sql` | `003_…_rollback.sql` (khôi phục baseline, kiểm md5) |
+| 3 | Hàm order/quote: nhánh canonical chỉ cho vệ sinh × TOTO/INAX (guard md5 baseline); hãng/ngành khác giữ legacy | `003_runtime_order_quote_canonical.sql` | `003_…_rollback.sql` (khôi phục baseline, kiểm md5) |
+| 3b | **Khoá commerce:** thu hồi mọi đường tạo/sửa/xoá đơn-báo giá trực tiếp của `authenticated` (RPC + ghi bảng + sequence) khi commerce OFF | `004_commerce_direct_access_lock.sql` | `004_…_rollback.sql` (ACL baseline, khớp từng byte) |
 | 4 | Import 10 batch (mỗi batch 1 transaction, guard plan SHA, row-count, stop rule 350 MiB − 8 MiB) | `prod-import.mts --out` → `batch-NNNN-apply.sql` | `batch-NNNN-rollback.sql` + `ledger.jsonl` |
 | 5 | Đối soát: đếm theo status, kiểm CHECK, dung lượng | truy vấn đọc | — |
 | 6 | Deploy Worker/Admin SPA candidate (Owner duyệt riêng) | workflow Production hiện có | Worker rollback (không hoàn tác SQL) |
@@ -48,7 +49,7 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 
 ## 6. Rollback
 - Dữ liệu: `batch-*-rollback.sql` theo ledger (tuần tự ngược) → hoặc khôi phục từ bản sao 5.2. `version` chỉ tăng, không lùi.
-- Hàm: `003 rollback` (đơn đã tạo trong lúc 003 chạy giữ nguyên `discount/total`).
+- Hàm: `003 rollback` (đơn đã tạo trong lúc 003 chạy giữ nguyên `discount/total`). Khoá commerce: `004 rollback` chỉ khi Owner GO mở lại commerce.
 - Schema: `002`, `001` rollback (từ chối nếu còn giá trị — phải rollback dữ liệu trước).
 - Worker rollback tách riêng và **không** hoàn tác SQL; ngược lại cũng vậy.
 - Stop rule: dừng ngay nếu lệch row-count, lệch plan SHA, headroom < 8 MiB, hoặc lỗi guard — không tự retry.
@@ -71,14 +72,14 @@ Tuyệt đối không chạy 1→4 rồi mới nghĩ tới Worker: thứ tự cu
 | SQL 001 rollback | Chỉ khi đã xoá hết giá trị (`batch-*-rollback.sql`); sau đó Worker mới cờ TẮT/BẬT đều chạy (đã test) |
 Rollback độc lập từng thành phần (Worker/cờ, dữ liệu, quyền cột, Edge Function không xoá được → thôi thấy cột qua P470-002 rollback, schema): xem `release-manifest.md` §5.
 
-**Thứ tự cutover:** xem `release-manifest.md` §3–§5 (cổng phê duyệt A–E, trình tự thực thi, rollback độc lập). Tóm tắt: merge (quyền riêng) → backup/export (GO-B) → P470-001/002 (GO-C) → snapshot đọc-only + planner → import (GO-D, plan SHA pin trước apply) → Edge Function → lane M4 `publish canonical_pricing=off` → `on` (GO-E). **P470-003 hoãn** (manifest §6).
+**Thứ tự cutover:** xem `release-manifest.md` §3–§5 (cổng phê duyệt A–E, trình tự thực thi, rollback độc lập). Tóm tắt: merge (quyền riêng) → backup/export (GO-B) → P470-001→004 (GO-C) → snapshot đọc-only + planner → import (GO-D từng plan hãng × trạng thái, plan SHA pin trước apply; ứng viên Owner-accepted chỉ qua file duyệt, manifest §9) → Edge Function → lane M4 `publish canonical_pricing=off` → `on` (GO-E). P470-003 + P470-004 nằm trong cổng C (1C đã được Owner duyệt, manifest §6).
 
 **Phát hiện độc lập (cần quyết định riêng):** với ACL thật của `dpg_public_catalogue` (thiếu `spec_definitions.key`, `spec_options.slug`) truy vấn sibling của `main` (#432) báo `permission denied` ⇒ PDP có `variant_group` sẽ 5xx nếu phát hành từ `main`. #476 làm "không có sibling" khi gặp 42501; muốn có bộ chọn biến thể thì cần grant #432 (Owner đã dặn không phát hành kèm #432). Đồng thời lọc khoảng giá (`price_min/max`) trên PLP vẫn trả rỗng như hiện nay.
 
 ## 7b. PASS / FAIL / UNKNOWN
 | Hạng mục | Kết quả |
 |---|---|
-| Migration 001–003 + rollback trên PG local cô lập (baseline md5 khớp Production byte-exact) | PASS |
+| Migration 001–004 + rollback trên PG local cô lập (baseline md5 khớp Production byte-exact; rollback 004 khớp ACL baseline từng byte; role `authenticated` thật bị chặn mọi đường ghi sau 004) | PASS |
 | Hành vi order/quote: giá canonical, voucher × qty đúng 1 lần, NULL→quote, nhóm khác legacy | PASS (local) |
 | Planner: dry-run mặc định, guard identity/SHA/headroom/row-count, rollback batch, idempotent | PASS (local) |
 | Admin API giữ status nhất quán (37/37 tích hợp + 5 unit) | PASS (local) |
@@ -89,8 +90,9 @@ Rollback độc lập từng thành phần (Worker/cờ, dữ liệu, quyền c�
 | Benchmark local: 1 câu lệnh/trang, cùng plan; PLP +~2 ms (ORDER BY CASE) | PASS (chỉ hình dạng plan, không phải latency live) |
 | Variant siblings dưới ACL thật | FAIL trên `main` (5xx) → series/variant OFF ở Production; chip legacy giữ qua đường không cần grant #432 (PASS, PG ACL thật) |
 | Phạm vi hãng TOTO/INAX × active/inactive (lane, runtime, Admin, planner) | PASS (local/CI) |
-| Dữ liệu INAX + TOTO inactive sẵn sàng import | FAIL/UNKNOWN — chưa có CSV đạt Quality Gate (Codex lane); không chặn phát hành TOTO active |
-| Đăng ký Supabase Auth (đọc-only) | ĐANG BẬT, 0 tài khoản → quyết định hoãn 003 còn lại cho Owner (manifest §6) |
+| Dữ liệu 6.531 SKU (gói Codex #481/#482) qua planner | PASS offline: 4 tập hãng × trạng thái, 0 dừng; giá/liên hệ/ngừng/mơ hồ theo manifest §1b; chưa-xác-minh giữ trống. CSV phải refresh + pin trước GO-D → UNKNOWN cho đến lúc đó |
+| Ứng viên Owner-accepted (1.339) | PASS offline: cần file duyệt Owner mới nhập; 1.252 đạt quy tắc, 87 TOTO active bị loại (thiếu bằng chứng hãng) — manifest §9 |
+| Đăng ký Supabase Auth (đọc-only) | ĐANG BẬT, 0 tài khoản → đóng bằng ACL (P470-004), không đổi Auth (manifest §6) | PASS (local) |
 | `price_valid_until` thật của Hita / 28 WARN voucher lớn | UNKNOWN — cần crawl lại + Owner nhìn |
 | 181 SKU active chưa xác minh | Codex tiếp tục; không chặn nếu Owner chấp nhận ẩn giá |
 | Sao lưu (5.1, 5.2) | CHƯA TẠO |
@@ -99,4 +101,4 @@ Rollback độc lập từng thành phần (Worker/cờ, dữ liệu, quyền c�
 Public: PDP 3 SKU mẫu mỗi trạng thái (PRICE_VERIFIED có promo+voucher, CONTACT_VERIFIED, UNRESOLVED/NULL) hiển thị đúng; PLP sắp xếp giá; schema.org `Offer` chỉ khi có giá; không SKU sanitary nào hiện giá legacy. Admin: đăng nhập, sửa giá 1 SKU TEST-owned rồi hoàn tác (status chuyển PRICE_VERIFIED/NULL). Quote: tạo báo giá 1 SKU canonical + 1 SKU NULL (snapshot không dùng legacy). Order (nếu bật): voucher × qty đúng, replay idempotent. Theo dõi 24h: log lỗi `PRICE_*`, `check_violation`, dung lượng DB < 350 MiB, tỉ lệ 5xx/p95, số báo giá/đơn.
 
 ## 9. Owner GO phải nêu
-Candidate SHA cuối · CSV sha256 · plan SHA · danh sách SQL (P470-001/002, batch; 003 hoãn) · rollback · headroom đo lại ngay trước GO · xác nhận sao lưu đã tạo · quyết định mục 7 · cửa sổ thực hiện. Sau đó mới dừng ở ngưỡng này; mọi thứ khác không được chạy.
+Candidate SHA cuối · CSV sha256 · plan SHA · danh sách SQL (P470-001…004, batch) · rollback · headroom đo lại ngay trước GO · xác nhận sao lưu đã tạo · quyết định mục 7 · cửa sổ thực hiện. Sau đó mới dừng ở ngưỡng này; mọi thứ khác không được chạy.
