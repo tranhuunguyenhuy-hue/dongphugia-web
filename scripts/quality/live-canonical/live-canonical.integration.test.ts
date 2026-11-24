@@ -196,6 +196,37 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         await sql(`revoke select (key) on dpg_app.spec_definitions from ${PUB}; revoke select (slug, sort_order) on dpg_app.spec_options from ${PUB}`)
     })
 
+    it('PHASE 4c: per-brand release set (TOTO/INAX) x state — inactive SKUs with canonical price never reach Public; INAX only when its brand flag is on', async () => {
+        await sql(`insert into dpg_app.products(sku,name,slug,category_id,subcategory_id,brand_id,price,list_price,price_state,is_active,canonical_price_status,regular_price_vnd,canonical_price_checked_at) values
+          ('T-INACTIVE','TOTO inactive priced','t-inactive',1,1,1,null,null,'unknown',false,'PRICE_VERIFIED',8100000,now()),
+          ('I-INACTIVE','INAX inactive priced','i-inactive',1,1,2,null,null,'unknown',false,'PRICE_VERIFIED',8200000,now());
+          update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=7000000, canonical_price_checked_at=now() where sku='I-INAX'`)
+        const seen = async (brands: string | undefined) => {
+            vi.unstubAllEnvs(); production(); if (brands !== undefined) vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', brands)
+            const m = await load()
+            const list = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, {})).products
+            const by = Object.fromEntries(list.map(p => [p.sku, p]))
+            const search = (await m.searchLiveProducts('INACTIVE', 1, 24)).results
+            const pdp = await Promise.all(['t-inactive', 'i-inactive'].map(s => m.getLiveProductByCategory('thiet-bi-ve-sinh', s)))
+            const asc = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { priceSort: 'asc' })).products.map(p => p.sku)
+            // Public reads active only: inactive rows are absent from listing / search / PDP (hence SEO/JSON-LD/sitemap) whatever the flags
+            expect(list.some(p => p.sku.endsWith('INACTIVE'))).toBe(false); expect(search).toHaveLength(0); expect(pdp).toEqual([null, null])
+            expect(JSON.stringify([list, search])).not.toMatch(/8100000|8200000/)
+            return { inax: by['I-INAX'], asc }
+        }
+        expect((await seen(undefined)).inax).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })          // default = TOTO only
+        expect((await seen('toto')).inax).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })
+        const both = await seen('toto,inax'); expect(both.inax).toMatchObject({ price: 7000000, price_provenance: 'hita-exact-v1' })
+        expect(both.asc.slice(0, 3)).toEqual(['T-VERIFIED', 'T-PROMO', 'I-INAX'])                                      // INAX joins the verified-price sort only when enabled
+        const inaxOnly = await seen('inax'); expect(inaxOnly.inax).toMatchObject({ price: 7000000 })
+        vi.unstubAllEnvs(); production(); vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', 'inax')
+        const m = await load(); const toto = (await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, {})).products.find(p => p.sku === 'T-PROMO')
+        expect(toto).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })                                   // INAX-only release leaves TOTO untouched (legacy path)
+        vi.stubEnv('PUBLIC_CANONICAL_PRICE_BRANDS', 'toto,evil,gach'); const m2 = await load()
+        expect((await m2.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, {})).products.find(p => p.sku === 'I-INAX')).toMatchObject({ price: null, price_display: 'Liên hệ báo giá' })   // allowlist ∩ env
+        await sql("delete from dpg_app.products where sku in ('T-INACTIVE','I-INACTIVE'); update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, canonical_price_checked_at=null where sku='I-INAX'")
+    })
+
     it('PHASE 5 (rollback): 002 rollback -> flag ON stays up (fail-safe); flag OFF unaffected; 001 rollback restores the old schema', async () => {
         await sql(`update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null, canonical_price_checked_at=null`)
         await sql(await sqlOf(prod('002_canonical_price_grants_rollback.sql')))
