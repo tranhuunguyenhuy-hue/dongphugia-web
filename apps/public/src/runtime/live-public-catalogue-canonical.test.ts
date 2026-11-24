@@ -93,6 +93,7 @@ describe('flag ON (Production)', () => {
         expect(supportedListingKeys('thiet-bi-ve-sinh')).toContain('sort'); expect(supportedListingKeys('thiet-bi-bep')).not.toContain('sort')
     })
     it('PDP, preview, search and siblings share the same columns and DTO (one query each)', async () => {
+        vi.stubEnv('PUBLIC_SERIES_VARIANT', 'on')
         const detail = { ...row({ canonical_price_status: 'PRICE_VERIFIED', regular_price_vnd: '1000000', promotional_price_vnd: '900000', online_voucher_amount_vnd: '50000' }), gallery_images: [], documents: [], specifications: {} }
         mocks.readPublicRows.mockResolvedValue([detail])
         const pdp = await getLiveProductByCategory('thiet-bi-ve-sinh', 'chau'); expect(pdp).toMatchObject({ price: 900000, final_online_price: 850000, price_provenance: 'hita-exact-v1' })
@@ -136,6 +137,7 @@ describe('schema/permission fail-safe (flag ON)', () => {
         expect(sqlOf(2)).toContain('canonical_price_status')
     })
     it('siblings: 42501 (series spec columns not granted to the Production role) degrades to no siblings; other errors propagate', async () => {
+        vi.stubEnv('PUBLIC_SERIES_VARIANT', 'on')
         vi.resetModules(); mocks.readPublicRows.mockReset()
         mocks.readPublicRows.mockRejectedValue(Object.assign(new Error('permission denied'), { code: '42501' }))
         const mod = await import('./live-public-catalogue')
@@ -144,6 +146,7 @@ describe('schema/permission fail-safe (flag ON)', () => {
         await expect(mod.getLiveVariantSiblings('G', 1)).rejects.toThrow('boom')
     })
     it('series facet: 42501 (#432 grants missing in Production) degrades to "no facet" with every selection dropped; other errors propagate', async () => {
+        vi.stubEnv('PUBLIC_SERIES_VARIANT', 'on')
         vi.resetModules(); mocks.readPublicRows.mockReset()
         mocks.readPublicRows.mockRejectedValue(Object.assign(new Error('permission denied'), { code: '42501' }))
         const mod = await import('./live-public-catalogue')

@@ -136,6 +136,7 @@ export function ProductPurchasePanel({
                 salePrice={toClientMoney(displaySalePrice)}
                 priceDisplay={canonicalPricing ? canonicalPriceLabel(displayProduct.price_display) : displayProduct.price_display}
                 displayVoucherOnly={canonicalPricing}
+                voucherCartNote={cartEnabled}
                 onlineDiscountAmount={displayVoucher}
                 stockStatus={displayProduct.stock_status}
             >

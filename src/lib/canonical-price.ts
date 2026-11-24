@@ -26,3 +26,11 @@ export function canonicalProductionBrands(env: CanonicalEnv = process.env as Can
 }
 export const canonicalSortEnabled = (categorySlug: string, env: CanonicalEnv = process.env as CanonicalEnv): boolean =>
     categorySlug === 'thiet-bi-ve-sinh' && canonicalPricingMode(env) !== 'off'
+
+// ── #470/#443 scope lock: series filter + variant selector (#432/#433/#440) are NOT accepted yet ───────────────────
+// Production keeps them OFF (no sibling/series query, `dong`/series_slugs ignored, nothing rendered) unless PUBLIC_SERIES_VARIANT=on.
+// TEST/staging/preview/local keep their existing behaviour. Defence in depth: 42501 degrade stays in live-public-catalogue.
+export type SeriesVariantEnv = { APP_ENV?: string; PUBLIC_SERIES_VARIANT?: string }
+export function seriesVariantEnabled(env: SeriesVariantEnv = process.env as SeriesVariantEnv): boolean {
+    return env.APP_ENV !== 'production' || env.PUBLIC_SERIES_VARIANT === 'on'
+}

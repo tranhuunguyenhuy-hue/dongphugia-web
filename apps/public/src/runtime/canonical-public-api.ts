@@ -7,7 +7,7 @@ import {getSnapshotCategories,getSnapshotProducts,getSnapshotProduct,getSnapshot
 import {usesStagingPublicSnapshot} from './public-snapshot-mode'
 import {publicPostgresEnabled} from './public-db'
 import {getLiveBrandsForListing,getLiveListing,getLiveListingLeaves,getLiveProductByCategory,getLiveSeriesFacet,getLiveVariantLabel} from './live-public-catalogue'
-import {parseSeriesParam,normalizeSeriesSelection} from '@/lib/series-facet-contract'
+import {parseSeriesParam,normalizeSeriesSelection} from '@/lib/series-facet-contract'; import {seriesVariantEnabled} from '@/lib/canonical-price'
 
 const allProducts=cache(async(category:string,sub?:string)=> {
  const c=(await getSnapshotCategories()).find(c=>c.slug===category)
@@ -69,7 +69,7 @@ export const getPublicProducts:typeof Original.getPublicProducts=async(f={})=>{
     return {products:[],total:0,totalPages:1,currentPage:page,page,pageSize:size} as Awaited<ReturnType<typeof Original.getPublicProducts>>
    }
    // #432: `?dong=` tags are honoured only together with a matching brand; anything else is dropped (the UI resets the URL via getSeriesFacet().dropped).
-   const seriesSlugs=normalizeSeriesSelection(brandSlugs,parseSeriesParam(f.series_slugs).slugs).accepted
+   const seriesSlugs=seriesVariantEnabled()?normalizeSeriesSelection(brandSlugs,parseSeriesParam(f.series_slugs).slugs).accepted:[]   // #470: ?dong= ignored while series is OFF
    const live=await getLiveListing(category,listingSlug,page,size,{brandSlugs,featured:f.is_featured===true,seriesSlugs,
     ...(f.sortBy==='price'?{priceSort:f.sortDir??'desc'}:{})})
    return {products:live.products,total:live.totalCount,totalPages:Math.max(1,Math.ceil(live.totalCount/size)),currentPage:page,page,pageSize:size} as unknown as Awaited<ReturnType<typeof Original.getPublicProducts>>
@@ -115,12 +115,13 @@ export const getPublicProductBySlug:typeof Original.getPublicProductBySlug=async
 export const getProductTypeFiltersBySubcategory:typeof Original.getProductTypeFiltersBySubcategory=async()=>[]
 export const getSubcategorySpecFilters:typeof Original.getSubcategorySpecFilters=async()=>[]
 export const getVariantSiblings:typeof Original.getVariantSiblings=async(group,id)=>
- (await getSnapshotVariantSiblings(group,id)).map(p=>({...p,original_price:p.original_price??null,list_price:p.list_price??null,sale_price:p.sale_price??null,online_discount_amount:p.online_discount_amount??null,
+ (!seriesVariantEnabled()?[]:await getSnapshotVariantSiblings(group,id)).map(p=>({...p,original_price:p.original_price??null,list_price:p.list_price??null,sale_price:p.sale_price??null,online_discount_amount:p.online_discount_amount??null,
   variant_type:p.variant_type??null,variant_label:p.variant_label??null,colors:p.colors??null})) as Awaited<ReturnType<typeof Original.getVariantSiblings>>
 // #432 contract: siblings = same variant group + same brand + same sub-category, public only (see getLiveVariantSiblings).
 // The value on the axis comes ONLY from the SKU's own `variant_label` column (never inferred from name/prefix); a label equal to the SKU code is not a value.
 const axisOption=(label:string|null|undefined,sku:string)=>label&&label.trim()&&label.trim().toUpperCase()!==sku.toUpperCase()?[{axis:'config',label:'Cấu hình',value:label.trim()}]:[]
 export const getVariantSelectionData:typeof Original.getVariantSelectionData=async(group,id)=>{
+if(!seriesVariantEnabled())return {axes:[],currentVariantOptions:[],siblings:[]} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>   // #470: no sibling query while variants are OFF
  const siblings=await getVariantSiblings(group,id)
  if(!publicPostgresEnabled())return {axes:[],currentVariantOptions:[],siblings}
  const current=await getLiveVariantLabel(id)
@@ -129,7 +130,7 @@ export const getVariantSelectionData:typeof Original.getVariantSelectionData=asy
  return {axes:hasAxis?[{key:'config',label:'Cấu hình'}]:[],currentVariantOptions:hasAxis?axisOption(current,''):[],siblings:enriched} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
 }
 export const getSeriesFacet:typeof Original.getSeriesFacet=async(category,listing,brandSlugs,selectedSeries=[],opts={})=>{
- if(!publicPostgresEnabled())return {applicable:false,options:[],selected:[],dropped:[...selectedSeries]}
+ if(!publicPostgresEnabled()||!seriesVariantEnabled())return {applicable:false,options:[],selected:[],dropped:[...selectedSeries]}
  return getLiveSeriesFacet(category,listing,brandSlugs,selectedSeries,opts)
 }
 export const getProductComponents:typeof Original.getProductComponents=async()=>[]

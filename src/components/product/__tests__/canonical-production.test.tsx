@@ -30,6 +30,7 @@ describe('#470 Production PDP (cart OFF)', () => {
         expect(screen.getByText('50.000đ')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: /Thêm vào giỏ/ })).not.toBeInTheDocument()
         expect(screen.getByText('Gọi tư vấn')).toBeInTheDocument()
+        expect(screen.queryByText(/giỏ/)).not.toBeInTheDocument()      // cart is OFF: no wording that promises a cart step
     })
     it('unverified and CONTACT_VERIFIED rows use different labels and never show a price, voucher or cart', () => {
         const { unmount } = render(<ProductPurchasePanel product={unverified} categorySlug={cat} canonicalPricing cartEnabled={false} />)

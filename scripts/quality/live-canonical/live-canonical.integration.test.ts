@@ -178,6 +178,24 @@ run('live PostgreSQL read path with real public-role ACL (#470)', () => {
         await expect(sql("update dpg_app.products set canonical_price_status='CONTACT_VERIFIED', regular_price_vnd=5 where sku='T-CONTACT'")).rejects.toThrow()
     })
 
+    it('PHASE 4b: series/variant gate — OFF in Production even when the series grants EXIST; ON only by explicit flag', async () => {
+        await sql(`grant select (key) on dpg_app.spec_definitions to ${PUB}; grant select (slug, sort_order) on dpg_app.spec_options to ${PUB};
+          insert into dpg_app.spec_definitions(key,label) values ('Bộ sưu tập','Bộ sưu tập'); insert into dpg_app.spec_options(spec_definition_id,value,slug) values (1,'Series X','toto-x');
+          insert into dpg_app.product_spec_values(product_id,spec_definition_id,option_id) select id,1,1 from dpg_app.products where sku in ('T-VERIFIED','T-PROMO')`)
+        production(); let m = await load(); log.length = 0
+        const siblings = await m.getLiveVariantSiblings('G1', 1)
+        const facet = await m.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau-lavabo', ['toto'], ['toto-x'])
+        const listing = await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { brandSlugs: ['toto'], seriesSlugs: ['toto-x'] })
+        expect(siblings).toEqual([]); expect(facet).toMatchObject({ applicable: false, dropped: ['toto-x'] })
+        expect(listing.products.length).toBeGreaterThan(2)                                  // series filter ignored (not applied) -> brand filter only
+        expect(log.join('\n')).not.toMatch(/spec_options|spec_definitions|product_spec_values/)   // no series/variant statement at all
+        vi.stubEnv('PUBLIC_SERIES_VARIANT', 'on'); m = await load(); log.length = 0
+        const on = await m.getLiveListing('thiet-bi-ve-sinh', 'chau-lavabo', 1, 48, { brandSlugs: ['toto'], seriesSlugs: ['toto-x'] })
+        expect(on.products.map(p => p.sku).sort()).toEqual(['T-PROMO', 'T-VERIFIED'])        // gate ON + grants -> the accepted-later behaviour works
+        expect((await m.getLiveSeriesFacet('thiet-bi-ve-sinh', 'chau-lavabo', ['toto'], ['toto-x'])).applicable).toBe(true)
+        await sql(`revoke select (key) on dpg_app.spec_definitions from ${PUB}; revoke select (slug, sort_order) on dpg_app.spec_options from ${PUB}`)
+    })
+
     it('PHASE 5 (rollback): 002 rollback -> flag ON stays up (fail-safe); flag OFF unaffected; 001 rollback restores the old schema', async () => {
         await sql(`update dpg_app.products set canonical_price_status=null, regular_price_vnd=null, promotional_price_vnd=null, online_voucher_amount_vnd=null, canonical_price_checked_at=null`)
         await sql(await sqlOf(prod('002_canonical_price_grants_rollback.sql')))

@@ -4,7 +4,7 @@ import { cache } from 'react'
 import { sanitizeRichHtml } from '@/lib/html-sanitizer'
 import { QUARANTINED_VARIANT_GROUPS, VARIANT_SIBLING_CAP, normalizeSeriesSelection, type SeriesFacet } from '@/lib/series-facet-contract'
 import { readPublicRows } from './public-db'
-import { canonicalPricingMode, canonicalProductionBrands } from '@/lib/canonical-price'
+import { canonicalPricingMode, canonicalProductionBrands, seriesVariantEnabled } from '@/lib/canonical-price'
 import { canonicalPublicPricing, canonicalUnverifiedPricing, inCanonicalScope } from '../../../../scripts/catalogue-direct/public-canonical-pricing.mjs'
 import type { SnapshotCategory, SnapshotProduct, SnapshotSearchProduct } from './public-snapshot-catalogue'
 
@@ -147,7 +147,7 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
   return {products:[] as SnapshotProduct[],totalCount:0,page}
  if(brandSlugs.length>32||brandSlugs.some(slug=>!SLUG.test(slug)))return {products:[] as SnapshotProduct[],totalCount:0,page}
  // A series tag without a selected brand (or of another brand) is ignored; it never produces an odd/empty result.
- const seriesSlugs=normalizeSeriesSelection(brandSlugs,[...(filters.seriesSlugs??[])].filter(s=>SLUG.test(s))).accepted.slice(0,16)
+ const seriesSlugs=seriesVariantEnabled()?normalizeSeriesSelection(brandSlugs,[...(filters.seriesSlugs??[])].filter(s=>SLUG.test(s))).accepted.slice(0,16):[]
  // One product (SKU) = one row = one card. Series is a filter on SKUs, never a grouping.
  const priceSort=(testPricingEnabled()||productionPricingEnabled())&&category==='thiet-bi-ve-sinh'&&filters.priceSort
  const rows=await readProductRows<PublicProductRow>(c=>{
@@ -156,7 +156,7 @@ export const getLiveListing=cache(async(category:string,listing:string,page=1,pa
    ' WHERE '+PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2'+
    ' AND (cardinality($5::text[])=0 OR b.slug=ANY($5::text[]))'+
    ' AND (NOT $6::boolean OR p.is_featured=true)'+
-   ' AND (cardinality($7::text[])=0 OR'+SERIES_MATCH+')'+
+   (seriesVariantEnabled()?' AND (cardinality($7::text[])=0 OR'+SERIES_MATCH+')':' AND cardinality($7::text[])=0')+   // series OFF: statement never references the series spec tables
    ' ORDER BY '+priceOrder+'p.listing_priority DESC NULLS LAST,p.sort_order,p.id LIMIT $4 OFFSET $3'},
    [category,listing,(page-1)*pageSize,pageSize,brandSlugs,filters.featured===true,seriesSlugs], 'listing-page')
  return {products:rows.map(mapLiveProduct),totalCount:Number(rows[0]?.total_count??0),page}
@@ -330,6 +330,7 @@ export async function searchLiveProducts(raw:string,page:number,limit:number){
 // Never the whole series. A group is excluded when it is in the reviewed-wrong list (#431 D5) or when its public members
 // carry two different approved series (mixed group). No prefix guessing; cap is a safety bound, not a 8-item truncation.
 export async function getLiveVariantSiblings(group:string,currentId:number){
+ if(!seriesVariantEnabled())return [] as SnapshotProduct[]   // #470: variants not accepted yet -> no query
  try{return await loadVariantSiblings(group,currentId)}catch(error){
   // #470 finding: the Production public role cannot read spec_definitions.key / spec_options.slug (the #432 series grants are not applied).
   // Without them a PDP must degrade to "no siblings" instead of a 5xx. Any other error still propagates.
@@ -363,6 +364,7 @@ export async function getLiveVariantLabel(currentId:number):Promise<string|null>
  */
 export async function getLiveSeriesFacet(category:string,listing:string,brandSlugs:readonly string[],selectedSeries:readonly string[]=[],opts:{featured?:boolean}={}):Promise<SeriesFacet>{
  const none:SeriesFacet={applicable:false,options:[],selected:[],dropped:[...selectedSeries]}
+ if(!seriesVariantEnabled())return none   // #470: series filter not accepted yet -> no query
  if(![category,listing].every(s=>SLUG.test(s))||brandSlugs.length===0||brandSlugs.length>32||brandSlugs.some(s=>!SLUG.test(s)))return none
  // #470 finding (same as siblings): the Production public role cannot read spec_definitions.key / spec_options.slug (#432 grants not
  // applied). Degrade to "no series facet" (the page then drops any ?dong= and redirects) instead of a 5xx on brand-filtered PLPs.
