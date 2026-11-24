@@ -80,7 +80,7 @@ describe.skipIf(!integrationUrl || !loopback)('commerce v1 staff inbox (PostgreS
   })
 
   it('lists and reads the exact snapshot a guest submitted (lines, prices, voucher once, events) — never legacy tables', async () => {
-    const list = (await listSales(deps, ctx('admin'), 'orders', new URLSearchParams())).body as any
+    const list = (await listSales(deps, ctx('admin'), 'orders', body({}))).body as any
     expect(list.data.total).toBe(3); expect(list.data.counts).toEqual({ new: 3, processing: 0, done: 0, cancelled: 0 })
     expect(list.data.items.map((i: any) => i.total_vnd).sort()).toEqual([1_700_000, 2_000_000, 6_100_000])
     const one = (await getSales(deps, ctx('admin'), 'orders', rows.order[0])).body as any
@@ -91,22 +91,22 @@ describe.skipIf(!integrationUrl || !loopback)('commerce v1 staff inbox (PostgreS
     expect(quote.data.lines).toMatchObject([{ reason: 'NO_PRICE', unit_selling_vnd: null, quantity: 2 }, { reason: 'NO_PRICE', unit_selling_vnd: null }])   // NULL stays NULL, never 0
   })
   it('search and filters are parameterised; bad input is rejected', async () => {
-    expect(((await listSales(deps, ctx('admin'), 'orders', new URLSearchParams({ q: "x'; drop table dpg_commerce.orders;--" }))).body as any).data.total).toBe(0)
-    expect(((await listSales(deps, ctx('admin'), 'orders', new URLSearchParams({ q: 'Khach 2' }))).body as any).data.items[0].customer_name).toBe('Khach 2')
-    expect(((await listSales(deps, ctx('admin'), 'orders', new URLSearchParams({ q: codes.order[2] }))).body as any).data.total).toBe(1)
-    expect(await code(listSales(deps, ctx('admin'), 'orders', new URLSearchParams({ status: 'paid' })))).toBe('VALIDATION_FAILED')
+    expect(((await listSales(deps, ctx('admin'), 'orders', body({ q: "x'; drop table dpg_commerce.orders;--" }))).body as any).data.total).toBe(0)
+    expect(((await listSales(deps, ctx('admin'), 'orders', body({ q: 'Khach 2' }))).body as any).data.items[0].customer_name).toBe('Khach 2')
+    expect(((await listSales(deps, ctx('admin'), 'orders', body({ q: codes.order[2] }))).body as any).data.total).toBe(1)
+    expect(await code(listSales(deps, ctx('admin'), 'orders', body({ status: 'paid' })))).toBe('VALIDATION_FAILED')
     expect(await code(getSales(deps, ctx('admin'), 'orders', 0))).toBe('NOT_FOUND'); expect(await code(getSales(deps, ctx('admin'), 'orders', 987654))).toBe('NOT_FOUND')
-    expect(((await listSales(deps, ctx('admin'), 'orders', new URLSearchParams({ limit: '2', page: '2' }))).body as any).data.items).toHaveLength(1)
+    expect(((await listSales(deps, ctx('admin'), 'orders', body({ limit: '2', page: '2' }))).body as any).data.items).toHaveLength(1)
   })
   it('RBAC: a sale user sees only records assigned to them; others look absent; unauthenticated is 401', async () => {
-    expect(((await listSales(deps, ctx('sale'), 'orders', new URLSearchParams())).body as any).data.total).toBe(0)
+    expect(((await listSales(deps, ctx('sale'), 'orders', body({}))).body as any).data.total).toBe(0)
     expect(await code(getSales(deps, ctx('sale'), 'orders', rows.order[0]))).toBe('NOT_FOUND')
-    expect(await code(listSales(deps, { request_id: 'x', ip: '' }, 'orders', new URLSearchParams()))).toBe('UNAUTHENTICATED')
+    expect(await code(listSales(deps, { request_id: 'x', ip: '' }, 'orders', body({})))).toBe('UNAUTHENTICATED')
     expect(await code(assignSales(deps, ctx('sale'), 'orders', rows.order[0], body({ user_id: ids.sale, expected_version: 1 })))).toBe('NOT_FOUND')     // cannot even touch an unassigned record
     expect(await code(assignSales(deps, ctx('manager'), 'orders', rows.order[0], body({ user_id: ids.off, expected_version: 1 })))).toBe('VALIDATION_FAILED')   // inactive staff
     expect(await code(assignSales(deps, ctx('manager'), 'orders', rows.order[0], body({ user_id: 99999, expected_version: 1 })))).toBe('VALIDATION_FAILED')
     expect(((await assignSales(deps, ctx('manager'), 'orders', rows.order[0], body({ user_id: ids.sale, expected_version: 1 }))).body as any).data).toMatchObject({ assigned_to: ids.sale, version: 2 })
-    expect(((await listSales(deps, ctx('sale'), 'orders', new URLSearchParams())).body as any).data.total).toBe(1)
+    expect(((await listSales(deps, ctx('sale'), 'orders', body({}))).body as any).data.total).toBe(1)
     expect(await code(getSales(deps, ctx('other'), 'orders', rows.order[0]))).toBe('NOT_FOUND')
     expect(await code(assignSales(deps, ctx('sale'), 'orders', rows.order[0], body({ user_id: null, expected_version: 2 })))).toBe('FORBIDDEN')     // sale cannot reassign
   })
@@ -157,6 +157,17 @@ describe.skipIf(!integrationUrl || !loopback)('commerce v1 staff inbox (PostgreS
     expect(Object.keys(d.data.stats).join()).not.toMatch(/revenue|paid|payment/i)
     const s = (await salesSummary(deps, ctx('manager'))).body as any
     expect(s.data.new_quotes).toBe(1); expect(typeof s.data.new_orders).toBe('number')
-    expect(await code(dashboard(deps, ctx('sale')))).toBe('FORBIDDEN')
+    // sale = assigned-only: own counts/rows only, no catalogue size, nothing about other people's records
+    const insert = (code: string, who: number | null, hash: string) => owner.query(`insert into dpg_commerce.orders(code,status,customer_name,customer_phone,delivery_address,subtotal_vnd,total_vnd,line_count,idempotency_hash,request_hash,assigned_to)
+      values ($1,'new','Dash Test','0912345678','1 Test Street',1000,1000,1,repeat($2,64),repeat($2,64),$3)`, [code, hash, who])
+    await insert('DH-AAAAAAAA01', ids.sale, 'a'); await insert('DH-AAAAAAAA02', ids.manager, 'b'); await insert('DH-AAAAAAAA03', null, 'c')
+    const mine = (await dashboard(deps, ctx('sale'))).body as any, everyone = (await dashboard(deps, ctx('admin'))).body as any
+    expect(mine.data.scope).toBe('own'); expect(everyone.data.scope).toBe('all')
+    expect(mine.data.stats.total_products).toBeNull(); expect(mine.data.stats.active_products).toBeNull(); expect(typeof everyone.data.stats.total_products).toBe('number')
+    expect(mine.data.stats.new_orders).toBe(1); expect(mine.data.new_orders.map((o: any) => o.code)).toEqual(['DH-AAAAAAAA01'])        // only the sale's own record
+    expect(everyone.data.stats.new_orders).toBeGreaterThanOrEqual(3)                                                                   // the admin sees the whole system
+    expect(JSON.stringify(mine)).not.toMatch(/DH-AAAAAAAA0[23]/)                                                                       // no other person's record leaks
+    const managerView = (await dashboard(deps, ctx('manager'))).body as any; expect(managerView.data.scope).toBe('all')
+    expect(await code(dashboard(deps, { request_id: 'x', ip: '' }))).toBe('UNAUTHENTICATED')
   })
 })

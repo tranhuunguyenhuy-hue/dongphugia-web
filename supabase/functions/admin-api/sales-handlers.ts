@@ -47,9 +47,10 @@ async function load(db: Db, ctx: Context, kind: SalesKind, id: number, lock = fa
   return row
 }
 
-export async function listSales(deps: Deps, ctx: Context, kind: SalesKind, search: URLSearchParams): Promise<Result> {
+/** Search/list is a POST with a JSON body (never a URL): a customer phone typed by staff must not appear in browser history, gateway or Edge access logs. */
+export async function listSales(deps: Deps, ctx: Context, kind: SalesKind, body: string): Promise<Result> {
   const cfg = TABLE[kind], session = requireAny(ctx, cfg.read)
-  const query = validate(z.object({ q: z.string().trim().max(100).optional(), status: z.enum(STATUSES).optional(), ...pageQuery }).strict(), Object.fromEntries(search))
+  const query = validate(z.object({ q: z.string().trim().max(100).optional(), status: z.enum(STATUSES).optional(), ...pageQuery }).strict(), parseJson(body))
   const where: string[] = [], params: unknown[] = []
   if (!can(session.role, cfg.readAll)) { params.push(session.userId); where.push(`assigned_to = $${params.length}`) }
   const scopeParams = [...params], scope = where.join(' and ')

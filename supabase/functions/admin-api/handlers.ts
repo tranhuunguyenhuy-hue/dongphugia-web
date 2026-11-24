@@ -123,11 +123,13 @@ function dispatchCommerce(deps: Deps, ctx: Context, method: string, path: string
     if (variants[2] === undefined) return method === 'GET' ? commerce.listVariants(cd, ctx, pid) : method === 'POST' ? commerce.linkVariant(cd, ctx, pid, body) : undefined
     return method === 'DELETE' ? commerce.unlinkVariant(cd, ctx, pid, Number(variants[2])) : undefined
   }
+  const searchRoute = path.match(/^\/sales\/(orders|quotes)\/list$/)
+  if (searchRoute) return method === 'POST' ? salesHandlers.listSales(cd, ctx, searchRoute[1] as salesHandlers.SalesKind, body) : undefined
   const sales = path.match(/^\/sales\/(orders|quotes)(?:\/(\d{1,9}))?(?:\/(status|note|assign))?$/)
   if (path === '/sales/summary' && method === 'GET') return salesHandlers.salesSummary(cd, ctx)
   if (!sales) return undefined
   const kind = sales[1] as salesHandlers.SalesKind, id = sales[2] === undefined ? undefined : Number(sales[2]), action = sales[3]
-  if (id === undefined) return method === 'GET' && !action ? salesHandlers.listSales(cd, ctx, kind, search) : undefined
+  if (id === undefined) return undefined                       // no GET list: search terms never travel in a URL
   if (!action) return method === 'GET' ? salesHandlers.getSales(cd, ctx, kind, id) : undefined
   if (method !== 'POST') return undefined
   return action === 'status' ? salesHandlers.setSalesStatus(cd, ctx, kind, id, body) : action === 'note' ? salesHandlers.setSalesNote(cd, ctx, kind, id, body) : salesHandlers.assignSales(cd, ctx, kind, id, body)

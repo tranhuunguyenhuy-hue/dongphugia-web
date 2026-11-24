@@ -25,17 +25,17 @@ export function DashboardPage({ go }: { go: (to: string) => void }) {
   const [data, setData] = useState<Dashboard | null>(null); const [error, setError] = useState('')
   useEffect(() => { let live = true; commerce.dashboard().then((d) => { if (live) { setData(d); setError('') } }).catch((e) => { if (live) setError(errorText(e)) }); return () => { live = false } }, [])
   const link = (to: string, label: ReactNode) => <a className="font-medium hover:underline" href={BASE + to} onClick={(e) => { e.preventDefault(); go(to) }}>{label}</a>
-  const header = <PageHeader title="Tổng quan" description="Đơn hàng và yêu cầu báo giá đang chờ xử lý, quy mô danh mục sản phẩm." />
+  const header = <PageHeader title="Tổng quan" description={data?.scope === 'own' ? 'Đơn hàng và yêu cầu báo giá được giao cho bạn.' : 'Đơn hàng và yêu cầu báo giá đang chờ xử lý, quy mô danh mục sản phẩm.'} />
   if (!data) return <div className="grid grid-cols-[minmax(0,1fr)] gap-6">{header}{error ? <Alert>{error}</Alert> : <div className="grid gap-4 sm:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 rounded-xl" />)}</div>}</div>
   const s = data.stats
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       {header}
       {error && <Alert>{error}</Alert>}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={`grid gap-4 ${s.active_products === null ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
         <Kpi title="Đơn hàng mới" value={s.new_orders} hint={`${s.processing_orders} đang xử lý`} icon={<ShoppingCart />} />
         <Kpi title="Yêu cầu báo giá mới" value={s.new_quotes} hint={`${s.processing_quotes} đang xử lý`} icon={<FileQuestion />} />
-        <Kpi title="Sản phẩm đang bán" value={<>{s.active_products}<span className="text-base font-normal text-muted-foreground"> / {s.total_products}</span></>} icon={<Package />} />
+        {s.active_products !== null && <Kpi title="Sản phẩm đang bán" value={<>{s.active_products}<span className="text-base font-normal text-muted-foreground"> / {s.total_products}</span></>} icon={<Package />} />}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card><CardHeader><CardTitle>Đơn hàng mới</CardTitle></CardHeader><CardContent>

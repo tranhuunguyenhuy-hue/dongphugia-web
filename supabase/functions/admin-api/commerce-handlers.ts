@@ -44,22 +44,28 @@ const idOf = (value: number) => { if (!Number.isInteger(value) || value < 1) thr
 /** The commerce schema is applied by its own Owner GO: until then (or after a rollback) the dashboard shows zeros instead of failing. */
 const COMMERCE_SCHEMA_MISSING = new Set(['42P01', '3F000', '42501'])
 export async function dashboard(deps: Deps, ctx: Context): Promise<Result> {
-  requirePermission(ctx, 'dashboard:read')
+  const session = requireAny(ctx, ['dashboard:read', 'dashboard:read_own'])
+  const all = can(session.role, 'dashboard:read')
+  // Roles with only "read own" (sale) see ONLY records assigned to them: no system-wide counts, no other people's customers, no catalogue size.
+  const own = all ? '' : ' and assigned_to = $1', params = all ? [] : [session.userId]
+  const canOrders = all || can(session.role, 'orders:read_assigned'), canQuotes = all || can(session.role, 'quotes:read_assigned')
   const [stats, orders, quotes] = await Promise.all([
     deps.db.query<Row>(
-      `select (select count(*) from dpg_commerce.quotes where status = 'new') as new_quotes, (select count(*) from dpg_commerce.orders where status = 'new') as new_orders,
-              (select count(*) from dpg_commerce.orders where status = 'processing') as processing_orders, (select count(*) from dpg_commerce.quotes where status = 'processing') as processing_quotes,
-              (select count(*) from dpg_app.products) as total_products, (select count(*) from dpg_app.products where is_active = true) as active_products`),
-    deps.db.query<Row>(`select id, code, customer_name, customer_phone, total_vnd, line_count, created_at from dpg_commerce.orders where status = 'new' order by created_at desc, id desc limit 5`),
-    deps.db.query<Row>(`select id, code, customer_name, customer_phone, line_count, created_at from dpg_commerce.quotes where status = 'new' order by created_at desc, id desc limit 5`),
-  ]).catch(async (error) => {
+      `select (select count(*) from dpg_commerce.quotes where status = 'new'${canQuotes ? own : ' and false'}) as new_quotes, (select count(*) from dpg_commerce.orders where status = 'new'${canOrders ? own : ' and false'}) as new_orders,
+              (select count(*) from dpg_commerce.orders where status = 'processing'${canOrders ? own : ' and false'}) as processing_orders, (select count(*) from dpg_commerce.quotes where status = 'processing'${canQuotes ? own : ' and false'}) as processing_quotes`, params),
+    canOrders ? deps.db.query<Row>(`select id, code, customer_name, customer_phone, total_vnd, line_count, created_at from dpg_commerce.orders where status = 'new'${own} order by created_at desc, id desc limit 5`, params) : Promise.resolve([] as Row[]),
+    canQuotes ? deps.db.query<Row>(`select id, code, customer_name, customer_phone, line_count, created_at from dpg_commerce.quotes where status = 'new'${own} order by created_at desc, id desc limit 5`, params) : Promise.resolve([] as Row[]),
+  ]).catch((error) => {
     if (!COMMERCE_SCHEMA_MISSING.has((error as { code?: string })?.code ?? '')) throw error
-    const only = await deps.db.query<Row>('select (select count(*) from dpg_app.products) as total_products, (select count(*) from dpg_app.products where is_active = true) as active_products')
-    return [[{ new_orders: 0, new_quotes: 0, processing_orders: 0, processing_quotes: 0, ...only[0] }], [], []] as [Row[], Row[], Row[]]
+    return [[{ new_orders: 0, new_quotes: 0, processing_orders: 0, processing_quotes: 0 }], [], []] as [Row[], Row[], Row[]]
   })
+  // Catalogue size is a system-wide figure: only the "read all" dashboard gets it (null = withheld, never a partial or zero).
+  const catalogue = all ? (await deps.db.query<Row>('select (select count(*) from dpg_app.products) as total_products, (select count(*) from dpg_app.products where is_active = true) as active_products'))[0] : null
   const s = stats[0]
   return { status: 200, body: { data: {
-    stats: { new_orders: Number(s.new_orders), new_quotes: Number(s.new_quotes), processing_orders: Number(s.processing_orders), processing_quotes: Number(s.processing_quotes), total_products: Number(s.total_products), active_products: Number(s.active_products) },
+    scope: all ? 'all' : 'own',
+    stats: { new_orders: Number(s.new_orders), new_quotes: Number(s.new_quotes), processing_orders: Number(s.processing_orders), processing_quotes: Number(s.processing_quotes),
+      total_products: catalogue ? Number(catalogue.total_products) : null, active_products: catalogue ? Number(catalogue.active_products) : null },
     new_orders: orders.map((o) => ({ ...o, total_vnd: num(o.total_vnd) })), new_quotes: quotes,
   } } }
 }

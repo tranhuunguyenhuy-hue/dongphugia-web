@@ -20,7 +20,7 @@ const ROUTES = [
   { method: 'DELETE', pattern: /^\/r\/[a-z][a-z0-9-]{1,40}\/\d{1,9}$/ },
   // Commerce v1 inbox (dpg_commerce), assignees, dashboard (dedicated handlers in the function). The legacy /orders and /quotes routes are retired.
   { method: 'GET', pattern: /^\/(dashboard|assignees)$/ }, { method: 'GET', pattern: /^\/sales\/summary$/ },
-  { method: 'GET', pattern: /^\/sales\/(orders|quotes)$/ }, { method: 'GET', pattern: /^\/sales\/(orders|quotes)\/\d{1,9}$/ },
+  { method: 'POST', pattern: /^\/sales\/(orders|quotes)\/list$/ }, { method: 'GET', pattern: /^\/sales\/(orders|quotes)\/\d{1,9}$/ },
   { method: 'POST', pattern: /^\/sales\/(orders|quotes)\/\d{1,9}\/(status|note|assign)$/ },
   { method: 'POST', pattern: /^\/products\/bulk$/ },
   { method: 'GET', pattern: /^\/products\/\d{1,9}\/variants$/ }, { method: 'POST', pattern: /^\/products\/\d{1,9}\/variants$/ }, { method: 'DELETE', pattern: /^\/products\/\d{1,9}\/variants\/\d{1,9}$/ },

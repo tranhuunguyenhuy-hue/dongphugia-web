@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, commerce, type SalesDetail, type User } from './api'
 import { ConfirmProvider, Toaster } from './ui'
 import { SalesDetailPage, SalesList } from './Sales'
+import { DashboardPage } from './Dashboard'
 
 const user = (role: User['role'], permissions: string[]): User => ({ id: 1, email: 'a@example.test', name: 'A', role, permissions })
 const admin = user('admin', ['*']), sale = user('sale', ['orders:read_assigned', 'orders:update_status', 'orders:edit_note'])
@@ -69,5 +70,15 @@ describe('commerce v1 inbox (Admin SPA)', () => {
     vi.spyOn(commerce, 'list').mockResolvedValue({ items: [{ id: 5, code: 'DH-0123456789', status: 'new', customer_name: 'Nguyen Van A', customer_phone: '0912345678', total_vnd: 6_100_000, line_count: 2, assigned_to: null, created_at: '2026-11-24T01:00:00Z', updated_at: '2026-11-24T01:00:00Z' }], total: 1, counts: { new: 1, processing: 2, done: 3, cancelled: 4 } })
     render(<SalesList kind="orders" user={admin} go={vi.fn()} />)
     await screen.findByText('DH-0123456789'); expect(screen.getByText('Đang xử lý (2)')).toBeInTheDocument(); expect(screen.getByText('Tất cả (10)')).toBeInTheDocument()
+  })
+  it('dashboard for a sale user (scope own): own work only, no catalogue size; admin still sees it', async () => {
+    const base = { new_orders: [], new_quotes: [] }
+    const spy = vi.spyOn(commerce, 'dashboard').mockResolvedValueOnce({ scope: 'own', stats: { new_orders: 1, new_quotes: 0, processing_orders: 0, processing_quotes: 0, total_products: null, active_products: null }, ...base })
+    const { unmount } = render(<DashboardPage go={vi.fn()} />)
+    expect(await screen.findByText(/được giao cho bạn/)).toBeInTheDocument()
+    expect(screen.queryByText('Sản phẩm đang bán')).not.toBeInTheDocument(); expect(screen.getByText('Đơn hàng mới')).toBeInTheDocument()
+    unmount(); spy.mockResolvedValueOnce({ scope: 'all', stats: { new_orders: 3, new_quotes: 1, processing_orders: 0, processing_quotes: 0, total_products: 138, active_products: 134 }, ...base })
+    render(<DashboardPage go={vi.fn()} />)
+    expect(await screen.findByText('Sản phẩm đang bán')).toBeInTheDocument()
   })
 })
