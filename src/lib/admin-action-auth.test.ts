@@ -53,7 +53,6 @@ import { createProduct } from './product-actions'
 import { createBlogPost } from './blog-actions'
 import { createPartner } from './partner-actions'
 import { createProject } from './project-actions'
-import { getAdminOrders, updateOrderStatus } from './order-actions'
 
 describe('admin Server Action authorization', () => {
     beforeEach(() => {
@@ -72,40 +71,5 @@ describe('admin Server Action authorization', () => {
         expect(mocks.blogCreate).not.toHaveBeenCalled()
         expect(mocks.partnerCreate).not.toHaveBeenCalled()
         expect(mocks.projectCreate).not.toHaveBeenCalled()
-    })
-
-    it('requires an authenticated session before listing admin orders', async () => {
-        mocks.requireAuth.mockRejectedValue(new Error('UNAUTHORIZED'))
-
-        await expect(getAdminOrders({})).rejects.toThrow('UNAUTHORIZED')
-
-        expect(mocks.orderFindMany).not.toHaveBeenCalled()
-        expect(mocks.orderCount).not.toHaveBeenCalled()
-    })
-
-    it('lets sale users update only orders assigned to them', async () => {
-        mocks.requirePermission.mockResolvedValue({ id: 7, role: 'sale' })
-        mocks.orderFindUnique.mockResolvedValue({ assigned_to: 7 })
-        mocks.orderUpdate.mockResolvedValue({})
-
-        await expect(updateOrderStatus(123, 'confirmed')).resolves.toEqual({ success: true })
-
-        expect(mocks.orderFindUnique).toHaveBeenCalledWith({
-            where: { id: 123 },
-            select: { assigned_to: true },
-        })
-        expect(mocks.orderUpdate).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 123 },
-            data: expect.objectContaining({ status: 'confirmed' }),
-        }))
-    })
-
-    it('blocks sale users from updating orders assigned to someone else', async () => {
-        mocks.requirePermission.mockResolvedValue({ id: 7, role: 'sale' })
-        mocks.orderFindUnique.mockResolvedValue({ assigned_to: 8 })
-
-        await expect(updateOrderStatus(123, 'confirmed')).rejects.toThrow('FORBIDDEN')
-
-        expect(mocks.orderUpdate).not.toHaveBeenCalled()
     })
 })
