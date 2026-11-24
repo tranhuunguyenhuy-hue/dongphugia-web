@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { findProduct, parsePdp, pdpUrl, searchUrl } from './adapter.mts'
 
@@ -78,5 +79,29 @@ describe('Hita public pricing', () => {
     for (const page of [fixture({ offer: 800_000 }), fixture({ regular: '800.000đ' }), fixture({ selling: '900.000,50đ' })]) {
       expect(parsePdp(page, sku)).toMatchObject({ status: 'UNKNOWN', regular_price_vnd: null })
     }
+  })
+})
+
+describe('INAX single price recovery', () => {
+  const code = 'C-504VAN/BW1'
+  const hit = { product_code: code, product_price: { sku: code, priceOld: '3640000.00', priceNew: '3640000.00' } }
+  const page = readFileSync('scripts/hita-price-audit/fixtures/inax-c-504van-single-price.html', 'utf8')
+
+  it('uses the visible, corroborated single price even when search repeats it twice', () => {
+    expect(parsePdp(page, code, hit, 'INAX')).toMatchObject({
+      status: 'EXACT', regular_price_vnd: 3_640_000, promotional_price_vnd: null, online_voucher_amount_vnd: null,
+    })
+  })
+
+  it('rejects conflicting search prices and requires the exact model and brand', () => {
+    expect(parsePdp(page, code, { ...hit, product_price: { ...hit.product_price, priceOld: '4140000.00' } }, 'INAX').exception).toBe('SEARCH_PRICE_CONFLICT')
+    expect(parsePdp(page, 'C-504VAN', undefined, 'INAX').exception).toBe('PDP_SKU_MISMATCH')
+    expect(parsePdp(page, code, undefined, 'TOTO').exception).toBe('PDP_BRAND_NOT_PROVEN')
+  })
+
+  it('supports a one-item Offer array and rejects an ambiguous array', () => {
+    const offer = '{"price":"3640000.00","priceCurrency":"VND","priceValidUntil":"2026-12-01"}'
+    expect(parsePdp(page.replace(offer, `[${offer}]`), code, hit, 'INAX').status).toBe('EXACT')
+    expect(parsePdp(page.replace(offer, `[${offer},${offer}]`), code, hit, 'INAX').exception).toBe('MULTIPLE_EXACT_OFFERS')
   })
 })

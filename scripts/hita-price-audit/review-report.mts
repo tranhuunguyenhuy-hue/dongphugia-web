@@ -58,7 +58,7 @@ export type Attempt = { startedAtUtc: string; httpRequests: number; non2xx: numb
 export function summaryMarkdown({ rows, scope, coverage, attempt, files }: { rows: ReviewRow[]; scope: { inventoryTotal: number; synthetic: number }; coverage: Coverage; attempt: Attempt; files: string[] }) {
   const n = (f: (r: ReviewRow) => boolean) => rows.filter(f).length
   const by = (key: 'status' | 'review_status') => [...new Set(rows.map(r => String(r[key])))].sort().map(k => `| ${k} | ${n(r => String(r[key]) === k)} |`).join('\n')
-  const stale = (r: ReviewRow) => r.review_status.toString().startsWith('STALE_PILOT')
+  const stale = (r: ReviewRow) => String(r.review_status).startsWith('STALE_PILOT')
   const fresh = n(r => r.review_status === 'FRESH_CRAWL_PENDING_OWNER_REVIEW')
   const live = attempt.haltReason ? `LIVE_BLOCKED (\`${attempt.haltReason}\`)` : 'OK'
   return `# Hita price crawl — review summary (#448)
