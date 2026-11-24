@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCommerceCart, CART_MAX_LINES } from '@/lib/commerce/cart-store'
 import { commerceEnabled } from '@/lib/commerce/flags'
@@ -131,6 +131,80 @@ describe('cart page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })); await screen.findByRole('alert')
     fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })); await waitFor(() => expect(push).toHaveBeenCalled())
     const keys = calls.filter(c => c.path === 'orders').map(c => c.headers['idempotency-key']); expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1])
+  })
+  describe('idempotency key is kept whenever the write may have happened (TL review #470)', () => {
+    const order = () => { useCommerceCart.getState().add(line(1), 1) }
+    const prepare = async () => { render(<CommerceCartPage />); await screen.findByText('Đặt hàng (1 sản phẩm)'); fill(); fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: '12 Le Loi, Quan 1' } }) }
+    const send = () => fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' }))
+    const ok = () => json(201, { ok: true, kind: 'order', code: 'DH-DDDDDDDDDD', status: 'new', totalVnd: 1_700_000, lineCount: 1, replayed: true })
+    it.each([
+      ['5xx after commit', () => json(502, { ok: false, code: 'COMMERCE_FAILED' })],
+      ['503', () => json(503, { ok: false, code: 'COMMERCE_UNAVAILABLE', error: 'Tạm thời chưa khả dụng.' })],
+      ['429 (rate limit answers before the replay)', () => json(429, { ok: false, code: 'RATE_LIMITED', error: 'Thao tác quá nhanh.' })],
+      ['200 with a broken body', () => new Response('<html>oops', { status: 200 })],
+      ['200 without ok:true', () => json(200, { code: 'WHATEVER' })],
+    ])('order: %s -> the retry carries the SAME key and ends in ONE receipt', async (_label, first) => {
+      order(); let n = 0
+      mockApi((path) => path === 'cart' ? json(200, checkBody([orderLine(1, 1)])) : (++n === 1 ? first() : ok()))
+      await prepare(); send(); await screen.findByRole('alert'); expect(push).not.toHaveBeenCalled()
+      send(); await waitFor(() => expect(push).toHaveBeenCalledTimes(1))
+      const keys = calls.filter(c => c.path === 'orders').map(c => c.headers['idempotency-key']); expect(keys).toHaveLength(2); expect(keys[0]).toBe(keys[1])
+      expect(loadReceipts()).toHaveLength(1)
+    })
+    it('quote: 5xx then retry replays the same key', async () => {
+      useCommerceCart.getState().add(line(2), 1); let n = 0
+      mockApi((path) => path === 'cart' ? json(200, checkBody([quoteLine(2, 1)])) : (++n === 1 ? json(500, { ok: false, code: 'COMMERCE_FAILED' }) : json(201, { ok: true, kind: 'quote', code: 'BG-EEEEEEEEEE', status: 'new', lineCount: 1, replayed: true })))
+      render(<CommerceCartPage />); await screen.findByText('Yêu cầu báo giá (1 sản phẩm)'); fill()
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu báo giá' })); await screen.findByRole('alert')
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu báo giá' })); await waitFor(() => expect(push).toHaveBeenCalledTimes(1))
+      const keys = calls.filter(c => c.path === 'quotes').map(c => c.headers['idempotency-key']); expect(keys[0]).toBe(keys[1]); expect(loadReceipts()).toMatchObject([{ kind: 'quote', code: 'BG-EEEEEEEEEE' }])
+    })
+    it('a request the server refused before writing anything (validation) does NOT keep the key', async () => {
+      order(); let n = 0
+      mockApi((path) => path === 'cart' ? json(200, checkBody([orderLine(1, 1)])) : (++n === 1 ? json(400, { ok: false, code: 'INVALID_INPUT', error: 'Dữ liệu không hợp lệ.' }) : ok()))
+      await prepare(); send(); await screen.findByRole('alert'); send(); await waitFor(() => expect(push).toHaveBeenCalled())
+      const keys = calls.filter(c => c.path === 'orders').map(c => c.headers['idempotency-key']); expect(keys[0]).not.toBe(keys[1])
+    })
+  })
+  describe('cart snapshot always matches the cart on screen (TL review #470)', () => {
+    it('out-of-order cart checks: the older, slower answer never overwrites the newer one; nothing can be sent until the snapshot matches', async () => {
+      useCommerceCart.getState().add(line(1), 1)
+      const waiting: { quantity: number; resolve: (r: Response) => void }[] = []
+      mockApi((path, body) => {
+        if (path !== 'cart') return json(201, { ok: true, kind: 'order', code: 'DH-FFFFFFFFFF', status: 'new', totalVnd: 5_100_000, lineCount: 1 })
+        const quantity = (body.items as { quantity: number }[])[0].quantity
+        return new Promise<Response>(resolve => waiting.push({ quantity, resolve }))
+      })
+      render(<CommerceCartPage />)
+      await waitFor(() => expect(waiting).toHaveLength(1)); waiting[0].resolve(json(200, checkBody([orderLine(1, 1)]))); await screen.findByText('Đặt hàng (1 sản phẩm)')
+      fill(); fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: '12 Le Loi, Quan 1' } })
+      fireEvent.click(screen.getByLabelText('Tăng số lượng')); await waitFor(() => expect(waiting).toHaveLength(2))       // quantity 2 -> check A
+      fireEvent.click(screen.getByLabelText('Tăng số lượng')); await waitFor(() => expect(waiting).toHaveLength(3))       // quantity 3 -> check B
+      expect(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })).toBeDisabled()                                     // stale snapshot: cannot submit
+      expect(screen.getByRole('status').textContent).toMatch(/Đang cập nhật giá/)
+      waiting[2].resolve(json(200, checkBody([orderLine(1, 3)])))                                                           // newest answers first
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })).toBeEnabled())
+      waiting[1].resolve(json(200, checkBody([orderLine(1, 2)])))                                                           // the stale answer arrives LATE
+      await new Promise(r => setTimeout(r, 20))
+      expect(screen.getAllByText(/5\.100\.000/).length).toBeGreaterThan(0); expect(screen.queryByText(/3\.400\.000/)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })); await waitFor(() => expect(push).toHaveBeenCalled())
+      expect(calls.find(c => c.path === 'orders')!.body).toMatchObject({ expectedTotalVnd: 5_100_000, items: [{ productId: 1, quantity: 3 }] })
+    })
+    it('removing a line quickly never submits the removed line or an old total; a failed re-check blocks sending and offers a retry', async () => {
+      useCommerceCart.getState().add(line(1), 1); useCommerceCart.getState().add(line(2), 1); let failing = false
+      mockApi((path, body) => {
+        if (path !== 'cart') return json(201, { ok: true, kind: 'order', code: 'DH-GGGGGGGGGG', status: 'new', totalVnd: 1_700_000, lineCount: 1 })
+        if (failing) return json(503, { ok: false, code: 'COMMERCE_UNAVAILABLE', error: 'Tạm thời chưa khả dụng.' })
+        const ids = (body.items as { productId: number }[]).map(i => i.productId); return json(200, checkBody(ids.map(id => orderLine(id, 1))))
+      })
+      render(<CommerceCartPage />); await screen.findByText('Đặt hàng (2 sản phẩm)'); fill(); fireEvent.change(screen.getByLabelText('Địa chỉ giao hàng'), { target: { value: '12 Le Loi, Quan 1' } })
+      failing = true; fireEvent.click(screen.getByLabelText('Xóa San pham 2'))
+      await screen.findByRole('alert'); expect(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })).toBeDisabled()
+      failing = false; fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại giá' }))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })).toBeEnabled()); expect(screen.getByText('Đặt hàng (1 sản phẩm)')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi đơn đặt hàng' })); await waitFor(() => expect(push).toHaveBeenCalled())
+      expect(calls.find(c => c.path === 'orders')!.body).toMatchObject({ expectedTotalVnd: 1_700_000, items: [{ productId: 1, quantity: 1 }] })
+    })
   })
   it('client validation blocks bad contact data before any request; unavailable lines are flagged', async () => {
     useCommerceCart.getState().add(line(1), 1); useCommerceCart.getState().add(line(3), 1)
