@@ -173,15 +173,20 @@ export function coverageGaps(loaded, categories) {
 }
 
 function main() {
-  const [command, planId] = process.argv.slice(2)
+  const [command, planId, expected] = process.argv.slice(2)
   const loaded = loadPlan(process.cwd(), planId)
+  if (command === 'verify') {
+    if (loaded.digest !== expected) fail('PLAN_DIGEST_MISMATCH', `expected ${String(expected).slice(0, 12)} got ${loaded.short}`)
+    console.error(`RELEASE_PLAN status=PASS id=${loaded.plan.id} digest=${loaded.digest}`)
+    return
+  }
   if (command === 'validate' || command === 'digest') {
     writeOutputs({ plan_id: loaded.plan.id, plan_digest: loaded.digest })
     appendSummary(`- Release plan \`${loaded.plan.id}\` digest \`${loaded.digest}\`: ${loaded.plan.steps.map((s) => `${s.id}(${s.type}${s.destructive ? ',destructive' : ''}${s.privileged ? ',privileged' : ''})`).join(' → ')}`)
     console.error(`RELEASE_PLAN status=PASS id=${loaded.plan.id} digest=${loaded.digest}`)
     return
   }
-  throw new Error('USAGE: plan.mjs validate|digest <plan-id>')
+  throw new Error('USAGE: plan.mjs validate|digest <plan-id> | verify <plan-id> <digest>')
 }
 
 if (isMain(import.meta.url)) try { main() } catch (error) { console.error(`RELEASE_PLAN status=FAIL reason=${error.message}`); process.exit(1) }

@@ -213,11 +213,49 @@ describe('#511 plan-mode GO (full scope)', () => {
     expect(evaluateGo(goInput(GO, { ...rollback, issueComments: [comment(`ROLLBACK-GO ${A} ${ID} expand`, '2026-12-01T11:50:00Z')] })).reasons).not.toContain('ROLLBACK_GO_REQUIRED:expand')
   })
 
+  it('the dispatched operation must match the plan step type', () => {
+    expect(evaluateGo(goInput(GO, { purpose: { step: 'function', op: 'apply' } })).reasons).toContain('PLAN_OP_DOES_NOT_MATCH_STEP:apply/function')
+    expect(evaluateGo(goInput(GO, { purpose: { step: 'expand', op: 'function' } })).reasons).toContain('PLAN_OP_DOES_NOT_MATCH_STEP:function/sql')
+    expect(evaluateGo(goInput(GO, { purpose: { step: 'nope', op: 'apply' } })).reasons).toContain('PLAN_OP_DOES_NOT_MATCH_STEP:apply/unknown')
+  })
+
   it('a Production plan step needs the same GO (PLAN, preflight, UAT, quality) even when the Worker scope is unchanged', () => {
     const step = { purpose: { step: 'expand', op: 'apply' }, prodRuns: [] }
     expect(evaluateGo(goInput(GO, step)).ok).toBe(true)
     expect(evaluateGo({ ...goInput(GO, step), fullTouch: {} }).ok).toBe(true)
     expect(evaluateGo({ ...goInput(GO.replace(/PLAN [^\n]+\n/, ''), step), fullTouch: {} }).reasons).toContain('FULL_SCOPE_REQUIRES_PLAN')
     expect(evaluateGo({ ...goInput(GO, step), qualityRuns: [] }).reasons).toContain('QUALITY_NOT_PASSED state=missing')
+  })
+})
+
+describe('#511 lane wiring (static)', () => {
+  const read = (f) => readFileSync(`.github/workflows/${f}`, 'utf8')
+  const m6 = read('m6-production-sql-apply.yml'), m3 = read('m3-admin-api-deploy.yml'), fn = read('m4-production-function-deploy.yml'), st = read('v1-fixed-preview.yml')
+  it('every Production writer shares one concurrency group; TEST writers share the Staging group', () => {
+    for (const wf of [m6, fn, read('m4-production-admin-release.yml')]) expect(wf).toContain('v1-production-worker-release')
+    for (const wf of [m3, st]) expect(wf).toContain('group: m2-fixed-staging')
+  })
+  it('M6 plan steps: tagged run name, digest check, GO check and fresh backup before apply/rollback; read-only check has no GO', () => {
+    expect(m6).toContain("[release plan={0} step={1} digest={2} env=production op={3}]")
+    for (const name of ['Apply the reviewed plan step', 'Roll back the reviewed plan step', 'Check the reviewed plan (read-only)']) expect(m6).toContain(`- name: ${name}`)
+    const order = ['Validate the reviewed release plan and its digest', 'Require the GO comment for this exact plan step', 'Verify the fresh backup evidence', 'Apply the reviewed plan step']
+    const at = order.map((n) => m6.indexOf(n))
+    expect(at.every((i) => i > 0)).toBe(true)
+    expect([...at].sort((a, b) => a - b)).toEqual(at)
+    expect(m6).toContain("inputs.operation != 'release-check'") // backup proof skipped only for the read-only check
+    expect(m6).toContain('if: "!startsWith(inputs.operation, \'release-\')"') // #470 lane script never runs for plan operations
+  })
+  it('TEST lane: plan SQL only on the TEST environment credential, gated by TEST dependencies and the UAT lock', () => {
+    expect(m3).toContain('environment: m3-test-functions')
+    expect(m3).toContain('DATABASE_URL: ${{ secrets.M3_TEST_SQL_DATABASE_URL }}')
+    expect(m3).not.toContain('M6_OPERATOR_DATABASE_URL')
+    expect(m3).toContain('node scripts/release/plan-evidence.mjs gate')
+    expect(m3).toContain('MODE=manual node scripts/release/staging-lock.mjs recheck') // legacy function deploy still respects the lock
+  })
+  it('Production function lane: plan deploys pass the GO check and are tagged; Staging publish/lock-uat carry the plan', () => {
+    expect(fn).toContain('op=function]')
+    expect(fn.indexOf('Require the GO comment for this exact plan function step')).toBeLessThan(fn.indexOf('- name: Deploy function and set its secrets'))
+    expect(st).toContain('STAGING_WRITER: worker')
+    expect((st.match(/PLAN_DIGEST: \$\{\{ inputs\.plan_digest \}\}/g) ?? []).length).toBe(3)
   })
 })

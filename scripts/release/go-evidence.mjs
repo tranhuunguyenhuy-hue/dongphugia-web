@@ -209,6 +209,8 @@ export function evaluateGo(input) {
       const target = purpose === 'publish' ? 'publish' : purpose.step
       for (const gap of dependencyGaps(plan.loaded, 'production', target, { testStates: plan.testStates, prodStates: plan.prodStates })) reasons.push(gap)
       const step = purpose === 'publish' ? null : plan.loaded.plan.steps.find((s) => s.id === purpose.step)
+      const opTypes = { apply: ['sql', 'backfill'], rollback: ['sql', 'backfill'], function: ['function'] }
+      if (purpose !== 'publish' && (!step || !opTypes[purpose.op]?.includes(step.type))) reasons.push(`PLAN_OP_DOES_NOT_MATCH_STEP:${purpose.op}/${step?.type ?? 'unknown'}`)
       const separate = (type) => after.filter(unedited).some((c) => parseDirectives(c.body).some((d) => d.type === type
         && d.args[0] === candidateSha && d.args[1] === plan.loaded.plan.id && d.args[2] === step?.id))
       if (step && (step.destructive || step.privileged) && purpose.op !== 'rollback' && !separate('stepGo')) reasons.push(`STEP_GO_REQUIRED:${step.id}`)
@@ -273,6 +275,8 @@ async function main() {
   const repo = env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY
   const fullTouch = env.FULL_TOUCH && env.FULL_TOUCH !== 'unknown' ? JSON.parse(env.FULL_TOUCH) : null
   const request = github()
+  // Lanes whose inputs may not carry a URL (M6, function lanes) pass the numeric comment id; the URL comes from GitHub itself.
+  if (!env.GO_COMMENT_URL && /^[1-9][0-9]{0,15}$/.test(env.GO_COMMENT_ID ?? '')) env.GO_COMMENT_URL = (await request(`/repos/${repo}/issues/comments/${env.GO_COMMENT_ID}`)).html_url
   const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo, withHistory: env.SCOPE_WITH_HISTORY === 'true' })
   // GO_PURPOSE=step (M6 plan-apply/rollback, Production function lane) names PLAN_STEP_ID and PLAN_OP; default = the Worker publish.
   const purpose = env.GO_PURPOSE === 'step' ? { step: env.PLAN_STEP_ID, op: env.PLAN_OP } : 'publish'

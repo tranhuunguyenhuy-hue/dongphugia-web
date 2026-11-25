@@ -78,7 +78,7 @@ async function main() {
   const lock = await lockStatus(request, { requestIssue: issue, candidateSha: sha, repo })
   // The legacy M2 publisher is disabled (Public-only artifact under the same SHA tag would overwrite the combined Staging).
   let blocked = env.LEGACY_M2 === 'true' ? 'LEGACY_M2_PUBLISH_DISABLED' : head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
-  if (!blocked) {
+  if (!blocked && (command === 'acquire' || env.STAGING_WRITER === 'worker')) {
     // #511: a full-scope candidate reaches the combined Staging only with its plan and the TEST chain before the Worker applied;
     // lock-uat additionally needs the TEST Worker step itself (no UAT before every TEST dependency passed). Unknown scope = refuse.
     const scope = await releaseScope(sha)

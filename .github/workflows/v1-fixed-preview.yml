@@ -22,6 +22,14 @@ on:
         description: 'publish-m3 / lock-uat: open issue that holds the Staging UAT lock for this exact SHA (lock-uat pins the live SHA without redeploying)'
         required: false
         type: string
+      plan_id:
+        description: '#511 full scope only: reviewed release plan id (its TEST chain must be applied before the combined Staging / UAT)'
+        required: false
+        type: string
+      plan_digest:
+        description: '#511 full scope only: 64-hex plan digest'
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -380,10 +388,13 @@ jobs:
         with:
           name: m3-fixed-preview-${{ github.sha }}
           path: ${{ runner.temp }}/m3-preview-artifact
-      - name: Recheck newest main and the UAT lock right before deploying
+      - name: Recheck newest main, the UAT lock and (full scope) the plan's TEST chain right before deploying
         id: recheck
         env:
           GH_TOKEN: ${{ github.token }}
+          STAGING_WRITER: worker
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
         run: node scripts/release/staging-lock.mjs recheck
       - name: Publish only named staging and run hosted smoke
         id: publish
@@ -402,6 +413,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
         run: node scripts/release/staging-lock.mjs acquire
       - name: Upload sanitized hosted evidence
         if: always()
@@ -436,4 +449,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
         run: node scripts/release/staging-lock.mjs acquire

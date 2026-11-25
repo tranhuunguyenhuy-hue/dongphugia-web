@@ -96,10 +96,11 @@ describe('#470 m6 Production SQL lane — fail-closed checks', () => {
     expect(wf).toContain("github.ref == 'refs/heads/main'"); expect(wf).toContain("github.actor == 'tranhuunguyenhuy-hue'"); expect(wf).toContain('inputs.approved_source_sha == github.sha')
     expect(wf).toContain('environment: production-sql-apply')
     const inputs = [...wf.matchAll(/^      ([a-z_0-9]+):\n        description/gm)].map((m) => m[1])
-    expect(inputs).toEqual(['approved_source_sha', 'operation', 'group', 'plan_set_sha256', 'resume', 'rollback_source_run_id', 'go_prod'])
+    // #511 adds the reviewed release-plan ids (still no SQL, path, file, URL, query or command input).
+    expect(inputs).toEqual(['approved_source_sha', 'operation', 'group', 'plan_set_sha256', 'resume', 'rollback_source_run_id', 'go_prod', 'plan_id', 'step_id', 'plan_digest', 'go_comment_id'])
     for (const name of inputs) expect(name).not.toMatch(/sql|path|file|url|query|command/)
     const choices = wf.match(/options: \[(preflight[^\]]*)\]/)[1].split(',').map((x) => x.trim())
-    expect([...choices].sort()).toEqual([...OPERATIONS].sort())
+    expect([...choices].sort()).toEqual([...OPERATIONS, 'release-check', 'release-apply', 'release-rollback'].sort())
     expect(wf).not.toMatch(/\$\{\{\s*inputs\.(go_prod|rollback_source_run_id|plan_set_sha256)\s*\}\}[^\n]*(run|test|\$\()/)
     expect(wf).not.toMatch(/echo "(?!::add-mask::)[^\n]*\$DATABASE_URL/)
   })

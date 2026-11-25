@@ -1,4 +1,7 @@
 name: M6 Production SQL apply (protected, manual)
+run-name: >-
+  M6 ${{ inputs.operation }}${{ startsWith(inputs.operation, 'release-') && format(' [release plan={0} step={1} digest={2} env=production op={3}]',
+  inputs.plan_id, inputs.step_id, inputs.plan_digest, inputs.operation == 'release-apply' && 'apply' || inputs.operation == 'release-rollback' && 'rollback' || 'check') || '' }}
 
 # #470 — the ONLY lane that may change the Production database for the price/commerce release. Never runs on merge, push or schedule.
 # Inputs are choices/ids only: there is no input for SQL text, a file path, a URL or an identifier. Every file, plan and expected count comes from the
@@ -6,6 +9,9 @@ name: M6 Production SQL apply (protected, manual)
 # rollback-schema, provision-intake (each needs a fresh m4-production-backup run (<2h, dump + restore rehearsal PASS) and the Owner's GO phrase).
 # Credential (environment `production-sql-apply`, Owner-approval required): secret M6_OPERATOR_DATABASE_URL = a SHORT-LIVED operator login (see
 # docs/ops/price-release-470/m6-owner-setup.md). Never printed, never uploaded. Artifacts hold plans/ledgers only (public catalogue data, no PII, no credentials).
+# #511 release plans: release-check (read-only, every SQL step), release-apply / release-rollback (one step) execute ONLY the reviewed
+# release/plans/<plan_id> at this SHA, bound to plan_digest, after the GO comment check (plan, preflight, TEST chain, UAT, dependencies,
+# separate STEP-GO / ROLLBACK-GO) and the same fresh backup proof. The #470 operations are unchanged.
 on:
   workflow_dispatch:
     inputs:
@@ -17,7 +23,7 @@ on:
         description: preflight and plan-import are read-only; the rest mutate Production and need the GO phrase
         required: true
         type: choice
-        options: [preflight, plan-import, apply-004, apply-schema, apply-import, rollback-import, rollback-schema, provision-intake]
+        options: [preflight, plan-import, apply-004, apply-schema, apply-import, rollback-import, rollback-schema, provision-intake, release-check, release-apply, release-rollback]
         default: preflight
       group:
         description: plan-import / apply-import only. prices = 4,648 prices + 1,284 statuses (CP1) · voucher = 1,101 vouchers (after prices)
@@ -45,13 +51,35 @@ on:
         required: false
         type: string
         default: ''
+      plan_id:
+        description: 'release-* only (#511): reviewed plan folder name under release/plans'
+        required: false
+        type: string
+        default: ''
+      step_id:
+        description: 'release-apply / release-rollback: plan step id (release-check uses every SQL step)'
+        required: false
+        type: string
+        default: ''
+      plan_digest:
+        description: 'release-* only: the 64-hex plan digest approved in the GO comment'
+        required: false
+        type: string
+        default: ''
+      go_comment_id:
+        description: 'release-apply / release-rollback: numeric id of the Owner GO comment on the release issue'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
   actions: read
+  issues: read
 
+# #511: one serialized group for EVERY Production release writer (SQL, function, Worker publish).
 concurrency:
-  group: m6-production-sql-apply
+  group: v1-production-worker-release
   cancel-in-progress: false
 
 env:
@@ -96,13 +124,42 @@ jobs:
           test -n "$DATABASE_URL" || { echo 'M6 status=FAIL reason=operator_credential_missing'; exit 1; }
           echo "::add-mask::$DATABASE_URL"
           case "$M6_OPERATION" in
-            preflight|plan-import) ;;
+            preflight|plan-import|release-check) ;;
             *) test "$GO_PROD_INPUT" = "GO-PROD-${M6_APPROVED_SHA:0:12}" || { echo 'M6 status=FAIL reason=go_phrase_missing_or_wrong'; exit 1; } ;;
           esac
           if [ "$M6_OPERATION" = rollback-import ]; then [[ "$ROLLBACK_RUN_INPUT" =~ ^[0-9]{6,15}$ ]] || { echo 'M6 status=FAIL reason=rollback_source_run_id_required'; exit 1; }; fi
           echo 'M6 status=PASS stage=guard'
+      - name: Validate the reviewed release plan and its digest (#511 release-* only)
+        if: startsWith(inputs.operation, 'release-')
+        shell: bash
+        env:
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          STEP_ID: ${{ inputs.step_id }}
+        run: |
+          set -euo pipefail
+          [[ "$PLAN_DIGEST" =~ ^[0-9a-f]{64}$ ]] || { echo 'M6 status=FAIL reason=plan_digest_required'; exit 1; }
+          if [ "$M6_OPERATION" = release-check ]; then [ "$STEP_ID" = '*' ] || [ -z "$STEP_ID" ] || { echo 'M6 status=FAIL reason=release_check_is_whole_plan'; exit 1; }; fi
+          if [ "$M6_OPERATION" != release-check ]; then [[ "$STEP_ID" =~ ^[a-z][a-z0-9-]{1,40}$ ]] || { echo 'M6 status=FAIL reason=step_id_required'; exit 1; }; fi
+          node scripts/release/plan.mjs verify "$PLAN_ID" "$PLAN_DIGEST"
+      - name: Require the GO comment for this exact plan step (#511 release-apply / release-rollback)
+        if: inputs.operation == 'release-apply' || inputs.operation == 'release-rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GO_COMMENT_ID: ${{ inputs.go_comment_id }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          GO_PURPOSE: step
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          PLAN_STEP_ID: ${{ inputs.step_id }}
+          PLAN_OP: ${{ inputs.operation == 'release-rollback' && 'rollback' || 'apply' }}
+          RISK_LANE: full
+          FULL_TOUCH: '{}'
+          GO_PHASE: before the Production plan step
+          CHECK_MAIN_HEAD: 'true'
+        run: node scripts/release/go-evidence.mjs
       - name: Verify the fresh backup evidence (mutating operations only; fail closed)
-        if: inputs.operation != 'preflight' && inputs.operation != 'plan-import'
+        if: inputs.operation != 'preflight' && inputs.operation != 'plan-import' && inputs.operation != 'release-check'
         id: backup
         shell: bash
         env:
@@ -127,7 +184,38 @@ jobs:
           path: ${{ runner.temp }}/m6-rollback
           run-id: ${{ inputs.rollback_source_run_id }}
           github-token: ${{ github.token }}
+      - name: Check the reviewed plan (read-only)
+        if: inputs.operation == 'release-check'
+        env:
+          RELEASE_ENV: production
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          STEP_ID: '*'
+          PLAN_MODE: check
+          PLAN_OUT: ${{ runner.temp }}/m6-out
+        run: node scripts/release/plan-sql.mjs
+      - name: Apply the reviewed plan step
+        if: inputs.operation == 'release-apply'
+        env:
+          RELEASE_ENV: production
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          STEP_ID: ${{ inputs.step_id }}
+          PLAN_MODE: apply
+          PLAN_OUT: ${{ runner.temp }}/m6-out
+        run: node scripts/release/plan-sql.mjs
+      - name: Roll back the reviewed plan step
+        if: inputs.operation == 'release-rollback'
+        env:
+          RELEASE_ENV: production
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          STEP_ID: ${{ inputs.step_id }}
+          PLAN_MODE: rollback
+          PLAN_OUT: ${{ runner.temp }}/m6-out
+        run: node scripts/release/plan-sql.mjs
       - name: Run the lane
+        if: "!startsWith(inputs.operation, 'release-')"
         shell: bash
         env:
           M6_OUT: ${{ runner.temp }}/m6-out
@@ -138,7 +226,7 @@ jobs:
           mkdir -p "$M6_OUT"
           node scripts/m6/production-sql-apply.mjs
       - name: Upload plans and ledgers (no credentials, no PII)
-        if: always() && (inputs.operation == 'plan-import' || inputs.operation == 'apply-import' || inputs.operation == 'rollback-import')
+        if: always() && (inputs.operation == 'plan-import' || inputs.operation == 'apply-import' || inputs.operation == 'rollback-import' || startsWith(inputs.operation, 'release-'))
         uses: actions/upload-artifact@v4
         with:
           name: m6-${{ inputs.operation }}-${{ github.run_id }}
