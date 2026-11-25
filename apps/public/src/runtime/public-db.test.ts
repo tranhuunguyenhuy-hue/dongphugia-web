@@ -59,8 +59,8 @@ describe('Public PostgreSQL read boundary', () => {
       active -= 1
     })
 
-    const results = await withPublicReadScope(undefined, () => Promise.allSettled(Array.from({ length: 40 }, () =>
-      readPublicRows<{ id: number }>('SELECT id FROM dpg_app.products'),
+    const results = await withPublicReadScope(undefined, () => Promise.allSettled(Array.from({ length: 40 }, (_, index) =>
+      readPublicRows<{ id: number }>('SELECT id FROM dpg_app.products WHERE id = $1', [index]),
     )))
 
     expect(peak).toBe(4)
@@ -70,6 +70,32 @@ describe('Public PostgreSQL read boundary', () => {
     expect(rejected).toHaveLength(4)
     expect(rejected.every((result) => result.status === 'rejected'
       && result.reason.message === 'PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED')).toBe(true)
+  })
+
+  it('#457: reads an identical bound SELECT once per request and never shares it with another request', async () => {
+    const statement = 'SELECT id FROM dpg_app.products WHERE sku = $1'
+    const [first, second, other] = await withPublicReadScope(undefined, () => Promise.all([
+      readPublicRows<{ id: number }>(statement, ['DPG-7']),
+      readPublicRows<{ id: number }>(statement, ['DPG-7']),
+      readPublicRows<{ id: number }>(statement, ['DPG-8']),
+    ]))
+    expect(mocks.query).toHaveBeenCalledTimes(2)
+    expect(first).toEqual([{ id: 7 }])
+    expect(second).toEqual(first)
+    expect(second).not.toBe(first)
+    expect(other).toEqual([{ id: 7 }])
+    await withPublicReadScope(undefined, () => readPublicRows(statement, ['DPG-7']))
+    expect(mocks.query).toHaveBeenCalledTimes(3)
+    expect(mocks.end).toHaveBeenCalledTimes(3)
+  })
+
+  it('#457: a failed read is not memoized, so a later caller in the same request reads again', async () => {
+    mocks.query.mockRejectedValueOnce(new Error('Query read timeout'))
+    await withPublicReadScope(undefined, async () => {
+      await expect(readPublicRows('SELECT id FROM dpg_app.products')).rejects.toThrow('Query read timeout')
+      await expect(readPublicRows('SELECT id FROM dpg_app.products')).resolves.toEqual([{ id: 7 }])
+    })
+    expect(mocks.query).toHaveBeenCalledTimes(2)
   })
 
   it.each([

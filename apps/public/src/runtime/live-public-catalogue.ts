@@ -299,9 +299,12 @@ const loadLiveProduct=async(where:string,values:readonly string[])=>{
  const rows=await readProductRows<PublicProductRow>(c=>'SELECT '+priceColumns(c)+','+detailSelect+FROM+' WHERE '+PUBLIC+' '+where+' LIMIT 1',values)
  return rows.length?mapLiveProductDetail(rows[0]):null
 }
+// #457: (category_id, slug) is UNIQUE in dpg_app.products, so the listing-scoped read is the category read plus a listing check.
+// Route metadata and the PDP template thereby issue the SAME statement, which the request-scoped read memo serves once.
 export const getLiveProduct=cache(async(category:string,listing:string,slug:string)=>{
  if(![category,listing,slug].every(s=>SLUG.test(s)))return null
- return loadLiveProduct('AND c.slug=$1 AND s.slug=$2 AND p.slug=$3',[category,listing,slug])
+ const product=await getLiveProductByCategory(category,slug)
+ return product&&product.subcategories.slug===listing?product:null
 })
 export const getLiveProductByCategory=cache(async(category:string,slug:string)=>{
  if(![category,slug].every(s=>SLUG.test(s)))return null

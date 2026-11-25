@@ -69,7 +69,23 @@ export async function readPublicRows<T>(
   }
   // Local Next.js callers also get an independent scope; Worker rendering
   // establishes one shared scope for all reads belonging to that invocation.
-  if (!publicReadScope()) return withPublicReadScope(undefined, () => readPublicRows<T>(statement, values, queryLabel))
+  const scope = publicReadScope()
+  if (!scope) return withPublicReadScope(undefined, () => readPublicRows<T>(statement, values, queryLabel))
+  // #457: vinext runs a Flight page once as a probe and again as the render, and generateMetadata repeats the
+  // page's product read; React cache() does not memoize outside the render. The same bound SELECT is therefore
+  // read once per request: the Promise lives only in this request's scope (never shared across invocations),
+  // a failed read is not memoized, and every caller gets its own array.
+  const key = JSON.stringify([statement, values])
+  let shared = scope.reads.get(key) as Promise<T[]> | undefined
+  if (!shared) {
+    shared = readPublicRowsOnce<T>(statement, values, queryLabel)
+    scope.reads.set(key, shared)
+    shared.catch(() => { if (scope.reads.get(key) === shared) scope.reads.delete(key) })
+  }
+  return [...await shared]
+}
+
+async function readPublicRowsOnce<T>(statement: string, values: readonly PublicQueryValue[], queryLabel: PublicQueryLabel): Promise<T[]> {
   const started = performance.now()
   const queryTables = publicQueryTables(statement)
   let releaseReadSlot: (() => void) | null = null

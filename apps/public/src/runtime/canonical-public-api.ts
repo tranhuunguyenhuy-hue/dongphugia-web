@@ -124,9 +124,11 @@ export const getVariantSelectionData:typeof Original.getVariantSelectionData=asy
 if(!seriesVariantEnabled()){   // #470: series/variant OFF -> legacy chips (SKU + the SKU's own variant_label), no series/spec query, no #432 grants needed
   const empty={axes:[],currentVariantOptions:[],siblings:[]} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
   if(!publicPostgresEnabled())return empty
-  const legacy=(await getLiveLegacyVariantSiblings(group,id)).map(s=>({...s,original_price:s.original_price??null,list_price:s.list_price??null,sale_price:s.sale_price??null,online_discount_amount:s.online_discount_amount??null,variant_type:s.variant_type??null,variant_label:s.variant_label??null,colors:s.colors??null,variant_options:axisOption(s.variant_label,s.sku)}))
+  // #457: the current SKU's label is read alongside the siblings (one round trip instead of two in sequence).
+  const [legacySiblings,currentLabel]=await Promise.all([getLiveLegacyVariantSiblings(group,id),getLiveVariantLabel(id)])
+  const legacy=legacySiblings.map(s=>({...s,original_price:s.original_price??null,list_price:s.list_price??null,sale_price:s.sale_price??null,online_discount_amount:s.online_discount_amount??null,variant_type:s.variant_type??null,variant_label:s.variant_label??null,colors:s.colors??null,variant_options:axisOption(s.variant_label,s.sku)}))
   const hasLabel=legacy.some(s=>(s.variant_options as unknown[]).length>0)
-  return {axes:hasLabel?[{key:'config',label:'Cấu hình'}]:[],currentVariantOptions:hasLabel?axisOption(await getLiveVariantLabel(id),''):[],siblings:legacy} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
+  return {axes:hasLabel?[{key:'config',label:'Cấu hình'}]:[],currentVariantOptions:hasLabel?axisOption(currentLabel,''):[],siblings:legacy} as unknown as Awaited<ReturnType<typeof Original.getVariantSelectionData>>
  }
  const siblings=await getVariantSiblings(group,id)
  if(!publicPostgresEnabled())return {axes:[],currentVariantOptions:[],siblings}

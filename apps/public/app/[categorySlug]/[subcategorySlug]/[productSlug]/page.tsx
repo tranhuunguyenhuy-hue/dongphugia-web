@@ -4,6 +4,7 @@ import Water from '@/app/(public)/vat-lieu-nuoc/[sub]/[slug]/page'
 import Tile from '@/app/(public)/gach-op-lat/[sub]/[slug]/page'
 import {notFound} from 'next/navigation'
 import {getPublicAppEnvironment} from '../../../../src/config/env'
+import {preloadProductRoute} from '../../../../src/runtime/public-route-preload'
 export const runtime='edge'
 export const dynamic='force-dynamic'
 export async function generateMetadata({params}:{params:Promise<{categorySlug:string;subcategorySlug:string;productSlug?:string}>}) {
@@ -15,6 +16,7 @@ export async function generateMetadata({params}:{params:Promise<{categorySlug:st
 }
 export default async function CanonicalRoute({params,searchParams}: {params:Promise<{categorySlug:string;subcategorySlug:string;productSlug?:string}>;searchParams:Promise<Record<string,string>>}) {
  const p=await params
+ preloadProductRoute(p.categorySlug,p.subcategorySlug,p.productSlug!)
  const props={params:Promise.resolve({sub:p.subcategorySlug,slug:p.productSlug!}),searchParams}
  switch(p.categorySlug){
  case 'thiet-bi-ve-sinh':return Sanitary(props)

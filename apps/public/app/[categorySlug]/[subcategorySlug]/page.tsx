@@ -6,6 +6,7 @@ import {notFound} from 'next/navigation'
 import {getPublicAppEnvironment} from '../../../src/config/env'
 import {publicPostgresEnabled} from '../../../src/runtime/public-db'
 import {getLiveListingRouteMetadata} from '../../../src/runtime/live-public-catalogue'
+import {preloadListingRoute} from '../../../src/runtime/public-route-preload'
 import {isSupportedListingSort,resolveListingQuery,supportedListingKeys} from '../../../src/runtime/listing-query'
 import {isExpectedPublicNotFound,publicRouteFailureSummary} from '../../../src/runtime/public-route-diagnostics'
 export const runtime='edge'
@@ -45,6 +46,7 @@ export default async function CanonicalRoute({params,searchParams}: {params:Prom
  if(!resolvedQuery.ok)notFound()
  if('sort' in resolvedQuery.query&&!isSupportedListingSort(resolvedQuery.query.sort))notFound()
  const query=resolvedQuery.query
+ preloadListingRoute(p.categorySlug,p.subcategorySlug,Object.keys(query).length===0)
  const props={params:Promise.resolve({sub:p.subcategorySlug,slug:p.productSlug!}),searchParams:Promise.resolve(query)}
  try {
   switch(p.categorySlug){

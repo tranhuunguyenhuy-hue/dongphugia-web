@@ -186,6 +186,11 @@ describe('Live public catalogue projection', () => {
     ])
   })
 
+  it('#457: a product of another listing in the same category is not served under this listing', async () => {
+    mocks.readPublicRows.mockResolvedValueOnce([product])
+    await expect(getLiveProduct('thiet-bi-bep', 'chau-rua', 'voi-rua-chen-42')).resolves.toBeNull()
+  })
+
   it('loads bounded PDP media and sanitized content with one parameterized read', async () => {
     mocks.readPublicRows.mockResolvedValueOnce([{
       ...product,
@@ -202,7 +207,9 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain('dpg_app.product_documents')
     expect(statement).toContain('dpg_app.product_spec_values')
     expect(statement).toContain('LIMIT 12')
-    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen', 'voi-rua-chen-42'])
+    // #457: same statement as the PDP template's category read ((category_id, slug) is unique); listing checked on the row.
+    expect(statement).toContain('AND c.slug=$1 AND p.slug=$2 LIMIT 1')
+    expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen-42'])
     expect(result?.publicContent).toMatchObject({
       descriptionHtml: '<p>Chi tiết <img src="https://dpg-products.b-cdn.net/migrated/viglacera/detail.webp" loading="lazy" /></p>',
       specifications: { 'Kích thước': '600 mm' },
