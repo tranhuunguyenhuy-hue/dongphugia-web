@@ -13,6 +13,7 @@ import {
     NAV_ABOUT_LINKS as ABOUT_LINKS,
 } from '@/config/site'
 import { trackGenerateLead } from '@/lib/tracking'
+import { MegaSaleLink } from './mega-sale-link'
 
 
 // ── Accordion item for a single product category ──
@@ -143,6 +144,9 @@ export function MobileMenuSheet({
 
                     {/* ── Scrollable navigation ── */}
                     <nav className="flex-1 overflow-y-auto overscroll-contain" aria-label="Menu di động">
+                        <div className="px-6 pt-5 min-[520px]:hidden">
+                            <MegaSaleLink onClick={handleNavigate} />
+                        </div>
                         {/* Product categories with accordion */}
                         <div className="px-6 pt-5 pb-3">
                             <p className="text-[10px] font-bold text-stone-400 uppercase tracking-[0.16em] mb-1">
