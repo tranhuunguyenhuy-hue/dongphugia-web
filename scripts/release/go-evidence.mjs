@@ -8,16 +8,18 @@
 //   LANE <fast|standard|extended|full>   required when the lane floor is extended/full; may raise, never lower
 //   UAT PASS <sha>                       Owner UAT on fixed Staging (GO comment or an earlier Owner comment), required for fast+
 //   UAT-WAIVER <sha> <reason>            explicit Owner deferral/waiver instead of UAT, only in the GO comment
-//   FULL-EVIDENCE <sql|function> <run URL>   full lane: the category's own lane ran on a SHA containing the change
 //   FLAGS-CHANGE <key=value;...>         required exactly when the reviewed flags differ from the active version
-//   NO-GO <sha> | GO-PROD-REVOKE <sha> | UAT FAIL <sha>   withdraw approval (also after the GO, up to the pre-deploy recheck)
+//   NO-GO <sha> | GO-PROD-REVOKE <sha> | UAT FAIL <sha>   withdraw approval (also after the GO, up to the pre-deploy recheck);
+//                                        withdrawals count even from an edited comment, approvals only from unedited ones
+// A release scope with real SQL, Supabase function or Worker binding changes is NOT publishable by this Worker-only lane: no
+// existing lane evidence proves which operation ran and that every required change and postcondition holds, so it fails closed
+// (FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS) and is escalated to Owner/TL under the existing protected full process.
 import {
-  DEFAULT_REPOSITORY, FUNCTION_WORKFLOW, M4_WORKFLOW, SHA, SQL_WORKFLOW, STAGING_WORKFLOW, appendSummary, byTime,
-  currentMainHead, github, githubList, isMain, isOwnerComment, plainLines,
+  DEFAULT_REPOSITORY, M4_WORKFLOW, QUALITY_WORKFLOW, SHA, STAGING_WORKFLOW, appendSummary, byTime, currentMainHead, github,
+  githubList, isMain, isOwnerComment, plainLines, qualityFromRuns,
 } from './lib.mjs'
 import { LANES, laneRank, maxLane } from './risk-lane.mjs'
 
-const RUN_URL = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/actions\/runs\/([1-9][0-9]*)$/
 const DIRECTIVE = [
   ['go', /^GO-PROD ([0-9a-f]{40})$/],
   ['revoke', /^GO-PROD-REVOKE ([0-9a-f]{40})$/],
@@ -27,7 +29,6 @@ const DIRECTIVE = [
   ['waiver', /^UAT-WAIVER ([0-9a-f]{40}) (\S.{2,})$/],
   ['verifyRun', /^VERIFY-RUN ([1-9][0-9]*)$/],
   ['lane', new RegExp(`^LANE (${LANES.filter((l) => l !== 'none').join('|')})$`)],
-  ['fullEvidence', /^FULL-EVIDENCE (sql|function) (https:\/\/github\.com\/\S+)$/],
   ['flags', /^FLAGS-CHANGE ([a-z_]+=[a-z,-]+(?:;[a-z_]+=[a-z,-]+)*)$/],
 ]
 
@@ -61,10 +62,7 @@ export const FLAGS_STEP = 'Load the reviewed Production flags'
 export const GO_STEP = 'Require GO-PROD evidence'
 export const DEPLOY_STEP = 'Publish with the Admin secrets'
 export const STAGING_STEP = 'Publish only named staging'
-const FULL = {
-  sql: { path: SQL_WORKFLOW, step: 'Verify the fresh backup evidence' }, // runs only for mutating SQL operations
-  function: { path: FUNCTION_WORKFLOW, step: 'Deploy function and set its secrets' },
-}
+export const COMBINED_STAGING_JOB = 'publish-m3' // the legacy M2 `publish` job writes a Public-only artifact under the same SHA tag
 
 export function trustedRun(run, { path, repo = DEFAULT_REPOSITORY, sha }) {
   return run?.path === path && run.head_branch === 'main' && run.head_repository?.full_name === repo
@@ -78,7 +76,7 @@ export function stagingAt(stagingRuns, T, repo = DEFAULT_REPOSITORY) {
   const events = (stagingRuns ?? []).filter((run) => trustedRun(run, { path: STAGING_WORKFLOW, repo }))
     .flatMap((run) => (run.jobs ?? []).filter((j) => ['publish-m3', 'publish'].includes(j.name))
       .flatMap((j) => (j.steps ?? []).filter((s) => s.name.startsWith(STAGING_STEP) && ran(s))
-        .map((s) => ({ sha: run.head_sha, started: s.started_at, completed: s.completed_at, conclusion: s.conclusion }))))
+        .map((s) => ({ sha: run.head_sha, job: j.name, started: s.started_at, completed: s.completed_at, conclusion: s.conclusion }))))
     .filter((e) => e.started < T)
     .sort((a, b) => (a.started < b.started ? -1 : 1))
   return events.at(-1) ?? null
@@ -86,7 +84,7 @@ export function stagingAt(stagingRuns, T, repo = DEFAULT_REPOSITORY) {
 
 /** Pure evaluation; returns every failed check so one run shows the full picture. */
 export function evaluateGo(input) {
-  const { url, comment, issue, issueComments = [], m4Runs = [], stagingRuns = [], fullRuns = {}, ancestry = {}, candidateSha, lane,
+  const { url, comment, issue, issueComments = [], m4Runs = [], stagingRuns = [], qualityRuns = [], candidateSha, lane,
     fullTouch = null, flagsChange = '', currentRunId = null, repo = DEFAULT_REPOSITORY } = input
   const reasons = []
   const fail = (code) => { reasons.push(code); return { ok: false, reasons } }
@@ -111,9 +109,10 @@ export function evaluateGo(input) {
   else if (gos[0].value !== candidateSha) reasons.push('GO_WRONG_SHA')
   if (own.some((d) => ['nogo', 'revoke', 'uatFail'].includes(d.type) && d.value === candidateSha)) reasons.push('GO_CONTRADICTED_IN_SAME_COMMENT')
 
-  // Owner directives over the whole issue, in order (created_at, then id). Edited comments never count.
-  const owner = [...issueComments.filter((c) => c.id !== comment.id), comment].filter((c) => isOwnerComment(c) && unedited(c)).sort(byTime)
-  const after = owner.filter((c) => byTime(c, comment) > 0)
+  // Owner directives over the whole issue, in order (created_at, then id). Withdrawals (NO-GO, revoke, superseding GO, UAT FAIL)
+  // count even from an edited comment (fail closed); positive approvals (GO, UAT PASS, waiver) count only from unedited ones.
+  const ownerAll = [...issueComments.filter((c) => c.id !== comment.id), comment].filter(isOwnerComment).sort(byTime)
+  const after = ownerAll.filter((c) => byTime(c, comment) > 0)
   for (const d of after.flatMap((c) => parseDirectives(c.body))) {
     if (d.type === 'go' && d.value !== candidateSha) { reasons.push('GO_SUPERSEDED'); break }
     if (['revoke', 'nogo'].includes(d.type) && d.value === candidateSha) { reasons.push('GO_REVOKED'); break }
@@ -145,8 +144,8 @@ export function evaluateGo(input) {
   let uat = 'not-required'
   if (laneRank(effective) >= laneRank('fast')) {
     uat = 'missing'
-    const timeline = owner.flatMap((c) => {
-      const ds = parseDirectives(c.body).filter((d) => ['uatPass', 'uatFail'].includes(d.type) && d.value === candidateSha)
+    const timeline = ownerAll.flatMap((c) => {
+      const ds = parseDirectives(c.body).filter((d) => d.value === candidateSha && (d.type === 'uatFail' || (d.type === 'uatPass' && unedited(c))))
       if (new Set(ds.map((d) => d.type)).size > 1) reasons.push('UAT_AMBIGUOUS')
       return ds.map((d) => ({ type: d.type, c }))
     })
@@ -162,29 +161,21 @@ export function evaluateGo(input) {
       const served = stagingAt(stagingRuns, lastPass.c.created_at, repo)
       if (!served) reasons.push('UAT_PASS_WITHOUT_STAGING_DEPLOYMENT')
       else if (served.sha !== candidateSha) reasons.push('UAT_STAGING_NOT_CANDIDATE')
+      else if (served.job !== COMBINED_STAGING_JOB) reasons.push('UAT_STAGING_NOT_COMBINED_ARTIFACT')
       else if (served.conclusion !== 'success' || !(served.completed < lastPass.c.created_at)) reasons.push('UAT_STAGING_NOT_PASSED')
       else uat = 'pass'
     }
   }
 
-  // Full lane: each SQL/function change needs its own existing lane to have run (mutating, successful, before the GO) on a SHA
-  // that contains the newest change of that category. Binding changes ship in this artifact and need the LANE full line only.
-  if (effective === 'full') {
-    if (!fullTouch) reasons.push('FULL_SCOPE_UNKNOWN')
-    else {
-      for (const category of Object.keys(fullTouch).filter((c) => FULL[c])) {
-        const line = own.find((d) => d.type === 'fullEvidence' && d.value === category)
-        const m = line?.extra?.match(RUN_URL)
-        const run = m && m[1] === repo ? fullRuns[m[2]] : null
-        if (!line) { reasons.push(`FULL_EVIDENCE_MISSING:${category}`); continue }
-        if (!run || !trustedRun(run, { path: FULL[category].path, repo }) || run.event !== 'workflow_dispatch' || run.status !== 'completed'
-          || run.conclusion !== 'success' || step(run, FULL[category].step)?.conclusion !== 'success' || !(run.updated_at < comment.created_at)) {
-          reasons.push(`FULL_EVIDENCE_INVALID:${category}`); continue
-        }
-        if (!['ahead', 'identical'].includes(ancestry[`${fullTouch[category]}...${run.head_sha}`])) reasons.push(`FULL_EVIDENCE_STALE:${category}`)
-      }
-    }
-  }
+  // Full scope is never published by this Worker-only lane (see header). An explicitly raised LANE full without such changes is fine.
+  if (!fullTouch && effective === 'full') reasons.push('FULL_SCOPE_UNKNOWN')
+  const fullCategories = Object.keys(fullTouch ?? {})
+  if (fullCategories.length) reasons.push(`FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS:${fullCategories.sort().join('+')}`)
+
+  // CI: the exact candidate needs a successful trusted `quality` push run on main (no bypass through manual dispatch).
+  const quality = qualityFromRuns(qualityRuns, candidateSha, repo)
+  if (quality.state === 'pending') reasons.push('QUALITY_STATE_AMBIGUOUS_RUN_IN_PROGRESS')
+  else if (quality.state !== 'success') reasons.push(`QUALITY_NOT_PASSED state=${quality.state}`)
 
   // Flags: a live flag change must be stated exactly; a stale FLAGS-CHANGE line is rejected too.
   const flagLine = only('flags')
@@ -198,30 +189,21 @@ async function withJobs(request, repo, runs) {
   return Promise.all(runs.map(async (run) => ({ ...run, jobs: (await request(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`)).jobs })))
 }
 
-export async function collectGoInputs({ url, candidateSha, request, repo = DEFAULT_REPOSITORY, fullTouch = null }) {
+export async function collectGoInputs({ url, candidateSha, request, repo = DEFAULT_REPOSITORY }) {
   const { issue: number, commentId } = parseCommentUrl(url, repo)
   const file = (path) => path.split('/').at(-1)
-  const [comment, issue, issueComments, m4List, stagingForSha] = await Promise.all([
+  const [comment, issue, issueComments, m4List, stagingForSha, qualityRuns] = await Promise.all([
     request(`/repos/${repo}/issues/comments/${commentId}`),
     request(`/repos/${repo}/issues/${number}`),
     githubList(request, `/repos/${repo}/issues/${number}/comments`),
     githubList(request, `/repos/${repo}/actions/workflows/${file(M4_WORKFLOW)}/runs?head_sha=${candidateSha}`, { key: 'workflow_runs', maxPages: 2 }),
     githubList(request, `/repos/${repo}/actions/workflows/${file(STAGING_WORKFLOW)}/runs?head_sha=${candidateSha}`, { key: 'workflow_runs', maxPages: 2 }),
+    githubList(request, `/repos/${repo}/actions/workflows/${file(QUALITY_WORKFLOW)}/runs?head_sha=${candidateSha}&event=push`, { key: 'workflow_runs', maxPages: 2 }),
   ])
   // Every Staging run (any SHA) since the first one for this candidate: needed to prove what Staging served at UAT time.
   const since = stagingForSha.map((r) => r.created_at).sort()[0]
   const stagingList = since ? await githubList(request, `/repos/${repo}/actions/workflows/${file(STAGING_WORKFLOW)}/runs?created=%3E%3D${since}`, { key: 'workflow_runs', maxPages: 3 }) : []
-  const fullRuns = {}
-  const ancestry = {}
-  for (const d of parseDirectives(comment.body).filter((x) => x.type === 'fullEvidence')) {
-    const m = d.extra.match(RUN_URL)
-    if (!m || m[1] !== repo) continue
-    const run = (await withJobs(request, repo, [await request(`/repos/${repo}/actions/runs/${m[2]}`)]))[0]
-    fullRuns[m[2]] = run
-    const touch = fullTouch?.[d.value]
-    if (touch && SHA.test(run.head_sha ?? '')) ancestry[`${touch}...${run.head_sha}`] = (await request(`/repos/${repo}/compare/${touch}...${run.head_sha}`)).status
-  }
-  return { url, comment, issue, issueComments, candidateSha, repo, fullRuns, ancestry,
+  return { url, comment, issue, issueComments, candidateSha, repo, qualityRuns,
     m4Runs: await withJobs(request, repo, m4List), stagingRuns: await withJobs(request, repo, stagingList) }
 }
 
@@ -230,7 +212,7 @@ async function main() {
   const repo = env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY
   const fullTouch = env.FULL_TOUCH && env.FULL_TOUCH !== 'unknown' ? JSON.parse(env.FULL_TOUCH) : null
   const request = github()
-  const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo, fullTouch })
+  const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo })
   const result = evaluateGo({ ...inputs, lane: env.RISK_LANE, fullTouch, flagsChange: env.FLAGS_CHANGE ?? '', currentRunId: Number(env.GITHUB_RUN_ID) || null })
   if (env.CHECK_MAIN_HEAD === 'true') {
     // Right before publish: main must still be the approved candidate (no newer merge slipped in after the GO).

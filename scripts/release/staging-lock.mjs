@@ -4,8 +4,8 @@
 // While held, only the holder may redeploy, and only the SAME SHA (retry). A different SHA needs an explicit release (remove the
 // label) and a re-acquire. A label without exactly one valid SHA is UNKNOWN and blocks everyone. Never auto-released.
 import {
-  DEFAULT_REPOSITORY, SHA, appendSummary, byTime, cloudflare, currentMainHead, github, githubList, isMain, isOwnerComment,
-  liveStagingSha, plainLines, writeOutputs,
+  DEFAULT_REPOSITORY, SHA, appendSummary, byTime, cloudflare, currentMainHead, github, githubList, isCombinedStagingIdentity, isMain,
+  isOwnerComment, liveStagingSha, plainLines, writeOutputs,
 } from './lib.mjs'
 
 export const LOCK_LABEL = 'staging-uat-lock'
@@ -73,7 +73,8 @@ async function main() {
   const issue = await validateUatIssue(request, env.UAT_ISSUE, repo)
   const head = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
   const lock = await lockStatus(request, { requestIssue: issue, candidateSha: sha, repo })
-  const blocked = head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
+  // The legacy M2 publisher is disabled (Public-only artifact under the same SHA tag would overwrite the combined Staging).
+  const blocked = env.LEGACY_M2 === 'true' ? 'LEGACY_M2_PUBLISH_DISABLED' : head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
   if (command === 'recheck') {
     // Right before deploy: still the newest main (an older queued run never overwrites a newer one) and the lock still allows it.
     writeOutputs({ go: blocked ? 'false' : 'true', reason: blocked ?? lock.reason })
@@ -87,7 +88,7 @@ async function main() {
     if (!issue) throw new Error('UAT_ISSUE_REQUIRED')
     if (blocked) throw new Error(blocked)
     const live = await liveStagingSha(cloudflare())
-    if (live.sha !== sha) throw new Error(`STAGING_LIVE_SHA_MISMATCH live=${live.sha}`)
+    if (!isCombinedStagingIdentity(live, sha)) throw new Error(`STAGING_LIVE_NOT_COMBINED_CANDIDATE live=${live.sha} message=${JSON.stringify(live.message)}`)
     if (lock.state === 'held') {
       appendSummary(`- Staging UAT lock already held by #${issue} @ \`${sha}\` (live deployment ${live.deploymentId})`)
       console.error(`STAGING_LOCK already-held issue=#${issue} sha=${sha}`)
@@ -96,12 +97,12 @@ async function main() {
     // Lock line first, label second: a partial failure leaves no label (= no lock) rather than a label bound to an old line.
     await request(`/repos/${repo}/issues/${issue}/comments`, { method: 'POST', body: { body: [
       `STAGING-UAT-LOCK ${sha}`, '',
-      `Fixed Staging serves this exact SHA (live deployment ${live.deploymentId}) for Owner UAT; run ${env.RUN_URL ?? '-'}.`,
+      `The newest fixed-Staging deployment ${live.deploymentId} carries tag \`${sha}\` and message \`${live.message}\` (combined M3 publisher); run ${env.RUN_URL ?? '-'}. Content hashes are not compared.`,
       `Other Staging publishes, and other SHAs for this issue, are refused while the \`${LOCK_LABEL}\` label is on this open issue.`,
       'Release: remove the label after the Owner\'s UAT verdict (never automatic).',
     ].join('\n') } })
     await request(`/repos/${repo}/issues/${issue}/labels`, { method: 'POST', body: { labels: [LOCK_LABEL] } })
-    appendSummary(`- Staging UAT lock acquired: #${issue} @ \`${sha}\` (live deployment ${live.deploymentId})`)
+    appendSummary(`- Staging UAT lock acquired: #${issue} @ \`${sha}\` (newest deployment ${live.deploymentId}, message \`${live.message}\`)`)
     console.error(`STAGING_LOCK acquired issue=#${issue} sha=${sha}`)
     return
   }

@@ -11,8 +11,6 @@ export const ACCOUNT_ID = 'd54f3402b9d112ab64d6135e0e3f1fb1'
 export const M4_WORKFLOW = '.github/workflows/m4-production-admin-release.yml'
 export const STAGING_WORKFLOW = '.github/workflows/v1-fixed-preview.yml'
 export const QUALITY_WORKFLOW = '.github/workflows/quality.yml'
-export const SQL_WORKFLOW = '.github/workflows/m6-production-sql-apply.yml'
-export const FUNCTION_WORKFLOW = '.github/workflows/m4-production-function-deploy.yml'
 // Parent Worker id that owns the fixed `staging` preview (same constant as publish-m3-fixed-preview.mjs).
 export const STAGING_PARENT_WORKER_ID = 'e50647603f1b4e73bed14e2e79c15d26'
 
@@ -136,5 +134,25 @@ export async function liveStagingSha(request, previewName = 'staging') {
   const latest = (Array.isArray(deployments) ? deployments : []).reduce((a, d) => (!a || d.created_on > a.created_on ? d : a), null)
   const tag = latest?.annotations?.['workers/tag']
   if (!SHA.test(tag ?? '')) throw new Error('STAGING_IDENTITY_UNKNOWN')
-  return { sha: tag, deploymentId: latest.id, createdOn: latest.created_on }
+  return { sha: tag, message: latest.annotations?.['workers/message'] ?? '', deploymentId: latest.id, createdOn: latest.created_on }
+}
+
+// What this identity check proves, and no more: the newest `staging` preview deployment carries this source SHA tag and the
+// M3 combined publisher's message. The M2 Public-only publisher tags the same SHA with `M2 Public <sha>`, so SHA alone is not
+// artifact identity. Content hashes are not compared.
+export const isCombinedStagingIdentity = (live, sha) => live?.sha === sha && live?.message === `M3 Admin ${sha}`
+
+// Latest trusted `quality` run of a push to main for this exact SHA: success | failure | pending | missing (UNKNOWN throws).
+export async function qualityState(request, sha, repo = DEFAULT_REPOSITORY) {
+  if (!SHA.test(sha ?? '')) throw new Error('QUALITY_SHA_INVALID')
+  const runs = await githubList(request, `/repos/${repo}/actions/workflows/${QUALITY_WORKFLOW.split('/').at(-1)}/runs?head_sha=${sha}&event=push`, { key: 'workflow_runs', maxPages: 2 })
+  return qualityFromRuns(runs, sha, repo)
+}
+export function qualityFromRuns(runs, sha, repo = DEFAULT_REPOSITORY) {
+  const trusted = (runs ?? []).filter((r) => r.path === QUALITY_WORKFLOW && r.event === 'push' && r.head_branch === 'main'
+    && r.head_sha === sha && r.head_repository?.full_name === repo).sort(byTime)
+  const latest = trusted.at(-1)
+  if (!latest) return { state: 'missing' }
+  if (latest.status !== 'completed') return { state: 'pending', runId: latest.id }
+  return { state: latest.conclusion === 'success' ? 'success' : 'failure', runId: latest.id, url: latest.html_url }
 }

@@ -41,6 +41,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      actions: read
     outputs:
       run: ${{ steps.gate.outputs.run }}
       sha: ${{ steps.gate.outputs.sha }}
@@ -67,6 +68,7 @@ jobs:
           WR_ACTOR: ${{ github.event.workflow_run.actor.login }}
         run: node scripts/release/trigger-gate.mjs staging
   prepare:
+    needs: gate
     if: >-
       github.event_name == 'workflow_dispatch' &&
       !endsWith(inputs.operation, '-m3') && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
@@ -221,7 +223,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   publish:
-    # Legacy M2 snapshot publisher writes the same fixed Staging: it passes the gate's lock check and rechecks before deploying.
+    # DISABLED (#505, archival #510): the legacy M2 publisher writes a Public-only artifact over the combined fixed Staging under the
+    # same SHA tag. The gate refuses `operation=publish`, and the recheck below refuses again. Re-enable only by a reviewed PR.
     needs: [gate, prepare]
     if: inputs.operation == 'publish' && needs.prepare.result == 'success'
     runs-on: ubuntu-24.04
@@ -235,6 +238,7 @@ jobs:
       CANDIDATE_SHA: ${{ github.sha }}
       MODE: manual
       UAT_ISSUE: ${{ inputs.uat_issue }}
+      LEGACY_M2: 'true'
     # Reuse the existing non-Production credential environment only. Its legacy
     # label does not select a Worker: publisher code pins the parent and staging.
     environment: cloudflare-staging

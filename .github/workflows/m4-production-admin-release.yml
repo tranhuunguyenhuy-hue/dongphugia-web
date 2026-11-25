@@ -65,6 +65,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       run: ${{ steps.gate.outputs.run }}
       sha: ${{ steps.gate.outputs.sha }}
@@ -405,6 +406,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
           ACTIVE_OUTCOME: ${{ steps.active.outcome }}
+          FLAGS_OUTCOME: ${{ steps.flags.outcome }}
           FULL_TOUCH: ${{ steps.scope.outputs.full_touch }}
           RUN_ID: ${{ github.run_id }}
           CANONICAL_PRICING: ${{ steps.flags.outputs.canonical_pricing }}

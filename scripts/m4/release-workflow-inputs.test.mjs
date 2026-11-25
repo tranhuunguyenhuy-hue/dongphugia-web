@@ -61,9 +61,11 @@ describe('#505 fixed Staging lane contract', () => {
     expect(staging.slice(staging.indexOf('  gate:'), staging.indexOf('  prepare:'))).not.toContain('secrets.')
   })
 
-  it('applies the gate and the pre-deploy recheck to the legacy M2 publisher too (same fixed Staging)', () => {
+  it('disables the legacy M2 publisher twice (gate refusal + recheck), and its prepare job waits for the gate', () => {
     const legacy = staging.slice(staging.indexOf('\n  publish:\n'), staging.indexOf('\n  prepare-m3:\n'))
     expect(legacy).toContain('needs: [gate, prepare]')
+    expect(legacy).toContain("LEGACY_M2: 'true'")
+    expect(staging.slice(staging.indexOf('\n  prepare:\n'), staging.indexOf('\n  publish:\n'))).toContain('needs: gate')
     expect(step(legacy, 'Recheck newest main and the UAT lock right before deploying (legacy M2)')).toContain('staging-lock.mjs recheck')
     expect(step(legacy, 'Publish only named staging and run real hosted acceptance')).toContain("if: steps.recheck.outputs.go == 'true'")
   })
@@ -83,5 +85,8 @@ describe('#505 M4 scope and evidence wiring', () => {
     expect(workflow).toContain("SCOPE_WITH_HISTORY: 'true'")
     expect([...workflow.matchAll(/FULL_TOUCH: \$\{\{ steps\.scope\.outputs\.full_touch \}\}/g)]).toHaveLength(3)
     expect(step(workflow, 'Release evidence (#505, no secrets)')).toContain('JOB_STATUS: ${{ job.status }}')
+    expect(step(workflow, 'Release evidence (#505, no secrets)')).toContain('FLAGS_OUTCOME: ${{ steps.flags.outcome }}')
+    // The unprivileged gate reads quality runs (no CI bypass via manual dispatch).
+    expect(workflow.slice(workflow.indexOf('  gate:'), workflow.indexOf('  release:'))).toContain('actions: read')
   })
 })

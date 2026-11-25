@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { diffFlags, flagsDigest, flagsFromBindings, formatFlagsChange, loadFlags, parseFlags } from './flags.mjs'
 import { evaluateGo, isVerifyOperation, parseDirectives, stagingAt } from './go-evidence.mjs'
-import { activeVersionId, plainLines } from './lib.mjs'
+import { activeVersionId, isCombinedStagingIdentity, plainLines, qualityFromRuns } from './lib.mjs'
 import { readiness, renderEvidence } from './release-evidence.mjs'
 import { classifyLane, fullCategory, laneForPath } from './risk-lane.mjs'
 import { evaluateLock, lockedSha } from './staging-lock.mjs'
@@ -79,6 +79,7 @@ describe('#505 risk lane floor and full categories', () => {
 const base = { target: 'm4', repo: REPO, ref: 'refs/heads/main', actor: OWNER, githubSha: A, mainHead: A }
 const wr = { path: '.github/workflows/quality.yml', event: 'push', headBranch: 'main', headRepo: REPO, conclusion: 'success', actor: OWNER, headSha: A }
 const free = { allowed: true, reason: 'LOCK_FREE' }
+const qOk = { state: 'success' }
 
 describe('#505 D1 trigger gate', () => {
   it('auto-preflight: trusted main push yields verify only (auto publish impossible)', () => {
@@ -108,7 +109,7 @@ describe('#505 D1 trigger gate', () => {
   })
 
   it('manual dispatch keeps the identity rules and refuses misuse loudly', () => {
-    expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', input: { sha: A, operation: 'publish' } })).toMatchObject({ run: true, mode: 'manual', operation: 'publish' })
+    expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', quality: qOk, input: { sha: A, operation: 'publish' } })).toMatchObject({ run: true, mode: 'manual', operation: 'publish' })
     for (const [over, reason] of [
       [{ input: { sha: B, operation: 'verify' } }, 'APPROVED_SHA_NOT_DISPATCHED_MAIN'],
       [{ input: { sha: A, operation: 'verify' }, ref: 'refs/heads/claude/x' }, 'REF_NOT_MAIN'],
@@ -117,14 +118,34 @@ describe('#505 D1 trigger gate', () => {
       [{ input: { sha: A, operation: 'verify' }, mainHead: B }, 'SUPERSEDED main=' + B],
       [{ input: { sha: A, operation: 'deploy' } }, 'OPERATION_INVALID'],
       [{ event: 'push', input: {} }, 'EVENT_NOT_ALLOWED'],
-    ]) expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', ...over })).toMatchObject({ run: false, fail: true, reason })
+    ]) expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', quality: qOk, ...over })).toMatchObject({ run: false, fail: true, reason })
   })
 
-  it('every Staging writer (publish-m3, legacy M2 publish, lock-uat) is refused while the lock does not allow it', () => {
+  it.each(['failure', 'missing', 'pending', 'unknown'])('manual verify/publish/Staging is refused when quality on main is %s (no CI bypass)', (state) => {
+    for (const [target, operation] of [['m4', 'verify'], ['m4', 'publish'], ['staging', 'publish-m3'], ['staging', 'lock-uat'], ['staging', 'prepare-m3']]) {
+      expect(evaluateTrigger({ ...base, target, event: 'workflow_dispatch', quality: { state }, lock: free, input: { sha: A, operation, uatIssue: '7' } }))
+        .toMatchObject({ run: false, fail: true, reason: `QUALITY_NOT_PASSED state=${state}` })
+    }
+    expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', input: { sha: A, operation: 'verify' } }).reason).toBe('QUALITY_NOT_PASSED state=UNKNOWN')
+  })
+
+  it('reads the latest trusted quality push run on main for the exact SHA', () => {
+    const q = (id, created_at, status, conclusion, over = {}) => ({ id, created_at, status, conclusion, path: '.github/workflows/quality.yml', event: 'push',
+      head_branch: 'main', head_sha: A, head_repository: { full_name: REPO }, ...over })
+    expect(qualityFromRuns([q(1, 't1', 'completed', 'success')], A)).toMatchObject({ state: 'success' })
+    expect(qualityFromRuns([q(1, 't1', 'completed', 'success'), q(2, 't2', 'completed', 'failure')], A).state).toBe('failure') // re-run failed
+    expect(qualityFromRuns([q(1, 't1', 'completed', 'success'), q(2, 't2', 'in_progress', null)], A).state).toBe('pending')
+    expect(qualityFromRuns([q(1, 't1', 'completed', 'success', { event: 'pull_request' })], A).state).toBe('missing')
+    expect(qualityFromRuns([q(1, 't1', 'completed', 'success', { head_repository: { full_name: 'evil/x' } })], A).state).toBe('missing')
+  })
+
+  it('every Staging writer is refused while the lock does not allow it; the legacy M2 publisher is disabled outright', () => {
     const locked = { allowed: false, reason: 'STAGING_UAT_LOCKED issue=#499 sha=x' }
-    const st = (operation, lock, extra = {}) => evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', input: { sha: A, operation, ...extra }, lock })
-    for (const op of ['publish-m3', 'publish', 'lock-uat']) expect(st(op, locked, { uatIssue: '7' })).toMatchObject({ run: false, fail: true, reason: locked.reason })
-    expect(st('publish', free)).toMatchObject({ run: false, fail: false, reason: 'LEGACY_M2_PUBLISH_LOCK_CHECKED' })
+    const sameHolder = { allowed: true, reason: 'LOCK_HELD_BY_REQUESTER_SAME_SHA' }
+    const st = (operation, lock, extra = {}) => evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', quality: qOk, input: { sha: A, operation, ...extra }, lock })
+    for (const op of ['publish-m3', 'lock-uat']) expect(st(op, locked, { uatIssue: '7' })).toMatchObject({ run: false, fail: true, reason: locked.reason })
+    // M2 writes a Public-only artifact under the same SHA tag: refused even when free or held by the same issue + SHA.
+    for (const lock of [free, sameHolder, locked]) expect(st('publish', lock, { uatIssue: '7' })).toMatchObject({ run: false, fail: true, reason: 'LEGACY_M2_PUBLISH_DISABLED' })
     expect(st('lock-uat', free)).toMatchObject({ fail: true, reason: 'UAT_ISSUE_REQUIRED' })
     expect(st('lock-uat', free, { uatIssue: '7' })).toMatchObject({ run: true, operation: 'lock-uat' })
     expect(st('prepare-m3', locked).run).toBe(true) // builds only, never writes Staging
@@ -153,6 +174,13 @@ describe('#505 fixed Staging UAT lock', () => {
     expect(evaluateLock({ holders: [twoInOne], requestIssue: 7, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
     expect(evaluateLock({ holders: [holder(1), holder(2)], candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
     expect(evaluateLock({ holders: undefined, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+  })
+
+  it('lock-uat pins only the combined M3 artifact: same SHA published by the legacy M2 publisher does not qualify', () => {
+    expect(isCombinedStagingIdentity({ sha: A, message: `M3 Admin ${A}` }, A)).toBe(true)
+    expect(isCombinedStagingIdentity({ sha: A, message: `M2 Public ${A}` }, A)).toBe(false)
+    expect(isCombinedStagingIdentity({ sha: B, message: `M3 Admin ${B}` }, A)).toBe(false)
+    expect(isCombinedStagingIdentity({ sha: A, message: '' }, A)).toBe(false)
   })
 
   it('ignores lock lines from untrusted authors, quotes, code and indented text; orders by time then id', () => {
@@ -194,9 +222,11 @@ const STAGE = stagingRun(201, A, '2026-11-25T13:02:12Z', '2026-11-25T13:06:19Z')
 const GO_AT = '2026-11-25T13:24:38Z'
 const goComment = (body, over = {}) => ({ ...ownerComment(body, GO_AT, over), id: 9001, html_url: goUrl(9001), issue_url: `https://api.github.com/repos/${REPO}/issues/${ISSUE}` })
 const GOOD = `Owner duyệt.\nGO-PROD ${A}\nVERIFY-RUN 101\nUAT PASS ${A}`
+const QUALITY = { id: 50, path: '.github/workflows/quality.yml', event: 'push', head_branch: 'main', head_sha: A, head_repository: { full_name: REPO },
+  status: 'completed', conclusion: 'success', created_at: '2026-11-25T12:56:00Z' }
 const goInput = (body = GOOD, over = {}) => ({
   url: goUrl(9001), comment: goComment(body), issue: { number: ISSUE, state: 'open' }, issueComments: [], m4Runs: [VERIFY],
-  stagingRuns: [STAGE], candidateSha: A, lane: 'standard', fullTouch: {}, flagsChange: '', currentRunId: 999, ...over,
+  stagingRuns: [STAGE], qualityRuns: [QUALITY], candidateSha: A, lane: 'standard', fullTouch: {}, flagsChange: '', currentRunId: 999, ...over,
 })
 const reasonsFor = (body, over) => evaluateGo(goInput(body, over)).reasons
 
@@ -219,6 +249,10 @@ describe('#505 D3-A GO-PROD evidence', () => {
     // Pre-deploy recheck sees a UAT FAIL posted after the GO.
     expect(reasonsFor(GOOD, { issueComments: [ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:30:00Z')] })).toContain('UAT_FAILED_AFTER_GO')
     expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101\nUAT-WAIVER ${A} ok`, { issueComments: [ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:30:00Z')] })).toContain('UAT_FAILED_AFTER_GO')
+    // Withdrawals count even when the comment was edited; approvals never do.
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:30:00Z', { updated_at: '2026-11-25T13:31:00Z' })] })).toContain('UAT_FAILED_AFTER_GO')
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`NO-GO ${A}`, '2026-11-25T13:40:00Z', { updated_at: '2026-11-25T13:45:00Z' })] })).toContain('GO_REVOKED')
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`GO-PROD ${B}`, '2026-11-25T13:40:00Z', { updated_at: '2026-11-25T13:45:00Z' })] })).toContain('GO_SUPERSEDED')
     const edited = ownerComment(`UAT PASS ${A}`, '2026-11-25T13:10:00Z', { updated_at: '2026-11-25T13:11:00Z' })
     expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [edited] })).toContain('UAT_EVIDENCE_MISSING')
     expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [ownerComment(`UAT PASS ${A}\nUAT FAIL ${A}`, '2026-11-25T13:10:00Z')] })).toContain('UAT_AMBIGUOUS')
@@ -232,9 +266,11 @@ describe('#505 D3-A GO-PROD evidence', () => {
     // Another SHA was deployed between the candidate's Staging and the UAT (overwritten UAT).
     const overwrite = stagingRun(202, B, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z')
     expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, overwrite] })).toContain('UAT_STAGING_NOT_CANDIDATE')
-    // Legacy M2 publish job counts as a Staging writer too.
+    // Legacy M2 publish job counts as a Staging writer too, and never as UAT evidence: even with the SAME SHA it is Public-only.
     const legacy = stagingRun(203, B, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z', 'success', 'publish')
     expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, legacy] })).toContain('UAT_STAGING_NOT_CANDIDATE')
+    const sameShaM2 = stagingRun(204, A, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z', 'success', 'publish')
+    expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, sameShaM2] })).toContain('UAT_STAGING_NOT_COMBINED_ARTIFACT')
     expect(reasonsFor(GOOD, { stagingRuns: [] })).toContain('UAT_PASS_WITHOUT_STAGING_DEPLOYMENT')
     expect(stagingAt([STAGE], '2026-11-25T13:10:00Z')).toMatchObject({ sha: A, conclusion: 'success' })
   })
@@ -286,22 +322,24 @@ describe('#505 D3-A GO-PROD evidence', () => {
     expect(reasonsFor(GOOD, { lane: undefined, fullTouch: null })).toEqual(expect.arrayContaining(['LANE_ACK_REQUIRED', 'FULL_SCOPE_UNKNOWN']))
   })
 
-  it('full lane: SQL/function changes need their own lane to have run (mutating, before GO) on a SHA containing the change', () => {
-    const touch = { sql: C }
-    const sqlRun = { id: 301, path: '.github/workflows/m6-production-sql-apply.yml', head_sha: B, head_branch: 'main', head_repository: { full_name: REPO },
-      event: 'workflow_dispatch', status: 'completed', conclusion: 'success', created_at: '2026-11-25T11:00:00Z', updated_at: '2026-11-25T11:02:00Z',
-      jobs: [{ name: 'lane', steps: stepsOf({ 'Verify the fresh backup evidence (mutating operations only; fail closed)': ['success'] }) }] }
-    const line = `FULL-EVIDENCE sql https://github.com/${REPO}/actions/runs/301`
-    const full = (body, over = {}) => evaluateGo(goInput(`${GOOD}\nLANE full${body}`, { lane: 'full', fullTouch: touch, fullRuns: { 301: sqlRun }, ancestry: { [`${C}...${B}`]: 'ahead' }, ...over }))
-    expect(full(`\n${line}`)).toMatchObject({ ok: true })
-    expect(full('').reasons).toContain('FULL_EVIDENCE_MISSING:sql')
-    expect(full(`\n${line}`, { ancestry: { [`${C}...${B}`]: 'behind' } }).reasons).toContain('FULL_EVIDENCE_STALE:sql')
-    const readOnly = { ...sqlRun, jobs: [{ name: 'lane', steps: stepsOf({ 'Verify the fresh backup evidence (mutating operations only; fail closed)': ['skipped'] }) }] }
-    expect(full(`\n${line}`, { fullRuns: { 301: readOnly } }).reasons).toContain('FULL_EVIDENCE_INVALID:sql') // preflight/plan only
-    expect(full(`\n${line}`, { fullRuns: { 301: { ...sqlRun, updated_at: '2026-11-25T14:00:00Z' } } }).reasons).toContain('FULL_EVIDENCE_INVALID:sql')
-    expect(full(`\nFULL-EVIDENCE sql https://github.com/evil/repo/actions/runs/301`).reasons).toContain('FULL_EVIDENCE_INVALID:sql')
-    // Binding-only changes ship in this artifact: the LANE full acknowledgement is the gate.
-    expect(evaluateGo(goInput(`${GOOD}\nLANE full`, { lane: 'full', fullTouch: { bindings: C } })).ok).toBe(true)
+  it('full scope (SQL, function, bindings) is never published by the Worker-only lane, whatever evidence is offered', () => {
+    // A successful M6 rollback or an unrelated single apply must not count as proof that a schema change was applied.
+    const offered = `${GOOD}\nLANE full\nFULL-EVIDENCE sql https://github.com/${REPO}/actions/runs/301`
+    for (const touch of [{ sql: C }, { function: C }, { bindings: C }, { sql: C, function: B }]) {
+      const r = evaluateGo(goInput(offered, { lane: 'full', fullTouch: touch }))
+      expect(r.ok).toBe(false)
+      expect(r.reasons.join()).toMatch(/^.*FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS:/)
+    }
+    // An Owner may still raise a Worker-only release to LANE full voluntarily.
+    expect(evaluateGo(goInput(`${GOOD}\nLANE full`, { lane: 'extended', fullTouch: {} })).ok).toBe(true)
+  })
+
+  it('needs a successful trusted quality push run on main for the exact SHA (recheck sees a later failure)', () => {
+    expect(reasonsFor(GOOD, { qualityRuns: [] })).toContain('QUALITY_NOT_PASSED state=missing')
+    expect(reasonsFor(GOOD, { qualityRuns: [{ ...QUALITY, conclusion: 'failure' }] })).toContain('QUALITY_NOT_PASSED state=failure')
+    expect(reasonsFor(GOOD, { qualityRuns: [QUALITY, { ...QUALITY, id: 51, created_at: '2026-11-25T13:30:00Z', status: 'in_progress', conclusion: null }] }))
+      .toContain('QUALITY_STATE_AMBIGUOUS_RUN_IN_PROGRESS')
+    expect(reasonsFor(GOOD, { qualityRuns: [{ ...QUALITY, event: 'pull_request' }] })).toContain('QUALITY_NOT_PASSED state=missing')
   })
 
   it('refuses a non-Owner, edited, superseded or revoked GO, a closed issue, a PR and a URL outside this repository', () => {
@@ -325,28 +363,33 @@ describe('#505 D3-A GO-PROD evidence', () => {
 })
 
 describe('#505 evidence summary', () => {
-  const ok = { CANDIDATE_SHA: A, MODE: 'auto', OPERATION: 'verify', JOB_STATUS: 'success', ACTIVE_OUTCOME: 'success', PRODUCTION_SHA: B,
-    ACTIVE_VERSION: live.id, RISK_LANE: 'extended', CHANGED_FILES: '3', CANONICAL_PRICING: 'on', CANONICAL_BRANDS: 'toto,inax', COMMERCE: 'on',
-    SERIES_VARIANT: 'off', FLAGS_DIGEST: 'abc', PACKAGED: 'success', MEDIA: 'skipped', RUN_ID: '101', FULL_TOUCH: '{}' }
-  it('prints the GO template, bound to this verify run, only when every applicable gate passed; no secrets', () => {
-    const md = renderEvidence(ok, { quality: '[1](u) success', staging: '[2](u) success' })
+  const ok = { CANDIDATE_SHA: A, MODE: 'auto', OPERATION: 'verify', JOB_STATUS: 'success', ACTIVE_OUTCOME: 'success', FLAGS_OUTCOME: 'success',
+    PRODUCTION_SHA: B, ACTIVE_VERSION: live.id, RISK_LANE: 'extended', CHANGED_FILES: '3', CANONICAL_PRICING: 'on', CANONICAL_BRANDS: 'toto,inax',
+    COMMERCE: 'on', SERIES_VARIANT: 'off', FLAGS_DIGEST: 'abc', PACKAGED: 'success', MEDIA: 'skipped', RUN_ID: '101', FULL_TOUCH: '{}' }
+  const links = { qualityState: 'success', quality: '[1](u)', staging: '[2](u) success' }
+  it('prints the GO template, bound to this verify run, only when READY; says READY is not UAT or GO; no secrets', () => {
+    const md = renderEvidence(ok, links)
     expect(md).toContain(`GO-PROD ${A}\nVERIFY-RUN 101\nLANE extended\nUAT PASS ${A}`)
     expect(md).toContain(`rollback_version_id=${live.id}`)
     expect(md).toContain('**READY**')
+    expect(md).toContain('it is not UAT acceptance and not a GO')
     expect(md).not.toMatch(/secret|token|password/i)
   })
   it.each([
-    ['job failed after the packaged step', { JOB_STATUS: 'failure' }, 'NOT READY'],
-    ['packaged verify failed', { PACKAGED: 'failure', JOB_STATUS: 'failure' }, 'NOT READY'],
-    ['manual media test failed (continue-on-error)', { MODE: 'manual', MEDIA: 'failure' }, 'PARTIAL'],
-    ['scope unknown', { PRODUCTION_SHA: 'UNKNOWN' }, 'PARTIAL'],
-    ['live flags unknown', { ACTIVE_OUTCOME: 'failure' }, 'PARTIAL'],
-    ['publish run', { OPERATION: 'publish' }, 'PARTIAL'],
-  ])('no GO template when %s', (_n, over, status) => {
-    expect(readiness({ ...ok, ...over }).status).toBe(status)
-    expect(renderEvidence({ ...ok, ...over })).not.toContain('GO-PROD')
-  })
-  it('lists the FULL-EVIDENCE lines a full-lane GO needs', () => {
-    expect(renderEvidence({ ...ok, RISK_LANE: 'full', FULL_TOUCH: JSON.stringify({ sql: C, bindings: C }) })).toContain('FULL-EVIDENCE sql <URL of the successful m6-production-sql-apply run>')
+    ['job failed after the packaged step', { JOB_STATUS: 'failure' }, {}],
+    ['packaged verify failed', { PACKAGED: 'failure', JOB_STATUS: 'failure' }, {}],
+    ['manual media test failed (continue-on-error)', { MODE: 'manual', MEDIA: 'failure' }, {}],
+    ['production SHA unknown', { PRODUCTION_SHA: 'UNKNOWN' }, {}],
+    ['production SHA known but diff unknown', { FULL_TOUCH: 'unknown' }, {}],
+    ['full scope (sql)', { RISK_LANE: 'full', FULL_TOUCH: JSON.stringify({ sql: C }) }, {}],
+    ['live flags unknown', { ACTIVE_OUTCOME: 'failure' }, {}],
+    ['flags file failed', { FLAGS_OUTCOME: 'failure' }, {}],
+    ['publish run', { OPERATION: 'publish' }, {}],
+    ['quality failed', {}, { qualityState: 'failure' }],
+    ['quality missing', {}, { qualityState: 'missing' }],
+    ['quality pending', {}, { qualityState: 'pending' }],
+  ])('NOT READY and no GO template when %s', (_n, over, linkOver) => {
+    expect(readiness({ ...ok, ...over }, { ...links, ...linkOver }).status).toBe('NOT READY')
+    expect(renderEvidence({ ...ok, ...over }, { ...links, ...linkOver })).not.toContain('GO-PROD')
   })
 })

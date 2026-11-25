@@ -4,19 +4,20 @@
 // The auto lane is the CUMULATIVE release scope (live Production SHA → head), so a pending SQL/function/binding change from an
 // earlier merge keeps every later push out of the Worker-only automation, and multi-commit pushes are covered. UNKNOWN = full.
 import { execFileSync } from 'node:child_process'
-import { DEFAULT_REPOSITORY, OWNER, QUALITY_WORKFLOW, SHA, appendSummary, currentMainHead, github, isMain, writeOutputs } from './lib.mjs'
+import { DEFAULT_REPOSITORY, OWNER, QUALITY_WORKFLOW, SHA, appendSummary, currentMainHead, github, isMain, qualityState, writeOutputs } from './lib.mjs'
 import { classifyLane, changedPaths, releaseScope } from './risk-lane.mjs'
 import { lockStatus, validateUatIssue } from './staging-lock.mjs'
 
 const OPERATIONS = { m4: ['verify', 'publish'], staging: ['prepare-m3', 'publish-m3', 'lock-uat'] }
-// Legacy M2 snapshot operations run in their own jobs; only `publish` writes Staging, so it must pass the same lock and freshness gate.
+// Legacy M2 snapshot operations run in their own jobs. Its `publish` writes a Public-only artifact over the combined fixed Staging
+// under the same SHA tag, so it is DISABLED (#505; archival is #510). Recovery: re-enable only by a reviewed PR with Owner approval.
 const LEGACY_STAGING = ['verify-read-access', 'capture-snapshot', 'prepare-preview', 'publish']
 
 /**
  * Pure decision. Returns { run, fail, sha, mode, operation, uatIssue, reason }.
  * `fail` = refuse loudly (manual misuse); `run:false` without fail = skip quietly with a reason (auto path, legacy jobs).
  */
-export function evaluateTrigger({ target, event, repo, ref, actor, githubSha, input = {}, workflowRun = {}, mainHead, scopeLane, lock }) {
+export function evaluateTrigger({ target, event, repo, ref, actor, githubSha, input = {}, workflowRun = {}, mainHead, scopeLane, lock, quality }) {
   const skip = (reason) => ({ run: false, fail: false, reason })
   const refuse = (reason) => ({ run: false, fail: true, reason })
   if (!OPERATIONS[target]) return refuse('TARGET_INVALID')
@@ -27,14 +28,15 @@ export function evaluateTrigger({ target, event, repo, ref, actor, githubSha, in
   if (event === 'workflow_dispatch') {
     if (actor !== OWNER) return refuse('ACTOR_NOT_ALLOWED')
     const legacy = target === 'staging' && LEGACY_STAGING.includes(input.operation)
-    if (legacy && input.operation !== 'publish') return skip('LEGACY_M2_OPERATION_NO_STAGING_WRITE')
-    if (!legacy && !OPERATIONS[target].includes(input.operation)) return refuse('OPERATION_INVALID')
+    if (legacy && input.operation === 'publish') return refuse('LEGACY_M2_PUBLISH_DISABLED')
+    if (legacy) return skip('LEGACY_M2_OPERATION_NO_STAGING_WRITE')
+    if (!OPERATIONS[target].includes(input.operation)) return refuse('OPERATION_INVALID')
     if (input.sha !== githubSha) return refuse('APPROVED_SHA_NOT_DISPATCHED_MAIN')
     if (mainHead !== githubSha) return refuse(`SUPERSEDED main=${mainHead ?? 'UNKNOWN'}`)
-    const writesStaging = target === 'staging' && ['publish-m3', 'publish', 'lock-uat'].includes(input.operation)
-    if (writesStaging && !lock?.allowed) return refuse(lock?.reason ?? 'LOCK_STATE_UNKNOWN')
+    // No CI bypass through manual dispatch: the exact SHA needs a successful trusted `quality` push run on main.
+    if (quality?.state !== 'success') return refuse(`QUALITY_NOT_PASSED state=${quality?.state ?? 'UNKNOWN'}`)
+    if (target === 'staging' && ['publish-m3', 'lock-uat'].includes(input.operation) && !lock?.allowed) return refuse(lock?.reason ?? 'LOCK_STATE_UNKNOWN')
     if (input.operation === 'lock-uat' && !input.uatIssue) return refuse('UAT_ISSUE_REQUIRED')
-    if (legacy) return skip('LEGACY_M2_PUBLISH_LOCK_CHECKED') // M2 jobs run on their own; this gate only had to allow them
     return { run: true, fail: false, sha: githubSha, mode: 'manual', operation: input.operation, uatIssue: input.uatIssue ?? '', reason: 'MANUAL_DISPATCH' }
   }
 
@@ -76,6 +78,7 @@ async function main() {
     scope = await releaseScope(env.WR_HEAD_SHA)
   }
   const candidateSha = event === 'workflow_run' ? env.WR_HEAD_SHA : env.GITHUB_SHA
+  const quality = event === 'workflow_dispatch' ? await qualityState(request, env.GITHUB_SHA, repo).catch(() => ({ state: 'unknown' })) : undefined
   let uatIssue = env.INPUT_UAT_ISSUE ?? ''
   let lock
   if (target === 'staging') {
@@ -85,14 +88,14 @@ async function main() {
     lock = await lockStatus(request, { requestIssue: uatIssue === '' ? null : uatIssue, candidateSha, repo })
   }
   const decision = evaluateTrigger({
-    target, event, repo, ref: env.GITHUB_REF, actor: env.GITHUB_ACTOR, githubSha: env.GITHUB_SHA, mainHead, scopeLane: scope?.lane, lock,
+    target, event, repo, ref: env.GITHUB_REF, actor: env.GITHUB_ACTOR, githubSha: env.GITHUB_SHA, mainHead, scopeLane: scope?.lane, lock, quality,
     input: { sha: env.INPUT_SHA, operation: env.INPUT_OPERATION, uatIssue: String(uatIssue) },
     workflowRun: { path: env.WR_PATH, event: env.WR_EVENT, headBranch: env.WR_HEAD_BRANCH, headRepo: env.WR_HEAD_REPO,
       conclusion: env.WR_CONCLUSION, actor: env.WR_ACTOR, headSha: env.WR_HEAD_SHA },
   })
   writeOutputs({ run: String(decision.run), sha: decision.sha ?? '', mode: decision.mode ?? '', operation: decision.operation ?? '',
     uat_issue: decision.uatIssue ?? '', reason: decision.reason })
-  appendSummary(`### ${target === 'm4' ? 'M4 Production lane' : 'Fixed Staging'} trigger gate\n- Event \`${event}\`, decision **${decision.run ? 'RUN' : decision.fail ? 'REFUSED' : 'SKIPPED'}** — ${decision.reason}${decision.sha ? `\n- Candidate \`${decision.sha}\`, mode ${decision.mode}, operation ${decision.operation}` : ''}${scope ? `\n- Cumulative scope: Production \`${scope.productionSha}\` → head, lane **${scope.lane}**${scope.unknown ? ' (UNKNOWN → full)' : ''}; this push alone: ${pushLane}` : ''}${lock ? `\n- UAT lock: ${lock.reason}` : ''}`)
+  appendSummary(`### ${target === 'm4' ? 'M4 Production lane' : 'Fixed Staging'} trigger gate\n- Event \`${event}\`, decision **${decision.run ? 'RUN' : decision.fail ? 'REFUSED' : 'SKIPPED'}** — ${decision.reason}${decision.sha ? `\n- Candidate \`${decision.sha}\`, mode ${decision.mode}, operation ${decision.operation}` : ''}${scope ? `\n- Cumulative scope: Production \`${scope.productionSha}\` → head, lane **${scope.lane}**${scope.unknown ? ' (UNKNOWN → full)' : ''}; this push alone: ${pushLane}` : ''}${quality ? `\n- quality on main for this SHA: ${quality.state}${quality.runId ? ` (run ${quality.runId})` : ''}` : ''}${lock ? `\n- UAT lock: ${lock.reason}` : ''}`)
   console.error(`TRIGGER_GATE target=${target} run=${decision.run} fail=${decision.fail} reason=${decision.reason}`)
   if (decision.fail) process.exit(1)
 }
