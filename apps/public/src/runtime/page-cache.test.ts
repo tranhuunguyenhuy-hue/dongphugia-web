@@ -89,4 +89,13 @@ describe('page cache plan',()=>{
     expect(on).not.toBe(off); expect(pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null,'production:toto,inax').url).not.toBe(on)
     expect(()=>pageCacheKey(req('/'),planPageCache(req('/'))!,SHA,null,'production:<x>')).toThrow()
   })
+  it('#470: pricing and commerce flags can be ON together (worker builds `<pricing>:<brands>:commerce`) — previously every cacheable page answered 503', () => {
+    const plan=planPageCache(req('/thiet-bi-ve-sinh/chau/a'))!
+    const key=(variant:string)=>pageCacheKey(req('/thiet-bi-ve-sinh/chau/a'),plan,SHA,null,variant).url
+    const both=key('production:toto,inax:commerce')
+    expect(both).not.toBe(key('production:toto,inax')); expect(both).not.toBe(key('off:commerce'))
+    expect(key('off:commerce')).not.toBe(key('off')); expect(() => key('test:commerce')).not.toThrow()
+    for (const bad of ['production:toto:inax','production:toto,inax:commerce:commerce','production:<x>:commerce','production:toto,inax:evil'])
+      expect(()=>key(bad)).toThrow('PUBLIC_WORKER_CACHE_PRICING_VARIANT_INVALID')
+  })
 })
