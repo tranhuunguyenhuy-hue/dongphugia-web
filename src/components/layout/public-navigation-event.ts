@@ -6,9 +6,10 @@ export type PublicNavigationStart = CustomEvent<{
 }>
 
 export function publicRouteKey(pathname: string, search: string) {
+    const path = pathname.replace(/\/+$/, '') || '/'
     // Match the router's URLSearchParams serialization (e.g. spaces and %20).
     const query = new URLSearchParams(search).toString()
-    return query ? `${pathname}?${query}` : pathname
+    return query ? `${path}?${query}` : path
 }
 
 export function publicPageUrl(href: string) {

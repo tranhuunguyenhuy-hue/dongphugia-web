@@ -12,6 +12,7 @@ const LOADING_MESSAGE_MS = 12_000
 type Navigation = {
     href: string
     key: string
+    supersededKeys: ReadonlySet<string>
     variant: boolean
     document: boolean
     status: 'pending' | 'slow' | 'offline'
@@ -65,8 +66,13 @@ export function PublicNavigationFeedback({ children }: { children: ReactNode }) 
     }, [])
 
     const onCommit = useCallback((key: string) => {
-        if (committedRoute.current !== null && committedRoute.current !== key) update(null)
+        const routeChanged = committedRoute.current !== null && committedRoute.current !== key
         committedRoute.current = key
+        const latest = active.current
+        if (!routeChanged || !latest) return
+        // An earlier render can commit after the next intent starts. A different
+        // destination outside that chain can be the current router's redirect.
+        if (key === latest.key || !latest.supersededKeys.has(key)) update(null)
     }, [update])
 
     useEffect(() => {
@@ -77,9 +83,12 @@ export function PublicNavigationFeedback({ children }: { children: ReactNode }) 
                 update(null)
                 return
             }
+            const previous = active.current
+            const supersededKeys = new Set(previous?.supersededKeys)
+            if (previous && previous.key !== key) supersededKeys.add(previous.key)
             const variant = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[data-public-variant]'))
-                .some(link => link.pathname === url.pathname && link.search === url.search)
-            update({ href: url.href, key, variant, document: isDocument, status: navigator.onLine ? 'pending' : 'offline' })
+                .some(link => publicRouteKey(link.pathname, link.search) === key)
+            update({ href: url.href, key, supersededKeys, variant, document: isDocument, status: navigator.onLine ? 'pending' : 'offline' })
         }
         const onRouterStart = (event: Event) => {
             const { href } = (event as PublicNavigationStart).detail
@@ -159,7 +168,7 @@ export function ProductVariantLink({ href, current, className, children }: {
     children: ReactNode
 }) {
     const navigation = useContext(NavigationContext)
-    const pending = !current && navigation?.status === 'pending' && navigation.variant && navigation.key === href
+    const pending = !current && navigation?.status === 'pending' && navigation.variant && navigation.key === publicRouteKey(href, '')
     return (
         <Link href={href} prefetch={false} data-public-variant aria-busy={pending || undefined}
             aria-current={current ? 'page' : undefined}

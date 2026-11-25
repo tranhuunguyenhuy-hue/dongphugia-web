@@ -61,10 +61,20 @@ describe('Public navigation feedback', () => {
         expect(screen.getByRole('link', { name: 'b' })).toHaveAttribute('aria-busy', 'true')
         expect(fireEvent.click(screen.getByRole('link', { name: 'b' }))).toBe(false)
 
-        start('/sku-c')
+        start('/sku-c/')
         expect(screen.getByRole('link', { name: 'b' })).not.toHaveAttribute('aria-busy')
         expect(screen.getByRole('link', { name: 'c' })).toHaveAttribute('aria-busy', 'true')
+        // The router can finish a render already queued for B after starting C.
+        router.pathname = '/sku-b'
+        window.history.pushState(null, '', router.pathname)
+        rerender(page())
+        expect(screen.getByRole('link', { current: 'page' })).toHaveAttribute('href', window.location.pathname)
+        expect(screen.getByRole('link', { name: 'c' })).toHaveAttribute('aria-busy', 'true')
+        expect(fireEvent.click(screen.getByRole('link', { name: 'c' }))).toBe(false)
+        expect(screen.getByRole('status')).toHaveTextContent('Đang tải biến thể')
+
         router.pathname = '/sku-c'
+        window.history.pushState(null, '', router.pathname)
         rerender(page())
         expect(screen.getByRole('link', { name: 'c' })).toHaveAttribute('aria-current', 'page')
         expect(screen.getByRole('main')).not.toHaveAttribute('aria-busy')
@@ -82,6 +92,61 @@ describe('Public navigation feedback', () => {
         start('/sku-b')
         start('/sku-a?query=mau+thu', 'traverse')
         expect(screen.getByRole('status')).toBeEmptyDOMElement()
+    })
+
+    it('settles the latest redirect after an earlier destination commits', () => {
+        const { rerender } = render(page())
+        start('/sku-b/')
+        start('/cu/sku-c')
+        router.pathname = '/sku-b'
+        rerender(page())
+        expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+        expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('b')
+
+        router.pathname = '/sku-c'
+        rerender(page())
+        expect(screen.getByRole('main')).not.toHaveAttribute('aria-busy')
+        expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('c')
+    })
+
+    it('lets Back and Forward finish at a destination requested earlier in the chain', () => {
+        const { rerender } = render(page())
+        start('/sku-b')
+        start('/sku-c')
+        start('/sku-b', 'traverse')
+        router.pathname = '/sku-b'
+        rerender(page())
+        expect(screen.getByRole('status')).toBeEmptyDOMElement()
+        expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('b')
+
+        start('/sku-c', 'traverse')
+        router.pathname = '/sku-c'
+        rerender(page())
+        expect(screen.getByRole('status')).toBeEmptyDOMElement()
+        expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('c')
+    })
+
+    it('keeps the latest retry URL and deadline after an earlier destination commits', () => {
+        vi.useFakeTimers()
+        const { rerender } = render(page())
+        start('/sku-b')
+        act(() => vi.advanceTimersByTime(10_000))
+        start('/sku-c?x=1')
+        router.pathname = '/sku-b'
+        rerender(page())
+        act(() => vi.advanceTimersByTime(2_000))
+        expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+
+        act(() => vi.advanceTimersByTime(10_000))
+        expect(screen.getByRole('main')).not.toHaveAttribute('aria-busy')
+        expect(screen.getByRole('link', { name: 'Thử lại' }).getAttribute('href')).toContain('/sku-c?x=1')
+
+        start('/sku-c?x=1')
+        router.pathname = '/sku-c'
+        router.search = 'x=1'
+        rerender(page())
+        expect(screen.getByRole('status')).toBeEmptyDOMElement()
+        expect(screen.getByRole('link', { current: 'page' })).toHaveTextContent('c')
     })
 
     it('offers a retry to the original URL when the wait is long', () => {
