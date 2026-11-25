@@ -19,7 +19,7 @@ const modules = [
       connect(){return Promise.resolve()}
       query(sql,values){return new Promise((resolve,reject)=>{
         this.reject=reject;
-        this.timer=setTimeout(()=>values[0]==='fail'?reject(new Error('simulated read failure')):resolve({rows:[{id:7}]}),40);
+        this.timer=setTimeout(()=>String(values?.[0]).startsWith('fail')?reject(new Error('simulated read failure')):resolve({rows:[{id:7}]}),40);
       })}
       end(){clearTimeout(this.timer);this.reject?.(new Error('closed'));return Promise.resolve()}
     }` },
@@ -33,13 +33,14 @@ const modules = [
         const url=new URL(request.url);
         if(url.pathname==='/stream')return new Response(new ReadableStream({async start(stream){
           await new Promise(resolve=>setTimeout(resolve,10));
-          await Promise.all(Array.from({length:12},()=>readPublicRows('SELECT id FROM dpg_app.products')));
+          await Promise.all(Array.from({length:12},(_,i)=>readPublicRows('SELECT id FROM dpg_app.products WHERE id = $1',[i])));
           const scope=publicReadScope();
           stream.enqueue(new TextEncoder().encode(JSON.stringify({fulfilled:12,active:scope.active,peak:scope.peak,queued:scope.waiters.length})));stream.close();
         }}),{headers:{'Content-Type':'text/html'}});
         const timer=url.pathname==='/cancel'?setTimeout(abort,10):undefined;
-        const results=await Promise.allSettled(Array.from({length:url.pathname==='/capacity'?40:12},()=>
-          readPublicRows('SELECT id FROM dpg_app.products WHERE sku = $1',[url.pathname==='/error'?'fail':'ok'])));
+        // #457: identical bound SELECTs share one read per request, so capacity paths use distinct parameters.
+        const results=await Promise.allSettled(Array.from({length:url.pathname==='/capacity'?40:12},(_,i)=>
+          readPublicRows('SELECT id FROM dpg_app.products WHERE sku = $1',[(url.pathname==='/error'?'fail-':'ok-')+(url.pathname==='/dedupe'?0:i)])));
         clearTimeout(timer);request.signal.removeEventListener('abort',abort);
         const scope=publicReadScope();
         const body=JSON.stringify({fulfilled:results.filter(r=>r.status==='fulfilled').length,
@@ -56,7 +57,7 @@ const mf = new Miniflare(convertV4MiniflareOptions({
     bindings: { PUBLIC_CATALOGUE_SOURCE: 'postgresql', PUBLIC_DB: { connectionString: 'postgresql://test.invalid/test' } },
   }],
 }))
-async function probe(path, rsc = false) {
+async function probe(path, rsc = false, peak = 4) {
   const response = await mf.dispatchFetch('http://local' + path, { headers: rsc ? {
     RSC: '1', 'Next-Router-Prefetch': '1', 'Next-Router-Segment-Prefetch': '1', 'Next-URL': '/thiet-bi-ve-sinh/bon-cau.',
   } : {} })
@@ -66,7 +67,7 @@ async function probe(path, rsc = false) {
   const data = JSON.parse(text)
   assert.equal(data.active, 0)
   assert.equal(data.queued, 0)
-  assert.equal(data.peak, 4)
+  assert.equal(data.peak, peak)
   return data
 }
 try {
@@ -79,6 +80,8 @@ try {
   assert.equal(concurrent[3].errors.length, 12)
   assert.equal(concurrent[4].fulfilled, 12)
   assert.equal((await probe('/stream')).fulfilled, 12)
+  const dedupe = await probe('/dedupe', true, 1)
+  assert.equal(dedupe.fulfilled, 12)
   const capacity = await probe('/capacity')
   assert.equal(capacity.fulfilled, 36)
   assert.deepEqual(capacity.errors, Array(4).fill('PUBLIC_DATABASE_READ_CAPACITY_EXCEEDED'))
@@ -88,7 +91,7 @@ try {
   await canceled
   const subsequent = await probe('/independent', true)
   assert.equal(subsequent.fulfilled, 12)
-  console.log('PUBLIC_DB_WORKERD_REGRESSION PASS concurrent=5 cancelled=2 error_cleanup=PASS peak_per_request=4 queued_limit=32 subsequent=PASS')
+  console.log('PUBLIC_DB_WORKERD_REGRESSION PASS concurrent=5 cancelled=2 error_cleanup=PASS same_statement_dedupe=PASS peak_per_request=4 queued_limit=32 subsequent=PASS')
 } finally {
   await mf.dispose()
 }
