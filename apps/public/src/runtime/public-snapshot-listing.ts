@@ -15,6 +15,7 @@ import {
 } from './snapshot-listing-contract'
 
 const SAFE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+const CANONICAL_CARD_PRICE_KEYS = ['original_price', 'list_price', 'sale_price', 'online_discount_amount', 'final_online_price', 'price_provenance'] as const
 
 export async function getPublicSnapshotListingShard(
     category: string,
@@ -57,6 +58,10 @@ export async function getPublicSnapshotListingShard(
             canonical_category_slug: p.canonical_category_slug,
             canonical_subcategory_slug: p.canonical_subcategory_slug,
             url: p.url,
+            // #470: canonical-governed cards carry the six restored price fields; keep them (all or none) so the contract can validate the price.
+            ...(CANONICAL_CARD_PRICE_KEYS.every(key => Object.hasOwn(p, key))
+                ? Object.fromEntries(CANONICAL_CARD_PRICE_KEYS.map(key => [key, (p as unknown as Record<string, unknown>)[key]]))
+                : {}),
         }))
         if (products.some(p => !isPublicSnapshotListingProduct(p, category, listing))) {
             throw new Error('PUBLIC_DATABASE_LISTING_INVALID')
