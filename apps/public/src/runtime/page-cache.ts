@@ -75,7 +75,7 @@ export function pageCacheKey(request:Request,plan:PageCachePlan,sourceCommit:str
   if(catalogueCheckpoint)key.searchParams.set('__dpg_catalogue',catalogueCheckpoint)
   if(plan.search)key.searchParams.set('__dpg_q',plan.search)
   if(pricingVariant&&pricingVariant!=='off'){
-    if(!/^[a-z]+(?::[a-z0-9,-]{1,200})?$/.test(pricingVariant))throw new Error('PUBLIC_WORKER_CACHE_PRICING_VARIANT_INVALID')
+    if(!/^[a-z]+(?::[a-z0-9,-]{1,200})?(?::commerce)?$/.test(pricingVariant))throw new Error('PUBLIC_WORKER_CACHE_PRICING_VARIANT_INVALID')
     key.searchParams.set('__dpg_pricing',pricingVariant)
   }
   return new Request(key.toString(),{method:'GET'})
