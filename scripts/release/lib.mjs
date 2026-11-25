@@ -11,20 +11,30 @@ export const ACCOUNT_ID = 'd54f3402b9d112ab64d6135e0e3f1fb1'
 export const M4_WORKFLOW = '.github/workflows/m4-production-admin-release.yml'
 export const STAGING_WORKFLOW = '.github/workflows/v1-fixed-preview.yml'
 export const QUALITY_WORKFLOW = '.github/workflows/quality.yml'
+export const SQL_WORKFLOW = '.github/workflows/m6-production-sql-apply.yml'
+export const FUNCTION_WORKFLOW = '.github/workflows/m4-production-function-deploy.yml'
+// Parent Worker id that owns the fixed `staging` preview (same constant as publish-m3-fixed-preview.mjs).
+export const STAGING_PARENT_WORKER_ID = 'e50647603f1b4e73bed14e2e79c15d26'
 
-// Trimmed lines of a Markdown comment that are NOT inside a fenced code block and NOT a quote: only these may carry directives.
+// Lines of a Markdown comment that may carry directives. Directives must start at column 0, so indented lines (indented code,
+// nested list items) never count; fenced blocks (up to 3 leading spaces, ``` or ~~~, closed by the same or longer run), quotes and
+// HTML comments are dropped. Trailing whitespace is trimmed; leading whitespace is kept so the column-0 rule can apply.
 export function plainLines(body) {
+  const text = String(body ?? '').replace(/\r\n?/g, '\n').replace(/<!--[\s\S]*?(-->|$)/g, '')
   const lines = []
   let fence = null
-  for (const raw of String(body ?? '').replace(/\r\n?/g, '\n').split('\n')) {
-    const line = raw.trim()
-    const marker = line.match(/^(```|~~~)/)?.[1]
-    if (marker) { fence = fence === marker ? null : (fence ?? marker); continue }
-    if (fence || line.startsWith('>')) continue
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s+$/, '')
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})/)?.[1]
+    if (fence) { if (marker && marker[0] === fence[0] && marker.length >= fence.length && !line.slice(line.indexOf(marker) + marker.length).trim()) fence = null; continue }
+    if (marker) { fence = marker; continue }
+    if (/^ {0,3}>/.test(line) || /^( {4}|\t)/.test(line)) continue
     lines.push(line)
   }
   return lines
 }
+
+export const byTime = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : Number(a.id) - Number(b.id))
 
 export const isOwnerComment = (c) => c?.author_association === 'OWNER' && c?.user?.login === OWNER
 
@@ -114,4 +124,17 @@ export async function currentMainHead(request, repo = DEFAULT_REPOSITORY) {
 
 export function isMain(module) {
   return Boolean(process.argv[1]) && module === pathToFileURL(process.argv[1]).href
+}
+
+// Live identity of fixed Staging: the `workers/tag` (source SHA set by both publishers) of the newest deployment of the
+// `staging` preview. Read-only; anything unexpected is UNKNOWN (throws).
+export async function liveStagingSha(request, previewName = 'staging') {
+  const previews = await request(`/workers/workers/${STAGING_PARENT_WORKER_ID}/previews`)
+  const matches = (Array.isArray(previews) ? previews : []).filter((p) => p.name === previewName)
+  if (matches.length !== 1) throw new Error('STAGING_PREVIEW_UNKNOWN')
+  const deployments = await request(`/workers/workers/${STAGING_PARENT_WORKER_ID}/previews/${matches[0].id}/deployments`)
+  const latest = (Array.isArray(deployments) ? deployments : []).reduce((a, d) => (!a || d.created_on > a.created_on ? d : a), null)
+  const tag = latest?.annotations?.['workers/tag']
+  if (!SHA.test(tag ?? '')) throw new Error('STAGING_IDENTITY_UNKNOWN')
+  return { sha: tag, deploymentId: latest.id, createdOn: latest.created_on }
 }

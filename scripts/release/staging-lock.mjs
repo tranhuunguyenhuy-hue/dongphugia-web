@@ -1,39 +1,47 @@
-// #505 fixed Staging UAT lock. Holder = the one OPEN issue labelled `staging-uat-lock`; bound SHA = the latest trusted
-// `STAGING-UAT-LOCK <sha>` line on it (Owner, or this workflow's bot after a successful publish). Every Staging publish (manual and
-// auto) checks it before building and again right before deploying, under the `m2-fixed-staging` concurrency group.
-// Never auto-released: the agent/Owner removes the label after the Owner's UAT verdict. Ambiguous or unreadable state = locked.
-import { DEFAULT_REPOSITORY, SHA, appendSummary, currentMainHead, github, githubList, isMain, isOwnerComment, plainLines, writeOutputs } from './lib.mjs'
+// #505 fixed Staging UAT lock. Holder = the one OPEN issue labelled `staging-uat-lock`; bound SHA = the newest trusted
+// `STAGING-UAT-LOCK <sha>` line on it (Owner, or this workflow's bot). EVERY Staging publisher (M3 publish-m3, legacy M2 publish,
+// auto and manual) checks it before building and again right before deploying, under the `m2-fixed-staging` concurrency group.
+// While held, only the holder may redeploy, and only the SAME SHA (retry). A different SHA needs an explicit release (remove the
+// label) and a re-acquire. A label without exactly one valid SHA is UNKNOWN and blocks everyone. Never auto-released.
+import {
+  DEFAULT_REPOSITORY, SHA, appendSummary, byTime, cloudflare, currentMainHead, github, githubList, isMain, isOwnerComment,
+  liveStagingSha, plainLines, writeOutputs,
+} from './lib.mjs'
 
 export const LOCK_LABEL = 'staging-uat-lock'
 const LOCK_LINE = /^STAGING-UAT-LOCK ([0-9a-f]{40})$/
 const isWorkflowBot = (c) => c?.user?.login === 'github-actions[bot]' && c?.user?.type === 'Bot'
 
+/** Newest trusted lock SHA; `ambiguous` when one comment names two different SHAs. Untrusted authors, quotes, code are ignored. */
 export function lockedSha(comments) {
   let sha = null
-  for (const c of [...(comments ?? [])].sort((a, b) => (a.created_at < b.created_at ? -1 : 1))) {
+  for (const c of [...(comments ?? [])].sort(byTime)) {
     if (!isOwnerComment(c) && !isWorkflowBot(c)) continue
-    for (const line of plainLines(c.body)) {
-      const m = line.match(LOCK_LINE)
-      if (m) sha = m[1]
-    }
+    const shas = new Set(plainLines(c.body).map((line) => line.match(LOCK_LINE)?.[1]).filter(Boolean))
+    if (shas.size > 1) return { sha: null, ambiguous: true }
+    if (shas.size === 1) sha = [...shas][0]
   }
-  return sha
+  return { sha, ambiguous: false }
 }
 
-/** holders: open issues carrying the label, each with `comments`. requestIssue: issue a manual dispatch publishes for (or null). */
-export function evaluateLock({ holders, requestIssue = null }) {
+/** holders: open issues carrying the label (each with comments). requestIssue: issue a manual publish/lock is for (or null). */
+export function evaluateLock({ holders, requestIssue = null, candidateSha }) {
   if (!Array.isArray(holders)) return { state: 'unknown', allowed: false, reason: 'LOCK_STATE_UNKNOWN' }
   if (holders.length === 0) return { state: 'free', allowed: true, reason: 'LOCK_FREE' }
-  if (holders.length > 1) {
-    return { state: 'unknown', allowed: false, reason: `LOCK_AMBIGUOUS holders=${holders.map((h) => `#${h.number}`).join(',')}` }
-  }
+  if (holders.length > 1) return { state: 'unknown', allowed: false, reason: `LOCK_AMBIGUOUS holders=${holders.map((h) => `#${h.number}`).join(',')}` }
   const [holder] = holders
-  const sha = lockedSha(holder.comments)
-  if (requestIssue !== null && Number(requestIssue) === holder.number) {
-    return { state: 'held', holder: holder.number, lockedSha: sha, allowed: true, reason: 'LOCK_HELD_BY_REQUESTER' }
+  const { sha, ambiguous } = lockedSha(holder.comments)
+  if (ambiguous || !sha) {
+    return { state: 'unknown', holder: holder.number, allowed: false,
+      reason: `LOCK_SHA_UNKNOWN issue=#${holder.number} (post one STAGING-UAT-LOCK <sha> line or remove the label)` }
   }
-  return { state: 'held', holder: holder.number, lockedSha: sha, allowed: false,
-    reason: `STAGING_UAT_LOCKED issue=#${holder.number} sha=${sha ?? 'UNKNOWN'}` }
+  const mine = requestIssue !== null && Number(requestIssue) === holder.number
+  if (mine && candidateSha === sha) return { state: 'held', holder: holder.number, lockedSha: sha, allowed: true, reason: 'LOCK_HELD_BY_REQUESTER_SAME_SHA' }
+  if (mine) {
+    return { state: 'held', holder: holder.number, lockedSha: sha, allowed: false,
+      reason: `STAGING_UAT_LOCKED_DIFFERENT_SHA issue=#${holder.number} locked=${sha} candidate=${candidateSha} (release the label, then re-acquire)` }
+  }
+  return { state: 'held', holder: holder.number, lockedSha: sha, allowed: false, reason: `STAGING_UAT_LOCKED issue=#${holder.number} sha=${sha}` }
 }
 
 export async function readHolders(request, repo = DEFAULT_REPOSITORY) {
@@ -41,8 +49,8 @@ export async function readHolders(request, repo = DEFAULT_REPOSITORY) {
   return Promise.all(issues.map(async (issue) => ({ number: issue.number, comments: await githubList(request, `/repos/${repo}/issues/${issue.number}/comments`) })))
 }
 
-export async function lockStatus(request, { requestIssue = null, repo = DEFAULT_REPOSITORY } = {}) {
-  try { return evaluateLock({ holders: await readHolders(request, repo), requestIssue }) } catch (error) {
+export async function lockStatus(request, { requestIssue = null, candidateSha, repo = DEFAULT_REPOSITORY } = {}) {
+  try { return evaluateLock({ holders: await readHolders(request, repo), requestIssue, candidateSha }) } catch (error) {
     return { state: 'unknown', allowed: false, reason: `LOCK_STATE_UNKNOWN ${error.message}` }
   }
 }
@@ -62,30 +70,38 @@ async function main() {
   const request = github()
   const sha = env.CANDIDATE_SHA
   if (!SHA.test(sha ?? '')) throw new Error('CANDIDATE_SHA_INVALID')
-  const manual = env.MODE === 'manual'
+  const issue = await validateUatIssue(request, env.UAT_ISSUE, repo)
+  const head = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
+  const lock = await lockStatus(request, { requestIssue: issue, candidateSha: sha, repo })
+  const blocked = head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
   if (command === 'recheck') {
-    // Right before deploy: still the newest main (an old queued run must not overwrite a newer one) and the lock still allows it.
-    const issue = await validateUatIssue(request, env.UAT_ISSUE, repo)
-    const head = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
-    const lock = await lockStatus(request, { requestIssue: issue, repo })
-    const reason = head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
-    writeOutputs({ go: reason ? 'false' : 'true', reason: reason ?? lock.reason })
-    appendSummary(`- Staging deploy recheck: ${reason ? `**NOT DEPLOYED** — ${reason}` : `PASS (${lock.reason})`}`)
-    console.error(`STAGING_RECHECK go=${!reason} ${reason ?? lock.reason}`)
-    if (reason && manual) process.exit(1)
+    // Right before deploy: still the newest main (an older queued run never overwrites a newer one) and the lock still allows it.
+    writeOutputs({ go: blocked ? 'false' : 'true', reason: blocked ?? lock.reason })
+    appendSummary(`- Staging deploy recheck: ${blocked ? `**NOT DEPLOYED** — ${blocked}` : `PASS (${lock.reason})`}${issue ? '' : '\n- UAT lock: **none taken by this run** — Staging is NOT protected for UAT until `lock-uat` (or publish-m3 with uat_issue) records a lock.'}`)
+    console.error(`STAGING_RECHECK go=${!blocked} ${blocked ?? lock.reason}`)
+    if (blocked && env.MODE === 'manual') process.exit(1)
     return
   }
   if (command === 'acquire') {
-    // Called only after a successful manual publish for an issue, still inside the staging concurrency group.
-    const issue = await validateUatIssue(request, env.UAT_ISSUE, repo)
+    // After a successful manual publish, or the `lock-uat` operation: pin the SHA Staging ACTUALLY serves (live identity), no redeploy.
     if (!issue) throw new Error('UAT_ISSUE_REQUIRED')
-    await request(`/repos/${repo}/issues/${issue}/labels`, { method: 'POST', body: { labels: [LOCK_LABEL] } })
+    if (blocked) throw new Error(blocked)
+    const live = await liveStagingSha(cloudflare())
+    if (live.sha !== sha) throw new Error(`STAGING_LIVE_SHA_MISMATCH live=${live.sha}`)
+    if (lock.state === 'held') {
+      appendSummary(`- Staging UAT lock already held by #${issue} @ \`${sha}\` (live deployment ${live.deploymentId})`)
+      console.error(`STAGING_LOCK already-held issue=#${issue} sha=${sha}`)
+      return
+    }
+    // Lock line first, label second: a partial failure leaves no label (= no lock) rather than a label bound to an old line.
     await request(`/repos/${repo}/issues/${issue}/comments`, { method: 'POST', body: { body: [
       `STAGING-UAT-LOCK ${sha}`, '',
-      `Fixed Staging now serves this exact SHA for Owner UAT (run ${env.RUN_URL ?? '-'}). Other Staging publishes are refused while the`,
-      `\`${LOCK_LABEL}\` label is on this open issue. Release: remove the label after the Owner's UAT verdict (never automatic).`,
+      `Fixed Staging serves this exact SHA (live deployment ${live.deploymentId}) for Owner UAT; run ${env.RUN_URL ?? '-'}.`,
+      `Other Staging publishes, and other SHAs for this issue, are refused while the \`${LOCK_LABEL}\` label is on this open issue.`,
+      'Release: remove the label after the Owner\'s UAT verdict (never automatic).',
     ].join('\n') } })
-    appendSummary(`- Staging UAT lock acquired: #${issue} @ \`${sha}\``)
+    await request(`/repos/${repo}/issues/${issue}/labels`, { method: 'POST', body: { labels: [LOCK_LABEL] } })
+    appendSummary(`- Staging UAT lock acquired: #${issue} @ \`${sha}\` (live deployment ${live.deploymentId})`)
     console.error(`STAGING_LOCK acquired issue=#${issue} sha=${sha}`)
     return
   }

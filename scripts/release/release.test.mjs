@@ -2,10 +2,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { diffFlags, flagsDigest, flagsFromBindings, formatFlagsChange, loadFlags, parseFlags } from './flags.mjs'
-import { evaluateGo, parseDirectives } from './go-evidence.mjs'
+import { evaluateGo, isVerifyOperation, parseDirectives, stagingAt } from './go-evidence.mjs'
 import { activeVersionId, plainLines } from './lib.mjs'
-import { renderEvidence } from './release-evidence.mjs'
-import { classifyLane, laneForPath } from './risk-lane.mjs'
+import { readiness, renderEvidence } from './release-evidence.mjs'
+import { classifyLane, fullCategory, laneForPath } from './risk-lane.mjs'
 import { evaluateLock, lockedSha } from './staging-lock.mjs'
 import { evaluateTrigger } from './trigger-gate.mjs'
 
@@ -26,9 +26,9 @@ describe('#505 D2 flags-as-code', () => {
   it('rejects missing, extra, defaulted or unknown values (strict schema, no fallback)', () => {
     for (const bad of [
       '{}', 'not json', '[]',
-      JSON.stringify({ schema: 1, canonical_pricing: 'on', canonical_brands: 'toto,inax', series_variant: 'off' }), // commerce missing
+      JSON.stringify({ schema: 1, canonical_pricing: 'on', canonical_brands: 'toto,inax', series_variant: 'off' }),
       flagsText({ extra: 'x' }), flagsText({ schema: 2 }), flagsText({ canonical_pricing: 'true' }), flagsText({ commerce: true }),
-      flagsText({ canonical_brands: 'toto,caesar' }), flagsText({ canonical_pricing: 'off' }), // brands must be '' when off
+      flagsText({ canonical_brands: 'toto,caesar' }), flagsText({ canonical_pricing: 'off' }),
       flagsText({ series_variant: 'on' }), flagsText({ commerce: '' }),
     ]) expect(() => parseFlags(bad), bad).toThrow()
     expect(parseFlags(flagsText({ canonical_pricing: 'off', canonical_brands: '' })).canonical_pricing).toBe('off')
@@ -36,12 +36,10 @@ describe('#505 D2 flags-as-code', () => {
 
   it('treats inconsistent live bindings as UNKNOWN (fail closed) and reports intentional changes exactly', () => {
     const without = (name) => live.resources.bindings.filter((b) => b.name !== name)
-    expect(() => flagsFromBindings(without('ORDER_INTAKE_DB'))).toThrow(/commerce/) // flag on without intake binding
+    expect(() => flagsFromBindings(without('ORDER_INTAKE_DB'))).toThrow(/commerce/)
     expect(() => flagsFromBindings(without('PUBLIC_CANONICAL_PRICE_BRANDS'))).toThrow(/canonical_pricing/)
     expect(() => flagsFromBindings([...live.resources.bindings, { name: 'PUBLIC_SERIES_VARIANT', type: 'plain_text', text: 'maybe' }])).toThrow()
-    const commerceOff = parseFlags(flagsText({ commerce: 'off' }))
-    const diff = diffFlags(commerceOff, flagsFromBindings(live.resources.bindings))
-    expect(formatFlagsChange(diff)).toBe('commerce=off')
+    expect(formatFlagsChange(diffFlags(parseFlags(flagsText({ commerce: 'off' })), flagsFromBindings(live.resources.bindings)))).toBe('commerce=off')
     const pricingOff = parseFlags(flagsText({ canonical_pricing: 'off', canonical_brands: '' }))
     expect(formatFlagsChange(diffFlags(pricingOff, flagsFromBindings(live.resources.bindings)))).toBe('canonical_pricing=off;canonical_brands=-')
   })
@@ -53,21 +51,27 @@ describe('#505 D2 flags-as-code', () => {
   })
 })
 
-describe('#505 risk lane floor', () => {
+describe('#505 risk lane floor and full categories', () => {
   it.each([
     ['docs/ops/v1-fast-release.md', 'none'], ['scripts/release/release.test.mjs', 'none'],
+    ['supabase/functions/admin-api/production-migration.test.ts', 'none'],
     ['src/app/globals.css', 'fast'], ['public/banners/home.webp', 'fast'],
     ['src/components/layout/header.tsx', 'standard'], ['src/components/blog/author-card.tsx', 'standard'],
     ['src/components/cart/CartDrawer.tsx', 'extended'], ['src/app/(public)/gio-hang/page.tsx', 'extended'],
     ['src/lib/canonical-price.ts', 'extended'], ['apps/public/worker.ts', 'extended'], ['release/production-flags.json', 'extended'],
     ['apps/admin-spa/src/Sales.tsx', 'extended'], ['unknown/thing.txt', 'extended'],
-    ['prisma/schema.prisma', 'full'], ['supabase/functions/admin-api/index.ts', 'full'], ['.github/workflows/quality.yml', 'full'],
-    ['apps/public/wrangler.production.jsonc', 'full'],
+    // Pipeline-only: never a hosted DB/function/binding change, so it can not block Worker-only releases forever (#509 itself).
+    ['.github/workflows/quality.yml', 'extended'], ['scripts/release/go-evidence.mjs', 'extended'], ['scripts/backup/b11_rewrap_core.py', 'extended'],
+    ['prisma/schema.prisma', 'full'], ['supabase/migrations/0001.sql', 'full'], ['supabase/functions/admin-api/index.ts', 'full'],
+    ['scripts/m6/allowlist.json', 'full'], ['apps/public/wrangler.production.jsonc', 'full'],
   ])('%s → %s', (path, lane) => expect(laneForPath(path)).toBe(lane))
 
-  it('takes the highest lane of a change set (cannot be lowered by mixing in docs)', () => {
+  it('names the full category per path and keeps the highest lane of a change set', () => {
+    expect(['supabase/migrations/1.sql', 'supabase/functions/x/index.ts', 'apps/public/wrangler.jsonc', 'src/a.tsx'].map(fullCategory))
+      .toEqual(['sql', 'function', 'bindings', null])
     expect(classifyLane(['docs/a.md', 'src/app/globals.css']).lane).toBe('fast')
-    expect(classifyLane(['docs/a.md', 'src/components/x.tsx', 'src/lib/db.ts']).lane).toBe('extended')
+    const mixed = classifyLane(['src/components/x.tsx', 'supabase/migrations/2.sql'])
+    expect(mixed).toMatchObject({ lane: 'full', categories: { sql: ['supabase/migrations/2.sql'] } })
     expect(classifyLane([]).lane).toBe('none')
   })
 })
@@ -78,9 +82,8 @@ const free = { allowed: true, reason: 'LOCK_FREE' }
 
 describe('#505 D1 trigger gate', () => {
   it('auto-preflight: trusted main push yields verify only (auto publish impossible)', () => {
-    const d = evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, pushLane: 'standard' })
-    expect(d).toMatchObject({ run: true, mode: 'auto', operation: 'verify', sha: A })
-    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_run', workflowRun: wr, pushLane: 'fast', lock: free }))
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: 'standard' })).toMatchObject({ run: true, mode: 'auto', operation: 'verify', sha: A })
+    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_run', workflowRun: wr, scopeLane: 'extended', lock: free }))
       .toMatchObject({ run: true, mode: 'auto', operation: 'publish-m3' })
   })
 
@@ -90,18 +93,18 @@ describe('#505 D1 trigger gate', () => {
     ['other workflow', { path: '.github/workflows/homepage-quality.yml' }], ['other actor', { actor: 'someone' }],
     ['superseded head', { headSha: B }],
   ])('auto-preflight skips untrusted/stale trigger: %s', (_name, over) => {
-    const d = evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: { ...wr, ...over }, pushLane: 'standard' })
-    expect(d.run).toBe(false)
-    expect(d.fail).toBe(false)
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: { ...wr, ...over }, scopeLane: 'standard' })).toMatchObject({ run: false, fail: false })
   })
 
-  it('auto-preflight skips docs-only and full-lane pushes and a locked Staging, with a reason', () => {
-    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, pushLane: 'none' }).reason).toBe('NO_RUNTIME_CHANGE')
-    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, pushLane: 'full' }).reason).toBe('FULL_LANE_SEPARATE_GATES')
-    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, mainHead: B, pushLane: 'standard' }).reason).toMatch(/SUPERSEDED/)
+  it('decides on the CUMULATIVE scope: pending full change or unknown scope keeps a UI push out of Worker-only automation', () => {
+    // e.g. an unreleased SQL change merged earlier, then a UI merge: cumulative lane is full → skipped, not routed to Worker-only.
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: 'full' }).reason).toBe('FULL_LANE_OR_UNKNOWN_SCOPE_SEPARATE_GATES')
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: undefined }).run).toBe(false)
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: 'none' }).reason).toBe('NO_RUNTIME_CHANGE_VS_PRODUCTION')
+    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, mainHead: B, scopeLane: 'standard' }).reason).toMatch(/SUPERSEDED/)
     const locked = { allowed: false, reason: 'STAGING_UAT_LOCKED issue=#499 sha=x' }
-    const d = evaluateTrigger({ ...base, target: 'staging', event: 'workflow_run', workflowRun: wr, pushLane: 'standard', lock: locked })
-    expect(d).toMatchObject({ run: false, fail: false, reason: locked.reason })
+    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_run', workflowRun: wr, scopeLane: 'standard', lock: locked }))
+      .toMatchObject({ run: false, fail: false, reason: locked.reason })
   })
 
   it('manual dispatch keeps the identity rules and refuses misuse loudly', () => {
@@ -117,128 +120,233 @@ describe('#505 D1 trigger gate', () => {
     ]) expect(evaluateTrigger({ ...base, event: 'workflow_dispatch', ...over })).toMatchObject({ run: false, fail: true, reason })
   })
 
-  it('manual Staging publish is refused while another issue holds the UAT lock; legacy M2 ops pass through', () => {
+  it('every Staging writer (publish-m3, legacy M2 publish, lock-uat) is refused while the lock does not allow it', () => {
     const locked = { allowed: false, reason: 'STAGING_UAT_LOCKED issue=#499 sha=x' }
-    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', input: { sha: A, operation: 'publish-m3' }, lock: locked }))
-      .toMatchObject({ run: false, fail: true, reason: locked.reason })
-    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', input: { sha: A, operation: 'prepare-m3' }, lock: locked }).run).toBe(true)
-    expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', input: { sha: A, operation: 'capture-snapshot' } }))
-      .toMatchObject({ run: false, fail: false, reason: 'LEGACY_M2_OPERATION' })
+    const st = (operation, lock, extra = {}) => evaluateTrigger({ ...base, target: 'staging', event: 'workflow_dispatch', input: { sha: A, operation, ...extra }, lock })
+    for (const op of ['publish-m3', 'publish', 'lock-uat']) expect(st(op, locked, { uatIssue: '7' })).toMatchObject({ run: false, fail: true, reason: locked.reason })
+    expect(st('publish', free)).toMatchObject({ run: false, fail: false, reason: 'LEGACY_M2_PUBLISH_LOCK_CHECKED' })
+    expect(st('lock-uat', free)).toMatchObject({ fail: true, reason: 'UAT_ISSUE_REQUIRED' })
+    expect(st('lock-uat', free, { uatIssue: '7' })).toMatchObject({ run: true, operation: 'lock-uat' })
+    expect(st('prepare-m3', locked).run).toBe(true) // builds only, never writes Staging
+    expect(st('capture-snapshot', locked)).toMatchObject({ run: false, fail: false, reason: 'LEGACY_M2_OPERATION_NO_STAGING_WRITE' })
   })
 })
 
-const ownerComment = (id, body, created_at, over = {}) => ({ id, body, created_at, updated_at: created_at, author_association: 'OWNER', user: { login: OWNER, type: 'User' }, ...over })
+let nextId = 1
+const ownerComment = (body, created_at, over = {}) => ({ id: nextId++, body, created_at, updated_at: created_at, author_association: 'OWNER', user: { login: OWNER, type: 'User' }, ...over })
 
 describe('#505 fixed Staging UAT lock', () => {
   const lockLine = (sha) => `STAGING-UAT-LOCK ${sha}`
-  it('is free with no labelled issue and held otherwise, bound to the latest trusted lock line', () => {
-    expect(evaluateLock({ holders: [] })).toMatchObject({ state: 'free', allowed: true })
-    const holder = { number: 499, comments: [ownerComment(1, lockLine(A), '2026-11-25T09:00:00Z'), ownerComment(2, lockLine(B), '2026-11-25T10:00:00Z')] }
-    expect(evaluateLock({ holders: [holder] })).toMatchObject({ state: 'held', holder: 499, lockedSha: B, allowed: false })
-    expect(evaluateLock({ holders: [holder], requestIssue: 499 })).toMatchObject({ allowed: true, reason: 'LOCK_HELD_BY_REQUESTER' })
-    expect(evaluateLock({ holders: [holder], requestIssue: 500 }).allowed).toBe(false)
+  const holder = (number, ...comments) => ({ number, comments })
+  it('binds the lock to one SHA: the holder may only retry that SHA; others are refused', () => {
+    expect(evaluateLock({ holders: [], candidateSha: A })).toMatchObject({ state: 'free', allowed: true })
+    const h = holder(499, ownerComment(lockLine(A), '2026-11-25T09:00:00Z'), ownerComment(lockLine(B), '2026-11-25T10:00:00Z'))
+    expect(evaluateLock({ holders: [h], candidateSha: B })).toMatchObject({ state: 'held', lockedSha: B, allowed: false })
+    expect(evaluateLock({ holders: [h], requestIssue: 499, candidateSha: B })).toMatchObject({ allowed: true, reason: 'LOCK_HELD_BY_REQUESTER_SAME_SHA' })
+    expect(evaluateLock({ holders: [h], requestIssue: 499, candidateSha: C }).reason).toMatch(/^STAGING_UAT_LOCKED_DIFFERENT_SHA/)
+    expect(evaluateLock({ holders: [h], requestIssue: 500, candidateSha: B }).allowed).toBe(false)
   })
 
-  it('ignores lock lines from untrusted authors, quotes and code blocks; never auto-unlocks ambiguous state', () => {
+  it('a label without exactly one valid SHA blocks everyone, the holder included (no auto-unlock)', () => {
+    expect(evaluateLock({ holders: [holder(7)], requestIssue: 7, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+    const twoInOne = holder(7, ownerComment(`${lockLine(A)}\n${lockLine(B)}`, '2026-11-25T10:00:00Z'))
+    expect(evaluateLock({ holders: [twoInOne], requestIssue: 7, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+    expect(evaluateLock({ holders: [holder(1), holder(2)], candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+    expect(evaluateLock({ holders: undefined, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+  })
+
+  it('ignores lock lines from untrusted authors, quotes, code and indented text; orders by time then id', () => {
+    const t = '2026-11-25T11:00:00Z'
     const comments = [
-      ownerComment(1, lockLine(A), '2026-11-25T09:00:00Z'),
-      ownerComment(2, lockLine(B), '2026-11-25T10:00:00Z', { author_association: 'NONE', user: { login: 'random', type: 'User' } }),
-      ownerComment(3, `> ${lockLine(C)}\n\`\`\`\n${lockLine(C)}\n\`\`\``, '2026-11-25T11:00:00Z'),
-      { ...ownerComment(4, lockLine(C), '2026-11-25T08:00:00Z'), author_association: 'NONE', user: { login: 'github-actions[bot]', type: 'Bot' } },
+      ownerComment(lockLine(A), '2026-11-25T09:00:00Z'),
+      ownerComment(lockLine(B), '2026-11-25T10:00:00Z', { author_association: 'NONE', user: { login: 'random', type: 'User' } }),
+      ownerComment(`> ${lockLine(C)}\n\`\`\`\n${lockLine(C)}\n\`\`\`\n    ${lockLine(C)}\n<!-- ${lockLine(C)} -->`, t),
     ]
-    expect(lockedSha(comments)).toBe(A) // bot line is older; untrusted/quoted lines ignored
-    expect(evaluateLock({ holders: [{ number: 1, comments: [] }, { number: 2, comments: [] }] })).toMatchObject({ state: 'unknown', allowed: false })
-    expect(evaluateLock({ holders: undefined })).toMatchObject({ state: 'unknown', allowed: false })
-    expect(evaluateLock({ holders: [{ number: 7, comments: [] }] })).toMatchObject({ state: 'held', lockedSha: null, allowed: false })
+    expect(lockedSha(comments)).toEqual({ sha: A, ambiguous: false })
+    const sameTime = [ownerComment(lockLine(B), t), ownerComment(lockLine(C), t)]
+    expect(lockedSha(sameTime).sha).toBe(C) // same timestamp: higher id is later
+    const bot = { ...ownerComment(lockLine(C), '2026-11-25T12:00:00Z'), author_association: 'NONE', user: { login: 'github-actions[bot]', type: 'Bot' } }
+    expect(lockedSha([...comments, bot]).sha).toBe(C)
   })
 })
 
 // --- D3-A GO evidence ---------------------------------------------------------------------------------------------------
 const ISSUE = 600
 const goUrl = (id) => `https://github.com/${REPO}/issues/${ISSUE}#issuecomment-${id}`
-const run = (id, path, updated_at, over = {}) => ({
-  id, path, head_sha: A, head_branch: 'main', head_repository: { full_name: REPO }, event: 'workflow_dispatch', status: 'completed', conclusion: 'success', updated_at,
-  jobs: path.includes('m4-') ? [{ name: 'Build, verify and optionally publish the Production Admin Worker', conclusion: 'success', steps: [{ name: 'Verify the packaged Worker (Public parity from PostgreSQL, Admin fail-closed without secrets)', conclusion: 'success' }] }]
-    : [{ name: 'publish-m3', conclusion: 'success', steps: [{ name: 'Publish only named staging and run hosted smoke', conclusion: 'success' }] }],
+const stepsOf = (map) => Object.entries(map).map(([name, [conclusion, started_at = null, completed_at = null]]) => ({ name, conclusion, started_at, completed_at }))
+const m4Run = (id, created_at, updated_at, over = {}, stepMap = {}) => ({
+  id, path: '.github/workflows/m4-production-admin-release.yml', head_sha: A, head_branch: 'main', head_repository: { full_name: REPO },
+  event: 'workflow_dispatch', status: 'completed', conclusion: 'success', created_at, updated_at,
+  jobs: [{ name: 'Build, verify and optionally publish the Production Admin Worker', steps: stepsOf({
+    'Load the reviewed Production flags (release/production-flags.json, strict, no defaults)': ['success', created_at, created_at],
+    'Require GO-PROD evidence for the exact candidate (publish only)': ['skipped'],
+    'Verify the packaged Worker (Public parity from PostgreSQL, Admin fail-closed without secrets)': ['success', created_at, updated_at],
+    'Publish with the Admin secrets passed atomically': ['skipped'], ...stepMap }) }],
   ...over,
 })
-const verifyRun = run(1, '.github/workflows/m4-production-admin-release.yml', '2026-11-25T12:58:22Z')
-const stagingRun = run(2, '.github/workflows/v1-fixed-preview.yml', '2026-11-25T13:06:21Z')
-const goComment = (body, over = {}) => ({ ...ownerComment(9001, body, '2026-11-25T13:24:38Z', over), html_url: goUrl(9001), issue_url: `https://api.github.com/repos/${REPO}/issues/${ISSUE}` })
-const goInput = (body, over = {}) => ({
-  url: goUrl(9001), comment: goComment(body), issue: { number: ISSUE, state: 'open' }, issueComments: [], verifyRuns: [verifyRun],
-  stagingRuns: [stagingRun], candidateSha: A, lane: 'standard', flagsChange: '', ...over,
+const stagingRun = (id, sha, started, completed, conclusion = 'success', job = 'publish-m3') => ({
+  id, path: '.github/workflows/v1-fixed-preview.yml', head_sha: sha, head_branch: 'main', head_repository: { full_name: REPO },
+  event: 'workflow_run', status: 'completed', conclusion, created_at: started, updated_at: completed,
+  jobs: [{ name: job, steps: stepsOf({ 'Publish only named staging and run hosted smoke': [conclusion, started, completed] }) }],
 })
+const VERIFY = m4Run(101, '2026-11-25T12:56:45Z', '2026-11-25T12:58:22Z')
+const STAGE = stagingRun(201, A, '2026-11-25T13:02:12Z', '2026-11-25T13:06:19Z')
+const GO_AT = '2026-11-25T13:24:38Z'
+const goComment = (body, over = {}) => ({ ...ownerComment(body, GO_AT, over), id: 9001, html_url: goUrl(9001), issue_url: `https://api.github.com/repos/${REPO}/issues/${ISSUE}` })
+const GOOD = `Owner duyệt.\nGO-PROD ${A}\nVERIFY-RUN 101\nUAT PASS ${A}`
+const goInput = (body = GOOD, over = {}) => ({
+  url: goUrl(9001), comment: goComment(body), issue: { number: ISSUE, state: 'open' }, issueComments: [], m4Runs: [VERIFY],
+  stagingRuns: [STAGE], candidateSha: A, lane: 'standard', fullTouch: {}, flagsChange: '', currentRunId: 999, ...over,
+})
+const reasonsFor = (body, over) => evaluateGo(goInput(body, over)).reasons
 
 describe('#505 D3-A GO-PROD evidence', () => {
-  it('passes a well-formed GO after verify PASS with UAT on the exact staged SHA', () => {
-    const r = evaluateGo(goInput(`Owner duyệt.\nGO-PROD ${A}\nUAT PASS ${A}`))
-    expect(r).toMatchObject({ ok: true, lane: 'standard', uat: 'pass', verifyRunIds: [1] })
-    expect(evaluateGo(goInput(`GO-PROD ${A}\nLANE extended\nUAT-WAIVER ${A} accepted on evidence #508`, { lane: 'extended' }))).toMatchObject({ ok: true, uat: 'waived' })
-    expect(evaluateGo(goInput(`GO-PROD ${A}`, { lane: 'fast' }))).toMatchObject({ ok: true, uat: 'not-required' })
+  it('passes a well-formed GO bound to a verify PASS, with UAT while Staging served the exact SHA', () => {
+    expect(evaluateGo(goInput())).toMatchObject({ ok: true, lane: 'standard', uat: 'pass', verifyRunId: 101 })
+    expect(evaluateGo(goInput(`GO-PROD ${A}\nVERIFY-RUN 101\nLANE extended\nUAT-WAIVER ${A} accepted on evidence #508`, { lane: 'extended' }))).toMatchObject({ ok: true, uat: 'waived' })
+    expect(evaluateGo(goInput(`GO-PROD ${A}\nVERIFY-RUN 101`, { lane: 'none' }))).toMatchObject({ ok: true, uat: 'not-required' })
   })
 
-  it('accepts UAT PASS from an earlier unedited Owner comment, and rejects a later UAT FAIL', () => {
-    const uat = ownerComment(8000, `UAT PASS ${A}`, '2026-11-25T12:39:14Z')
-    expect(evaluateGo(goInput(`GO-PROD ${A}`, { issueComments: [uat] })).ok).toBe(true)
-    const failAfter = ownerComment(8001, `UAT FAIL ${A}`, '2026-11-25T13:00:00Z')
-    expect(evaluateGo(goInput(`GO-PROD ${A}`, { issueComments: [uat, failAfter] })).reasons).toContain('UAT_FAILED')
+  it('fast lane is not silently optional: it needs a short UAT or an explicit Owner waiver/deferral', () => {
+    expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { lane: 'fast' })).toContain('UAT_EVIDENCE_MISSING')
+    expect(evaluateGo(goInput(`GO-PROD ${A}\nVERIFY-RUN 101\nUAT-WAIVER ${A} batched with next release`, { lane: 'fast' })).ok).toBe(true)
   })
 
-  const reasonsFor = (body, over) => evaluateGo(goInput(body, over)).reasons
+  it('UAT chronology: earlier unedited PASS counts; a later FAIL (before or after GO) or an edited PASS does not', () => {
+    const uat = ownerComment(`UAT PASS ${A}`, '2026-11-25T13:10:00Z')
+    expect(evaluateGo(goInput(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [uat] })).ok).toBe(true)
+    expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [uat, ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:20:00Z')] })).toContain('UAT_FAILED')
+    // Pre-deploy recheck sees a UAT FAIL posted after the GO.
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:30:00Z')] })).toContain('UAT_FAILED_AFTER_GO')
+    expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101\nUAT-WAIVER ${A} ok`, { issueComments: [ownerComment(`UAT FAIL ${A}`, '2026-11-25T13:30:00Z')] })).toContain('UAT_FAILED_AFTER_GO')
+    const edited = ownerComment(`UAT PASS ${A}`, '2026-11-25T13:10:00Z', { updated_at: '2026-11-25T13:11:00Z' })
+    expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [edited] })).toContain('UAT_EVIDENCE_MISSING')
+    expect(reasonsFor(`GO-PROD ${A}\nVERIFY-RUN 101`, { issueComments: [ownerComment(`UAT PASS ${A}\nUAT FAIL ${A}`, '2026-11-25T13:10:00Z')] })).toContain('UAT_AMBIGUOUS')
+  })
+
+  it('UAT counts only if fixed Staging already served the candidate, successfully, at the moment of the UAT', () => {
+    const uatAt = (t) => [ownerComment(`UAT PASS ${A}`, t)]
+    const body = `GO-PROD ${A}\nVERIFY-RUN 101`
+    // Staging for the candidate finished AFTER the UAT PASS.
+    expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:04:00Z') })).toContain('UAT_STAGING_NOT_PASSED')
+    // Another SHA was deployed between the candidate's Staging and the UAT (overwritten UAT).
+    const overwrite = stagingRun(202, B, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z')
+    expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, overwrite] })).toContain('UAT_STAGING_NOT_CANDIDATE')
+    // Legacy M2 publish job counts as a Staging writer too.
+    const legacy = stagingRun(203, B, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z', 'success', 'publish')
+    expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, legacy] })).toContain('UAT_STAGING_NOT_CANDIDATE')
+    expect(reasonsFor(GOOD, { stagingRuns: [] })).toContain('UAT_PASS_WITHOUT_STAGING_DEPLOYMENT')
+    expect(stagingAt([STAGE], '2026-11-25T13:10:00Z')).toMatchObject({ sha: A, conclusion: 'success' })
+  })
+
+  it('verify evidence must be a trusted verify OPERATION bound by VERIFY-RUN and not invalidated by a newer failure', () => {
+    const publishRun = m4Run(102, '2026-11-25T13:00:00Z', '2026-11-25T13:02:00Z', {}, {
+      'Require GO-PROD evidence for the exact candidate (publish only)': ['success', '2026-11-25T13:00:10Z', '2026-11-25T13:00:20Z'],
+      'Publish with the Admin secrets passed atomically': ['success', '2026-11-25T13:01:00Z', '2026-11-25T13:01:10Z'] })
+    expect(isVerifyOperation(VERIFY)).toBe(true)
+    expect(isVerifyOperation(publishRun)).toBe(false)
+    expect(reasonsFor(GOOD.replace('VERIFY-RUN 101', 'VERIFY-RUN 102'), { m4Runs: [VERIFY, publishRun] })).toContain('VERIFY_RUN_NOT_A_TRUSTED_VERIFY_PASS')
+    expect(reasonsFor(GOOD.replace('\nVERIFY-RUN 101', ''))).toContain('VERIFY_RUN_MISSING')
+    const newerFail = m4Run(103, '2026-11-25T13:10:00Z', '2026-11-25T13:12:00Z', { conclusion: 'failure' }, {
+      'Verify the packaged Worker (Public parity from PostgreSQL, Admin fail-closed without secrets)': ['failure'] })
+    expect(reasonsFor(GOOD, { m4Runs: [VERIFY, newerFail] })).toContain('VERIFY_INVALIDATED_BY_NEWER_FAILURE')
+    // A run that failed AFTER the packaged step (e.g. media/flags) is not a PASS either.
+    const failedLater = m4Run(104, '2026-11-25T12:56:45Z', '2026-11-25T12:58:22Z', { conclusion: 'failure' })
+    expect(reasonsFor(GOOD.replace('VERIFY-RUN 101', 'VERIFY-RUN 104'), { m4Runs: [failedLater] })).toContain('VERIFY_RUN_NOT_A_TRUSTED_VERIFY_PASS')
+    const running = m4Run(105, '2026-11-25T13:20:00Z', '2026-11-25T13:20:00Z', { status: 'in_progress', conclusion: null })
+    expect(reasonsFor(GOOD, { m4Runs: [VERIFY, running] })).toContain('VERIFY_STATE_AMBIGUOUS_RUN_IN_PROGRESS')
+    expect(evaluateGo(goInput(GOOD, { m4Runs: [VERIFY, { ...running, id: 999 }] })).ok).toBe(true) // the current publish run itself
+    expect(reasonsFor(GOOD, { m4Runs: [{ ...VERIFY, updated_at: '2026-11-25T14:00:00Z' }] })).toContain('GO_BEFORE_VERIFY_PASS')
+    // A pre-#505 verify of the same SHA took its flags from dispatch inputs: it cannot prove the reviewed flags.
+    const legacyVerify = { ...VERIFY, jobs: [{ ...VERIFY.jobs[0], steps: VERIFY.jobs[0].steps.filter((x) => !x.name.startsWith('Load the reviewed')) }] }
+    expect(reasonsFor(GOOD, { m4Runs: [legacyVerify] })).toContain('VERIFY_RUN_NOT_A_TRUSTED_VERIFY_PASS')
+    for (const over of [{ head_sha: B }, { head_branch: 'claude/x' }, { event: 'pull_request' }]) {
+      expect(reasonsFor(GOOD, { m4Runs: [{ ...VERIFY, ...over }] })).toContain('VERIFY_RUN_NOT_A_TRUSTED_VERIFY_PASS')
+    }
+  })
+
   it.each([
-    ['missing GO line (prose quoting the Owner)', `Owner xác nhận nguyên văn: "Owner GO-PROD exact SHA ${A}"`, {}, 'GO_LINE_MISSING'],
-    ['GO only inside a quote', `> GO-PROD ${A}\nUAT PASS ${A}`, {}, 'GO_LINE_MISSING'],
-    ['GO only inside a code block', `\`\`\`\nGO-PROD ${A}\n\`\`\`\nUAT PASS ${A}`, {}, 'GO_LINE_MISSING'],
-    ['negated GO', `Không GO-PROD ${A}\nUAT PASS ${A}`, {}, 'GO_LINE_MISSING'],
-    ['wrong SHA', `GO-PROD ${B}\nUAT PASS ${A}`, {}, 'GO_WRONG_SHA'],
-    ['two GO lines', `GO-PROD ${A}\nGO-PROD ${B}\nUAT PASS ${A}`, {}, 'GO_LINE_AMBIGUOUS'],
-    ['GO and NO-GO together', `GO-PROD ${A}\nNO-GO ${A}\nUAT PASS ${A}`, {}, 'GO_CONTRADICTED_IN_SAME_COMMENT'],
-    ['no verify PASS', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [] }, 'VERIFY_PASS_MISSING'],
-    ['GO posted before verify finished', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [{ ...verifyRun, updated_at: '2026-11-25T14:00:00Z' }] }, 'GO_BEFORE_VERIFY_PASS'],
-    ['verify step failed', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [{ ...verifyRun, jobs: [{ ...verifyRun.jobs[0], steps: [{ ...verifyRun.jobs[0].steps[0], conclusion: 'failure' }] }] }] }, 'VERIFY_PASS_MISSING'],
-    ['verify on another SHA', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [{ ...verifyRun, head_sha: B }] }, 'VERIFY_PASS_MISSING'],
-    ['verify from a PR branch', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [{ ...verifyRun, head_branch: 'claude/x' }] }, 'VERIFY_PASS_MISSING'],
-    ['verify from an untrusted event', `GO-PROD ${A}\nUAT PASS ${A}`, { verifyRuns: [{ ...verifyRun, event: 'pull_request' }] }, 'VERIFY_PASS_MISSING'],
-    ['UAT missing for standard', `GO-PROD ${A}`, {}, 'UAT_EVIDENCE_MISSING'],
-    ['UAT PASS but never staged', `GO-PROD ${A}\nUAT PASS ${A}`, { stagingRuns: [] }, 'UAT_PASS_WITHOUT_STAGING_DEPLOYMENT'],
-    ['UAT on another SHA', `GO-PROD ${A}\nUAT PASS ${B}`, {}, 'UAT_EVIDENCE_MISSING'],
-    ['waiver without a reason', `GO-PROD ${A}\nUAT-WAIVER ${A}`, {}, 'UAT_EVIDENCE_MISSING'],
-    ['extended without LANE ack', `GO-PROD ${A}\nUAT PASS ${A}`, { lane: 'extended' }, 'LANE_ACK_REQUIRED'],
-    ['LANE lowered', `GO-PROD ${A}\nLANE standard\nUAT PASS ${A}`, { lane: 'full' }, 'LANE_LOWERED'],
-    ['unknown scope treated as full', `GO-PROD ${A}\nUAT PASS ${A}`, { lane: undefined }, 'LANE_ACK_REQUIRED'],
-    ['flag change not approved', `GO-PROD ${A}\nUAT PASS ${A}`, { flagsChange: 'commerce=off' }, 'FLAGS_CHANGE_NOT_APPROVED'],
-    ['flag change mismatch', `GO-PROD ${A}\nUAT PASS ${A}\nFLAGS-CHANGE commerce=on`, { flagsChange: 'commerce=off' }, 'FLAGS_CHANGE_NOT_APPROVED'],
-    ['stale flag change line', `GO-PROD ${A}\nUAT PASS ${A}\nFLAGS-CHANGE commerce=off`, {}, 'FLAGS_CHANGE_STALE'],
-    ['closed release issue', `GO-PROD ${A}\nUAT PASS ${A}`, { issue: { number: ISSUE, state: 'closed' } }, 'GO_ISSUE_CLOSED'],
-    ['GO on a pull request', `GO-PROD ${A}\nUAT PASS ${A}`, { issue: { number: ISSUE, state: 'open', pull_request: {} } }, 'GO_NOT_ON_RELEASE_ISSUE'],
-  ])('refuses: %s', (_name, body, over, reason) => expect(reasonsFor(body, over)).toContain(reason))
+    ['missing GO line (prose quoting the Owner)', `Owner xác nhận nguyên văn: "Owner GO-PROD exact SHA ${A}"\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['GO only inside a quote', `> GO-PROD ${A}\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['GO only inside a fenced block', `\`\`\`\nGO-PROD ${A}\n\`\`\`\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['GO only as indented code', `Text\n\n    GO-PROD ${A}\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['GO only inside an HTML comment', `<!--\nGO-PROD ${A}\n-->\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['negated GO', `Không GO-PROD ${A}\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_MISSING'],
+    ['wrong SHA', `GO-PROD ${B}\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_WRONG_SHA'],
+    ['two GO lines', `GO-PROD ${A}\nGO-PROD ${B}\nVERIFY-RUN 101\nUAT PASS ${A}`, 'GO_LINE_AMBIGUOUS'],
+    ['GO and NO-GO together', `${GOOD}\nNO-GO ${A}`, 'GO_CONTRADICTED_IN_SAME_COMMENT'],
+    ['GO and UAT FAIL together', `${GOOD}\nUAT FAIL ${A}`, 'GO_CONTRADICTED_IN_SAME_COMMENT'],
+    ['waiver without a reason', `GO-PROD ${A}\nVERIFY-RUN 101\nUAT-WAIVER ${A}`, 'UAT_EVIDENCE_MISSING'],
+    ['stale flag change line', `${GOOD}\nFLAGS-CHANGE commerce=off`, 'FLAGS_CHANGE_STALE'],
+  ])('refuses: %s', (_name, body, reason) => expect(reasonsFor(body)).toContain(reason))
 
-  it('refuses a non-Owner, edited, superseded or revoked GO and a URL outside this repository', () => {
-    const body = `GO-PROD ${A}\nUAT PASS ${A}`
-    expect(evaluateGo(goInput(body, { comment: goComment(body, { author_association: 'NONE', user: { login: 'random' } }) })).reasons).toContain('GO_NOT_OWNER_COMMENT')
-    expect(evaluateGo(goInput(body, { comment: goComment(body, { updated_at: '2026-11-25T13:30:00Z' }) })).reasons).toContain('GO_COMMENT_EDITED')
-    expect(evaluateGo(goInput(body, { issueComments: [ownerComment(9100, `GO-PROD ${B}`, '2026-11-25T13:40:00Z')] })).reasons).toContain('GO_SUPERSEDED')
-    expect(evaluateGo(goInput(body, { issueComments: [ownerComment(9101, `GO-PROD-REVOKE ${A}`, '2026-11-25T13:40:00Z')] })).reasons).toContain('GO_REVOKED')
-    expect(evaluateGo(goInput(body, { issueComments: [ownerComment(9102, `NO-GO ${A}`, '2026-11-25T13:40:00Z', { author_association: 'NONE', user: { login: 'random' } })] })).ok).toBe(true)
-    expect(evaluateGo(goInput(body, { url: `https://github.com/evil/repo/issues/${ISSUE}#issuecomment-9001` })).reasons).toContain('GO_URL_WRONG_REPOSITORY')
-    expect(evaluateGo(goInput(body, { url: '' })).reasons).toContain('GO_URL_INVALID')
+  it('lane: extended/full need an explicit line, never lowered; unknown scope is full', () => {
+    expect(reasonsFor(GOOD, { lane: 'extended' })).toContain('LANE_ACK_REQUIRED')
+    expect(reasonsFor(`${GOOD}\nLANE standard`, { lane: 'full' })).toContain('LANE_LOWERED')
+    expect(reasonsFor(GOOD, { lane: undefined, fullTouch: null })).toEqual(expect.arrayContaining(['LANE_ACK_REQUIRED', 'FULL_SCOPE_UNKNOWN']))
   })
 
-  it('only whole unquoted lines are directives', () => {
-    expect(parseDirectives(`**GO-PROD ${A}**\n\`GO-PROD ${A}\`\n  GO-PROD ${A}  `)).toEqual([{ type: 'go', value: A, extra: undefined }])
-    expect(plainLines('a\n~~~\nb\n~~~\n> c\nd')).toEqual(['a', 'd'])
+  it('full lane: SQL/function changes need their own lane to have run (mutating, before GO) on a SHA containing the change', () => {
+    const touch = { sql: C }
+    const sqlRun = { id: 301, path: '.github/workflows/m6-production-sql-apply.yml', head_sha: B, head_branch: 'main', head_repository: { full_name: REPO },
+      event: 'workflow_dispatch', status: 'completed', conclusion: 'success', created_at: '2026-11-25T11:00:00Z', updated_at: '2026-11-25T11:02:00Z',
+      jobs: [{ name: 'lane', steps: stepsOf({ 'Verify the fresh backup evidence (mutating operations only; fail closed)': ['success'] }) }] }
+    const line = `FULL-EVIDENCE sql https://github.com/${REPO}/actions/runs/301`
+    const full = (body, over = {}) => evaluateGo(goInput(`${GOOD}\nLANE full${body}`, { lane: 'full', fullTouch: touch, fullRuns: { 301: sqlRun }, ancestry: { [`${C}...${B}`]: 'ahead' }, ...over }))
+    expect(full(`\n${line}`)).toMatchObject({ ok: true })
+    expect(full('').reasons).toContain('FULL_EVIDENCE_MISSING:sql')
+    expect(full(`\n${line}`, { ancestry: { [`${C}...${B}`]: 'behind' } }).reasons).toContain('FULL_EVIDENCE_STALE:sql')
+    const readOnly = { ...sqlRun, jobs: [{ name: 'lane', steps: stepsOf({ 'Verify the fresh backup evidence (mutating operations only; fail closed)': ['skipped'] }) }] }
+    expect(full(`\n${line}`, { fullRuns: { 301: readOnly } }).reasons).toContain('FULL_EVIDENCE_INVALID:sql') // preflight/plan only
+    expect(full(`\n${line}`, { fullRuns: { 301: { ...sqlRun, updated_at: '2026-11-25T14:00:00Z' } } }).reasons).toContain('FULL_EVIDENCE_INVALID:sql')
+    expect(full(`\nFULL-EVIDENCE sql https://github.com/evil/repo/actions/runs/301`).reasons).toContain('FULL_EVIDENCE_INVALID:sql')
+    // Binding-only changes ship in this artifact: the LANE full acknowledgement is the gate.
+    expect(evaluateGo(goInput(`${GOOD}\nLANE full`, { lane: 'full', fullTouch: { bindings: C } })).ok).toBe(true)
+  })
+
+  it('refuses a non-Owner, edited, superseded or revoked GO, a closed issue, a PR and a URL outside this repository', () => {
+    expect(evaluateGo(goInput(GOOD, { comment: goComment(GOOD, { author_association: 'NONE', user: { login: 'random' } }) })).reasons).toContain('GO_NOT_OWNER_COMMENT')
+    expect(evaluateGo(goInput(GOOD, { comment: goComment(GOOD, { updated_at: '2026-11-25T13:30:00Z' }) })).reasons).toContain('GO_COMMENT_EDITED')
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`GO-PROD ${B}`, '2026-11-25T13:40:00Z')] })).toContain('GO_SUPERSEDED')
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`GO-PROD-REVOKE ${A}`, '2026-11-25T13:40:00Z')] })).toContain('GO_REVOKED')
+    expect(reasonsFor(GOOD, { issueComments: [ownerComment(`NO-GO ${A}`, GO_AT, { id: 9002 })] })).toContain('GO_REVOKED') // same time, later id
+    expect(evaluateGo(goInput(GOOD, { issueComments: [ownerComment(`NO-GO ${A}`, '2026-11-25T13:40:00Z', { author_association: 'NONE', user: { login: 'x' } })] })).ok).toBe(true)
+    expect(reasonsFor(GOOD, { issue: { number: ISSUE, state: 'closed' } })).toContain('GO_ISSUE_CLOSED')
+    expect(reasonsFor(GOOD, { issue: { number: ISSUE, state: 'open', pull_request: {} } })).toContain('GO_NOT_ON_RELEASE_ISSUE')
+    expect(reasonsFor(GOOD, { url: `https://github.com/evil/repo/issues/${ISSUE}#issuecomment-9001` })).toContain('GO_URL_WRONG_REPOSITORY')
+    expect(reasonsFor(GOOD, { url: '' })).toContain('GO_URL_INVALID')
+    expect(reasonsFor(GOOD, { flagsChange: 'commerce=off' })).toContain('FLAGS_CHANGE_NOT_APPROVED')
+  })
+
+  it('only whole column-0 lines outside quotes, code and HTML comments are directives', () => {
+    expect(parseDirectives(`**GO-PROD ${A}**\n\`GO-PROD ${A}\`\n  GO-PROD ${A}\nGO-PROD ${A}  `)).toEqual([{ type: 'go', value: A, extra: undefined }])
+    expect(plainLines('a\n~~~\nb\n~~~\n> c\n\tx\n<!-- y -->d')).toEqual(['a', 'd'])
   })
 })
 
 describe('#505 evidence summary', () => {
-  it('prints pinned SHA, rollback target, flags and the exact GO template; no secrets', () => {
-    const md = renderEvidence({ CANDIDATE_SHA: A, MODE: 'auto', OPERATION: 'verify', PRODUCTION_SHA: B, ACTIVE_VERSION: live.id, RISK_LANE: 'extended',
-      CHANGED_FILES: '3', CANONICAL_PRICING: 'on', CANONICAL_BRANDS: 'toto,inax', COMMERCE: 'on', SERIES_VARIANT: 'off', FLAGS_DIGEST: 'abc', PACKAGED: 'success', MEDIA: 'skipped' })
-    expect(md).toContain(`GO-PROD ${A}\nLANE extended\nUAT PASS ${A}`)
+  const ok = { CANDIDATE_SHA: A, MODE: 'auto', OPERATION: 'verify', JOB_STATUS: 'success', ACTIVE_OUTCOME: 'success', PRODUCTION_SHA: B,
+    ACTIVE_VERSION: live.id, RISK_LANE: 'extended', CHANGED_FILES: '3', CANONICAL_PRICING: 'on', CANONICAL_BRANDS: 'toto,inax', COMMERCE: 'on',
+    SERIES_VARIANT: 'off', FLAGS_DIGEST: 'abc', PACKAGED: 'success', MEDIA: 'skipped', RUN_ID: '101', FULL_TOUCH: '{}' }
+  it('prints the GO template, bound to this verify run, only when every applicable gate passed; no secrets', () => {
+    const md = renderEvidence(ok, { quality: '[1](u) success', staging: '[2](u) success' })
+    expect(md).toContain(`GO-PROD ${A}\nVERIFY-RUN 101\nLANE extended\nUAT PASS ${A}`)
     expect(md).toContain(`rollback_version_id=${live.id}`)
-    expect(md).toContain('SKIPPED (auto verify is read-only')
+    expect(md).toContain('**READY**')
     expect(md).not.toMatch(/secret|token|password/i)
-    expect(renderEvidence({ CANDIDATE_SHA: A, OPERATION: 'verify', PACKAGED: 'failure' })).not.toContain('GO-PROD')
+  })
+  it.each([
+    ['job failed after the packaged step', { JOB_STATUS: 'failure' }, 'NOT READY'],
+    ['packaged verify failed', { PACKAGED: 'failure', JOB_STATUS: 'failure' }, 'NOT READY'],
+    ['manual media test failed (continue-on-error)', { MODE: 'manual', MEDIA: 'failure' }, 'PARTIAL'],
+    ['scope unknown', { PRODUCTION_SHA: 'UNKNOWN' }, 'PARTIAL'],
+    ['live flags unknown', { ACTIVE_OUTCOME: 'failure' }, 'PARTIAL'],
+    ['publish run', { OPERATION: 'publish' }, 'PARTIAL'],
+  ])('no GO template when %s', (_n, over, status) => {
+    expect(readiness({ ...ok, ...over }).status).toBe(status)
+    expect(renderEvidence({ ...ok, ...over })).not.toContain('GO-PROD')
+  })
+  it('lists the FULL-EVIDENCE lines a full-lane GO needs', () => {
+    expect(renderEvidence({ ...ok, RISK_LANE: 'full', FULL_TOUCH: JSON.stringify({ sql: C, bindings: C }) })).toContain('FULL-EVIDENCE sql <URL of the successful m6-production-sql-apply run>')
   })
 })

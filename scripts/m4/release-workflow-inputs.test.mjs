@@ -60,4 +60,28 @@ describe('#505 fixed Staging lane contract', () => {
     expect(staging).toContain('group: m2-fixed-staging')
     expect(staging.slice(staging.indexOf('  gate:'), staging.indexOf('  prepare:'))).not.toContain('secrets.')
   })
+
+  it('applies the gate and the pre-deploy recheck to the legacy M2 publisher too (same fixed Staging)', () => {
+    const legacy = staging.slice(staging.indexOf('\n  publish:\n'), staging.indexOf('\n  prepare-m3:\n'))
+    expect(legacy).toContain('needs: [gate, prepare]')
+    expect(step(legacy, 'Recheck newest main and the UAT lock right before deploying (legacy M2)')).toContain('staging-lock.mjs recheck')
+    expect(step(legacy, 'Publish only named staging and run real hosted acceptance')).toContain("if: steps.recheck.outputs.go == 'true'")
+  })
+
+  it('lock-uat pins the live Staging SHA without building or deploying, under the same concurrency', () => {
+    const lock = staging.slice(staging.indexOf('\n  lock-uat:\n')).split('\n').filter((line) => !line.trim().startsWith('#')).join('\n')
+    expect(lock).toContain("needs.gate.outputs.operation == 'lock-uat'")
+    expect(lock).toContain('staging-lock.mjs acquire')
+    expect(lock).not.toMatch(/npm ci|build|publish-m[23]-fixed-preview|wrangler/)
+    expect(staging).toContain('options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3, lock-uat]')
+  })
+})
+
+describe('#505 M4 scope and evidence wiring', () => {
+  it('walks full history for the release scope and passes full-lane touches to both GO checks', () => {
+    expect(workflow).toContain('fetch-depth: 0')
+    expect(workflow).toContain("SCOPE_WITH_HISTORY: 'true'")
+    expect([...workflow.matchAll(/FULL_TOUCH: \$\{\{ steps\.scope\.outputs\.full_touch \}\}/g)]).toHaveLength(3)
+    expect(step(workflow, 'Release evidence (#505, no secrets)')).toContain('JOB_STATUS: ${{ job.status }}')
+  })
 })

@@ -15,11 +15,11 @@ on:
       operation:
         description: M2 Public capture/preflight/publication, or M3 combined Admin preparation/publication
         type: choice
-        options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3]
+        options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3, lock-uat]
         default: verify-read-access
         required: true
       uat_issue:
-        description: 'publish-m3 only: open issue number that takes the Staging UAT lock for this exact SHA (empty = no lock)'
+        description: 'publish-m3 / lock-uat: open issue that holds the Staging UAT lock for this exact SHA (lock-uat pins the live SHA without redeploying)'
         required: false
         type: string
 permissions:
@@ -221,10 +221,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   publish:
-    needs: prepare
+    # Legacy M2 snapshot publisher writes the same fixed Staging: it passes the gate's lock check and rechecks before deploying.
+    needs: [gate, prepare]
     if: inputs.operation == 'publish' && needs.prepare.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: read
+    env:
+      CANDIDATE_SHA: ${{ github.sha }}
+      MODE: manual
+      UAT_ISSUE: ${{ inputs.uat_issue }}
     # Reuse the existing non-Production credential environment only. Its legacy
     # label does not select a Worker: publisher code pins the parent and staging.
     environment: cloudflare-staging
@@ -246,7 +256,13 @@ jobs:
         with:
           name: m2-fixed-preview-${{ github.sha }}
           path: ${{ runner.temp }}/m2-preview-artifact
+      - name: Recheck newest main and the UAT lock right before deploying (legacy M2)
+        id: recheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/staging-lock.mjs recheck
       - name: Publish only named staging and run real hosted acceptance
+        if: steps.recheck.outputs.go == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -379,6 +395,8 @@ jobs:
         if: steps.publish.outcome == 'success' && env.MODE == 'manual' && env.UAT_ISSUE != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/release/staging-lock.mjs acquire
       - name: Upload sanitized hosted evidence
@@ -389,3 +407,29 @@ jobs:
           path: ${{ runner.temp }}/m3-hosted-evidence
           if-no-files-found: ignore
           retention-days: 30
+  lock-uat:
+    # Pin the SHA that fixed Staging ACTUALLY serves (e.g. after an auto publish) for Owner UAT, without rebuilding or redeploying.
+    # Same concurrency group as every Staging publish; refuses unless the lock is free (or already this issue + SHA), the SHA is
+    # still main HEAD and the live Staging deployment carries exactly this SHA.
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.operation == 'lock-uat'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: cloudflare-staging
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Take the Staging UAT lock on the live Staging SHA (no redeploy)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
+          MODE: manual
+          UAT_ISSUE: ${{ needs.gate.outputs.uat_issue }}
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/release/staging-lock.mjs acquire
