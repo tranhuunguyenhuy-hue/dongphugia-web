@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#f5f3ef">
+<title>Đông Phú Gia · Duyệt thiết kế điều hướng</title>
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.mjs"></script>
+</head>
+<body>
+<a class="skip" href="#content">Bỏ qua điều hướng</a>
+<header class="site-header">
+  <div class="top"><div class="wrap">
+    <a href="tel:0913865685"><span data-icon="phone"></span> 0913 865 685</a>
+    <a href="https://www.dongphugia.vn/lien-he"><span data-icon="pin"></span> Showroom · 273–275 Phan Đình Phùng, Đà Lạt</a>
+    <a class="contact" href="https://www.dongphugia.vn/lien-he">Liên hệ <span data-icon="arrow"></span></a>
+  </div></div>
+  <div class="wrap header-row">
+    <button class="icon-button menu-toggle" type="button" aria-label="Mở menu" aria-haspopup="dialog" aria-controls="drawer" data-icon="menu"></button>
+    <a class="logo" href="/" aria-label="Đông Phú Gia · Trang chủ"><img src="/assets/Logo.png" width="280" height="56" alt="Đông Phú Gia"></a>
+    <nav class="primary" aria-label="Điều hướng chính">
+      <button type="button" data-mode="product" aria-controls="mega" aria-expanded="false">Sản phẩm <span data-icon="down"></span></button>
+      <button type="button" data-mode="brand" aria-controls="mega" aria-expanded="false">Thương hiệu <span data-icon="down"></span></button>
+      <span class="secondary">
+        <a href="https://www.dongphugia.vn/uudaicuoinam2026/">Khuyến mãi</a>
+        <a href="https://www.dongphugia.vn/blog">Tin tức</a>
+        <a href="https://www.dongphugia.vn/ve-chung-toi">Giới thiệu</a>
+      </span>
+    </nav>
+    <button class="icon-button search-toggle" type="button" aria-label="Mở tìm kiếm" aria-controls="search" data-icon="search"></button>
+    <div class="search" id="search">
+      <form action="/tim-kiem" role="search">
+        <button class="icon-button" type="submit" data-icon="search" aria-label="Tìm kiếm"></button>
+        <input type="search" name="q" placeholder="Tìm tên sản phẩm hoặc mã SKU" aria-label="Tên sản phẩm hoặc mã SKU" autocomplete="off" maxlength="120" minlength="2" required aria-controls="suggestions">
+      </form>
+      <div id="suggestions" class="suggestions" hidden>
+        <div class="suggestion-title"><strong>Sản phẩm gợi ý</strong><small id="search-source"></small></div>
+        <div id="search-status" role="status"></div>
+        <div id="search-results"></div>
+      </div>
+    </div>
+    <a class="icon-button cart" href="/gio-hang" aria-label="Giỏ hàng" data-icon="bag"></a>
+  </div>
+  <section class="mega" id="mega" aria-label="Khám phá danh mục" hidden></section>
+</header>
+<dialog id="drawer" aria-labelledby="drawer-title">
+  <div class="drawer-top">
+    <button class="icon-button" type="button" data-icon="back" id="drawer-back" aria-label="Quay lại"></button>
+    <h2 id="drawer-title" tabindex="-1">Menu</h2>
+    <button class="icon-button" type="button" data-icon="close" id="drawer-close" aria-label="Đóng menu"></button>
+  </div>
+  <div class="drawer-content"></div>
+</dialog>
+<main id="content" tabindex="-1"></main>
+<footer hidden><div class="wrap">Đông Phú Gia <span>·</span> <a href="/">Prototype điều hướng</a></div></footer>
+</body>
+</html>

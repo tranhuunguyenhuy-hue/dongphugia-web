@@ -1,0 +1,744 @@
+{
+  "provenance": {
+    "observedOn": "2026-11-25",
+    "origin": "https://www.dongphugia.vn",
+    "shardCheckpoints": [
+      "e070986a19fdd579aa639524b83c3914bdc95fc1"
+    ]
+  },
+  "categories": [
+    {
+      "slug": "thiet-bi-ve-sinh",
+      "name": "Thiết bị vệ sinh",
+      "publicRoot": false,
+      "brandRoots": [],
+      "types": [
+        {
+          "slug": "bon-cau",
+          "name": "Bồn cầu",
+          "brands": [
+            "toto",
+            "inax"
+          ]
+        },
+        {
+          "slug": "lavabo",
+          "name": "Lavabo",
+          "brands": [
+            "toto"
+          ]
+        },
+        {
+          "slug": "sen-tam",
+          "name": "Sen tắm",
+          "brands": [
+            "toto"
+          ]
+        },
+        {
+          "slug": "voi-chau",
+          "name": "Vòi chậu",
+          "brands": [
+            "toto"
+          ]
+        },
+        {
+          "slug": "bon-tam",
+          "name": "Bồn tắm",
+          "brands": [
+            "toto"
+          ]
+        },
+        {
+          "slug": "nap-bon-cau",
+          "name": "Nắp bồn cầu",
+          "brands": [
+            "inax"
+          ]
+        },
+        {
+          "slug": "bon-tieu",
+          "name": "Bồn tiểu",
+          "brands": [
+            "inax"
+          ]
+        },
+        {
+          "slug": "phu-kien-phong-tam",
+          "name": "Phụ kiện phòng tắm",
+          "brands": [
+            "toto"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "thiet-bi-bep",
+      "name": "Thiết bị bếp",
+      "publicRoot": true,
+      "brandRoots": [
+        "elica",
+        "inax",
+        "kaff",
+        "kluger"
+      ],
+      "types": [
+        {
+          "slug": "bep-dien-tu",
+          "name": "Bếp điện từ",
+          "brands": [
+            "elica",
+            "kaff"
+          ]
+        },
+        {
+          "slug": "chau-rua-chen",
+          "name": "Chậu rửa chén",
+          "brands": [
+            "kluger"
+          ]
+        },
+        {
+          "slug": "may-hut-mui",
+          "name": "Máy hút mùi",
+          "brands": [
+            "elica"
+          ]
+        },
+        {
+          "slug": "voi-rua-chen",
+          "name": "Vòi rửa chén",
+          "brands": [
+            "inax",
+            "kluger"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "gach-op-lat",
+      "name": "Gạch ốp lát",
+      "publicRoot": true,
+      "brandRoots": [
+        "inax"
+      ],
+      "types": [
+        {
+          "slug": "gach-inax-ecocarat",
+          "name": "Gạch INAX Ecocarat",
+          "brands": [
+            "inax"
+          ]
+        },
+        {
+          "slug": "gach-op-tuong",
+          "name": "Gạch ốp tường",
+          "brands": [
+            "inax"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "vat-lieu-nuoc",
+      "name": "Vật liệu nước",
+      "publicRoot": true,
+      "brandRoots": [
+        "dai-thanh",
+        "ferroli",
+        "karofi"
+      ],
+      "types": [
+        {
+          "slug": "bon-chua-nuoc",
+          "name": "Bồn chứa nước",
+          "brands": [
+            "dai-thanh"
+          ]
+        },
+        {
+          "slug": "loc-nuoc",
+          "name": "Lọc nước",
+          "brands": [
+            "karofi"
+          ]
+        },
+        {
+          "slug": "may-nuoc-nong",
+          "name": "Máy nước nóng",
+          "brands": [
+            "ferroli"
+          ]
+        }
+      ]
+    }
+  ],
+  "brands": [
+    {
+      "slug": "elica",
+      "name": "Elica"
+    },
+    {
+      "slug": "ferroli",
+      "name": "Ferroli"
+    },
+    {
+      "slug": "inax",
+      "name": "INAX"
+    },
+    {
+      "slug": "kaff",
+      "name": "Kaff"
+    },
+    {
+      "slug": "karofi",
+      "name": "Karofi"
+    },
+    {
+      "slug": "kluger",
+      "name": "Kluger"
+    },
+    {
+      "slug": "toto",
+      "name": "TOTO"
+    },
+    {
+      "slug": "dai-thanh",
+      "name": "Đại Thành"
+    }
+  ],
+  "products": [
+    {
+      "id": 676,
+      "name": "Bồn cầu 1 khối TOTO MS636DT2 kèm nắp đóng êm TC393VS",
+      "sku": "MS636DT2#XW",
+      "url": "/thiet-bi-ve-sinh/bon-cau/bon-cau-1-khoi-toto-ms636dt2-nap-dong-em-tc393vs"
+    },
+    {
+      "id": 677,
+      "name": "Bồn cầu 2 khối TOTO CS320DRT3 kèm nắp đóng êm TC385VS",
+      "sku": "CS320DRT3#W",
+      "url": "/thiet-bi-ve-sinh/bon-cau/bon-cau-2-khoi-toto-cs320drt3-kem-nap-dong-em-tc385vs"
+    },
+    {
+      "id": 678,
+      "name": "Bồn cầu 2 khối TOTO CS325DRT3 kèm nắp đóng êm TC385VS",
+      "sku": "CS325DRT3#W",
+      "url": "/thiet-bi-ve-sinh/bon-cau/bon-cau-2-khoi-toto-cs325drt3-kem-nap-dong-em-tc385vs"
+    },
+    {
+      "id": 249,
+      "name": "Bồn cầu 1 khối INAX AC-2700VN (AC2700VN) nắp đóng êm",
+      "sku": "AC-2700VN/BW1",
+      "url": "/thiet-bi-ve-sinh/bon-cau/bon-cau-1-khoi-inax-ac-2700vn-nap-dong-em"
+    },
+    {
+      "id": 202,
+      "name": "Chậu Lavabo Đặt Bàn TOTO LW818JW",
+      "sku": "LW818JW/F#W",
+      "url": "/thiet-bi-ve-sinh/lavabo/chau-rua-lavabo-dat-ban-toto-lw818jw-kem-chan-chau-f"
+    },
+    {
+      "id": 205,
+      "name": "Chậu Lavabo Đặt Bàn TOTO LT700CTR",
+      "sku": "LT700CTR#W",
+      "url": "/thiet-bi-ve-sinh/lavabo/chau-rua-lavabo-dat-ban-toto-lt700ctr"
+    },
+    {
+      "id": 206,
+      "name": "Chậu Lavabo Đặt Bàn TOTO LW526NJU",
+      "sku": "LW526NJU#W",
+      "url": "/thiet-bi-ve-sinh/lavabo/chau-rua-lavabo-dat-ban-toto-lw526nju"
+    },
+    {
+      "id": 570,
+      "name": "Sen cây tắm đứng nóng lạnh TOTO DM907CS TVSM104NSR",
+      "sku": "TVSM104NSR/DM907CS",
+      "url": "/thiet-bi-ve-sinh/sen-tam/bo-sen-tam-toto-tvsm104nsrdm907cs-ket-hop-sen-cay-907cs"
+    },
+    {
+      "id": 571,
+      "name": "Sen cây nóng lạnh TOTO TBW01301AB dòng G kèm vòi xả bồn",
+      "sku": "TBW01301AB",
+      "url": "/thiet-bi-ve-sinh/sen-tam/sen-cay-nhiet-do-kem-voi-xa-bon-dong-g-mat-nhua-resin-toto-tbw01301ab-kem-voi-xa-bon"
+    },
+    {
+      "id": 572,
+      "name": "Sen cây nhiệt độ TOTO TBW01401AA dòng G kèm vòi xả bồn",
+      "sku": "TBW01401AA",
+      "url": "/thiet-bi-ve-sinh/sen-tam/sen-tam-cay-toto-tbw01401b-1-che-do-kem-voi-xa-bon"
+    },
+    {
+      "id": 590,
+      "name": "Vòi lavabo lạnh TOTO TVLC101NSR",
+      "sku": "TVLC101NSR",
+      "url": "/thiet-bi-ve-sinh/voi-chau/voi-lavabo-lanh-toto-tvlc101nsr"
+    },
+    {
+      "id": 591,
+      "name": "Vòi lavabo lạnh TOTO TX109LD",
+      "sku": "TX109LD",
+      "url": "/thiet-bi-ve-sinh/voi-chau/voi-chau-toto-tx109ld"
+    },
+    {
+      "id": 593,
+      "name": "Vòi lavabo nóng lạnh RUFICE TOTO TVLM108RU",
+      "sku": "TVLM108RU",
+      "url": "/thiet-bi-ve-sinh/voi-chau/voi-chau-toto-tvlm108ru-voi-co-thap"
+    },
+    {
+      "id": 630,
+      "name": "Bồn tắm TOTO PAY1720V#W TVBF411 nhựa 1m7 gồm bộ xả thải",
+      "sku": "PAY1720V#W/TVBF411",
+      "url": "/thiet-bi-ve-sinh/bon-tam/bon-tam-khong-chan-toto-pay1720vtvbf411-khong-tay-vin-kem-ong-thai"
+    },
+    {
+      "id": 631,
+      "name": "Bồn tắm TOTO PAY1720HV#W TVBF411 nhựa 1m7 tay vịn gồm bộ xả thải",
+      "sku": "PAY1720HV#W/TVBF411",
+      "url": "/thiet-bi-ve-sinh/bon-tam/bon-tam-khong-chan-toto-pay1720hvtbvf411-tay-vin-kem-ong-thai"
+    },
+    {
+      "id": 632,
+      "name": "Bồn tắm TOTO PAY1520HV#W TVBF411 nhựa 1m5 tay vịn gồm bộ xả thải",
+      "sku": "PAY1520HV#W/TVBF411",
+      "url": "/thiet-bi-ve-sinh/bon-tam/bon-tam-khong-chan-toto-pay1520hv-wtvbf411-tay-vin-kem-ong-thai"
+    },
+    {
+      "id": 774,
+      "name": "Nắp bồn cầu rửa cơ Eco washer TOTO TCW07S (E2)",
+      "sku": "TCW07S#W",
+      "url": "/thiet-bi-ve-sinh/nap-bon-cau/eco-washer-toto-tcw07s-ecowasher-e2"
+    },
+    {
+      "id": 775,
+      "name": "Nắp rửa cơ Eco washer TOTO TCW1211A (E4) 2 chế độ rửa trước & sau",
+      "sku": "TCW1211A#NW1",
+      "url": "/thiet-bi-ve-sinh/nap-bon-cau/eco-washer-toto-tcw1211a-ecowasher-e4"
+    },
+    {
+      "id": 776,
+      "name": "Nắp bồn cầu rửa cơ TOTO TCW09S (E5) 2 chế độ rửa trước & sau",
+      "sku": "TCW09S#W",
+      "url": "/thiet-bi-ve-sinh/nap-bon-cau/nap-bon-cau-rua-co-e5-toto-tcw09s"
+    },
+    {
+      "id": 1002,
+      "name": "Nắp rửa cơ INAX CW-S15VN (CWS15VN)",
+      "sku": "CW-S15VN/BW1",
+      "url": "/thiet-bi-ve-sinh/nap-bon-cau/nap-rua-co-inax-cw-s15vn-2247"
+    },
+    {
+      "id": 1200,
+      "name": "Nắp rửa điện tử thông minh INAX CW-H17VN (CWH17VN)",
+      "sku": "CW-H17VN/BW1",
+      "url": "/thiet-bi-ve-sinh/nap-bon-cau/nap-dien-tu-inax-cw-h17vn-2248"
+    },
+    {
+      "id": 661,
+      "name": "Bồn tiểu nam TOTO UT447HR treo tường",
+      "sku": "UT447HR#W",
+      "url": "/thiet-bi-ve-sinh/bon-tieu/bon-tieu-nam-toto-ut447hr"
+    },
+    {
+      "id": 662,
+      "name": "Bồn tiểu nam TOTO UT445H treo tường",
+      "sku": "UT445H#W",
+      "url": "/thiet-bi-ve-sinh/bon-tieu/bon-tieu-nam-toto-ut445h"
+    },
+    {
+      "id": 666,
+      "name": "Bồn tiểu nam TOTO UT57S treo tường",
+      "sku": "UT57S#W",
+      "url": "/thiet-bi-ve-sinh/bon-tieu/bon-tieu-nam-toto-ut57s"
+    },
+    {
+      "id": 300,
+      "name": "Bồn tiểu nam INAX U-411V (U411V)",
+      "sku": "U-411V/BW1",
+      "url": "/thiet-bi-ve-sinh/bon-tieu/bon-tieu-nam-inax-u-411v"
+    },
+    {
+      "id": 502,
+      "name": "Bồn tiểu nam INAX U-440V (U440V)",
+      "sku": "U-440V/BW1",
+      "url": "/thiet-bi-ve-sinh/bon-tieu/bon-tieu-nam-inax-u-440v"
+    },
+    {
+      "id": 6705,
+      "name": "Lô giấy vệ sinh TOTO YH902V",
+      "sku": "YH902V#PN",
+      "url": "/thiet-bi-ve-sinh/phu-kien-phong-tam/lo-giay-ve-sinh-toto-yh902v-3070-niken-yh902v-pn"
+    },
+    {
+      "id": 6706,
+      "name": "Móc áo G tròn TOTO YRH902V",
+      "sku": "YRH902V#BN",
+      "url": "/thiet-bi-ve-sinh/phu-kien-phong-tam/moc-ao-g-tron-toto-yrh902v-6923-nickel-mo-yrh902v-bn"
+    },
+    {
+      "id": 6707,
+      "name": "Móc áo G tròn TOTO YRH902V",
+      "sku": "YRH902V#PBR",
+      "url": "/thiet-bi-ve-sinh/phu-kien-phong-tam/moc-ao-g-tron-toto-yrh902v-6923-dong-yrh902v-pbr"
+    },
+    {
+      "id": 398,
+      "name": "Bếp hồng ngoại 2 vùng nấu ELICA H7 EVCH7520BL",
+      "sku": "H7 EVCH7520BL",
+      "url": "/thiet-bi-bep/bep-dien-tu/bep-hong-ngoai-2-vung-nau-elica-h7-evch7520bl"
+    },
+    {
+      "id": 399,
+      "name": "Bếp từ kết hợp hút mùi ELICA NikolaTesla FIT XL",
+      "sku": "NIKOLA TESLA FIT XL BL/A/83",
+      "url": "/thiet-bi-bep/bep-dien-tu/bep-tu-ket-hop-hut-mui-elica-nikolatesla-fit-xl"
+    },
+    {
+      "id": 400,
+      "name": "Bếp điện từ  4 vùng nấu (liên vùng) ELICA RATIO 604 PLUS BL",
+      "sku": "RATIO 604 PLUS BL",
+      "url": "/thiet-bi-bep/bep-dien-tu/bep-dien-tu-4-vung-nau-lien-vung-elica-ratio-604-plus-bl"
+    },
+    {
+      "id": 4829,
+      "name": "Bếp điện hồng ngoại đơn domino KAFF KF-330C",
+      "sku": "KF-330C",
+      "url": "/thiet-bi-bep/bep-dien-tu/bep-dien-hong-ngoai-don-domino-kaff-kf-330c"
+    },
+    {
+      "id": 4830,
+      "name": "Bếp điện từ đôi KAFF KF-073II",
+      "sku": "KF-073II",
+      "url": "/thiet-bi-bep/bep-dien-tu/bep-dien-tu-doi-kaff-kf-073ii"
+    },
+    {
+      "id": 376,
+      "name": "Chậu rửa chén Posco 304 Linen dập nổi Kluger KF7848FS - S78 Plus",
+      "sku": "KF7848FS - S78 Plus",
+      "url": "/thiet-bi-bep/chau-rua-chen/chau-rua-chen-posco-304-linen-dap-noi-kluger-kf7848fs-s78-plus"
+    },
+    {
+      "id": 377,
+      "name": "Chậu rửa chén Posco 304 Linen dập nổi Kluger KF7848FS - S78 Basic",
+      "sku": "KF7848FS - S78 Basic",
+      "url": "/thiet-bi-bep/chau-rua-chen/chau-rua-chen-posco-304-linen-dap-noi-kluger-kf7848fs-s78-basic"
+    },
+    {
+      "id": 378,
+      "name": "Chậu rửa chén Posco 304 Linen dập nổi Kluger KT8050FS – S80",
+      "sku": "KT8050FS – S80",
+      "url": "/thiet-bi-bep/chau-rua-chen/chau-rua-chen-posco-304-linen-dap-noi-kluger-kt8050fs-s80"
+    },
+    {
+      "id": 4851,
+      "name": "Máy hút mùi áp tường ELICA TUBE IX/A/43",
+      "sku": "TUBE IX/A/43",
+      "url": "/thiet-bi-bep/may-hut-mui/may-hut-mui-ap-tuong-elica-tube-ixa43"
+    },
+    {
+      "id": 4852,
+      "name": "Máy hút mùi âm tủ ELICA ERA GR/A/72",
+      "sku": "ERA GR/A/52",
+      "url": "/thiet-bi-bep/may-hut-mui/may-hut-mui-am-tu-elica-era-gra72"
+    },
+    {
+      "id": 4853,
+      "name": "Máy hút mùi âm tủ ELICA ERA S IX/A/52(72)",
+      "sku": "ERA S IX/A/52",
+      "url": "/thiet-bi-bep/may-hut-mui/may-hut-mui-am-tu-elica-era-s-ixa5272"
+    },
+    {
+      "id": 4891,
+      "name": "Lõi van TOTO HMC35B",
+      "sku": "HMC35B",
+      "url": "/thiet-bi-bep/voi-rua-chen/loi-van-toto-hmc35b"
+    },
+    {
+      "id": 4892,
+      "name": "Lõi van TOTO HVNMC35B",
+      "sku": "HVNMC35B",
+      "url": "/thiet-bi-bep/voi-rua-chen/loi-van-toto-hvnmc35b"
+    },
+    {
+      "id": 4893,
+      "name": "Lõi van TOTO HVNSCC40SR",
+      "sku": "HVNSCC40SR",
+      "url": "/thiet-bi-bep/voi-rua-chen/loi-van-toto-hvnscc40sr"
+    },
+    {
+      "id": 302,
+      "name": "Vòi bếp cảm ứng INAX SF-NB454SX-J (SFNB454SXJ)",
+      "sku": "SF-NB454SX-J",
+      "url": "/thiet-bi-bep/voi-rua-chen/voi-bep-cam-ung-inax-sf-nb454sx-j-6128"
+    },
+    {
+      "id": 303,
+      "name": "Vòi bếp INAX SFV-30 (SFV30) nước lạnh",
+      "sku": "SFV-30",
+      "url": "/thiet-bi-bep/voi-rua-chen/voi-bep-inax-sfv-30-4070"
+    },
+    {
+      "id": 5065,
+      "name": "Vòi chậu bếp nóng lạnh dây rút MOZA KLUGER KLF0009C (KLF0009S)",
+      "sku": "KLF0009S",
+      "url": "/thiet-bi-bep/voi-rua-chen/voi-chau-bep-nong-lanh-day-rut-moza-kluger-klf0009c-klf0009s"
+    },
+    {
+      "id": 5066,
+      "name": "Vòi chậu bếp nóng lạnh dây rút RENE KLUGER KLF0008S (KLF0008B)",
+      "sku": "KLF0008S",
+      "url": "/thiet-bi-bep/voi-rua-chen/voi-chau-bep-nong-lanh-day-rut-rene-kluger-klf0008s-klf0008b"
+    },
+    {
+      "id": 7822,
+      "name": "Gạch nội thất ECOCARAT PLUS RIBMIX INAX ECP-303/RBM",
+      "sku": "ECP-303/RBM2N",
+      "url": "/gach-op-lat/gach-inax-ecocarat/gach-noi-that-ecocarat-plus-ribmix-inax-ecp-303rbm-15069"
+    },
+    {
+      "id": 7823,
+      "name": "Gạch nội thất ECOCARAT PLUS STONE GRACE INAX ECP-630/STG",
+      "sku": "ECP-630/STG-1N",
+      "url": "/gach-op-lat/gach-inax-ecocarat/gach-noi-that-ecocarat-plus-stone-grace-inax-ecp-630stg-15070"
+    },
+    {
+      "id": 7824,
+      "name": "Gạch nội thất ECOCARAT PLUS LUXURY MOSAIC INAX ECP-25NET/LUX",
+      "sku": "ECP-25NET-LUX-12",
+      "url": "/gach-op-lat/gach-inax-ecocarat/gach-noi-that-ecocarat-plus-luxury-mosaic-inax-ecp-25netlux-15071"
+    },
+    {
+      "id": 7830,
+      "name": "Gạch ốp tường WAVE BORDER INAX DCF-20BNET/WAB",
+      "sku": "DCF-20BNET/WAB-1",
+      "url": "/gach-op-lat/gach-op-tuong/gach-op-tuong-wave-border-inax-dcf-20bnetwab-15077"
+    },
+    {
+      "id": 7831,
+      "name": "Gạch ốp tường MELVIO ALDEA INAX HAL-R/MAL",
+      "sku": "HAL-R/MAL-1",
+      "url": "/gach-op-lat/gach-op-tuong/gach-op-tuong-melvio-aldea-inax-hal-rmal-15078"
+    },
+    {
+      "id": 7832,
+      "name": "Gạch ốp tường CELAVIOGRAN A INAX HAL-35B/GRA",
+      "sku": "HAL-35B/GRA-M1",
+      "url": "/gach-op-lat/gach-op-tuong/gach-op-tuong-celaviogran-a-inax-hal-35bgra-15079"
+    },
+    {
+      "id": 5348,
+      "name": "Bồn nước inox Đại Thành 1000L đứng SUS 304 BNDTl1000D",
+      "sku": "BNDTl1000D",
+      "url": "/vat-lieu-nuoc/bon-chua-nuoc/bon-nuoc-inox-dai-thanh-1000l-dung-sus-304-bndtl1000d"
+    },
+    {
+      "id": 5349,
+      "name": "Bồn nước inox Đại Thành 1000L ngang SUS 304 BNDTl1000N",
+      "sku": "BNDTl1000N",
+      "url": "/vat-lieu-nuoc/bon-chua-nuoc/bon-nuoc-inox-dai-thanh-1000l-ngang-sus-304-bndtl1000n"
+    },
+    {
+      "id": 5350,
+      "name": "Bồn nước inox Đại Thành 1500L ngang SUS 304 BNDTl1500N",
+      "sku": "BNDTl1500N",
+      "url": "/vat-lieu-nuoc/bon-chua-nuoc/bon-nuoc-inox-dai-thanh-1500l-ngang-sus-304-bndtl1500n"
+    },
+    {
+      "id": 422,
+      "name": "Máy lọc nước Karofi KAQ-U99",
+      "sku": "KAQ-U99",
+      "url": "/vat-lieu-nuoc/loc-nuoc/may-loc-nuoc-karofi-kaq-u99"
+    },
+    {
+      "id": 423,
+      "name": "Lọc tổng trung tâm cao cấp Karofi KTF-P01",
+      "sku": "KTF-P01",
+      "url": "/vat-lieu-nuoc/loc-nuoc/loc-tong-trung-tam-cao-cap-karofi-ktf-p01"
+    },
+    {
+      "id": 424,
+      "name": "Lọc tổng trung tâm cao cấp Karofi KTF-P02",
+      "sku": "KTF-P02",
+      "url": "/vat-lieu-nuoc/loc-nuoc/loc-tong-trung-tam-cao-cap-karofi-ktf-p02"
+    },
+    {
+      "id": 402,
+      "name": "Máy nước nóng trực tiếp Panasonic 4.5kW DH-4MS1VW",
+      "sku": "DH-4MS1VW",
+      "url": "/vat-lieu-nuoc/may-nuoc-nong/may-nuoc-nong-truc-tiep-panasonic-45kw-dh-4ms1vw"
+    },
+    {
+      "id": 403,
+      "name": "Máy Nước Nóng Panasonic Gián Tiếp DH DH-15HBMVW",
+      "sku": "DH-15HBMVW",
+      "url": "/vat-lieu-nuoc/may-nuoc-nong/may-nuoc-nong-panasonic-gian-tiep-dh-dh-15hbmvw"
+    },
+    {
+      "id": 404,
+      "name": "Máy nước nóng trực tiếp Panasonic 4.5kW DH-4NTP1VM",
+      "sku": "DH-4NTP1VM",
+      "url": "/vat-lieu-nuoc/may-nuoc-nong/may-nuoc-nong-truc-tiep-panasonic-45kw-dh-4ntp1vm"
+    },
+    {
+      "id": 409,
+      "name": "Máy nước nóng trực tiếp Ferroli Amore GDP điều khiển điện tử",
+      "sku": "AMORE GDP 4500W",
+      "url": "/vat-lieu-nuoc/may-nuoc-nong/may-nuoc-nong-truc-tiep-ferroli-amore-gdp-dieu-khien-dien-tu"
+    },
+    {
+      "id": 410,
+      "name": "Máy nước nóng trực tiếp Ferroli Amore GSP bơm tăng áp",
+      "sku": "AMORE GSP 4500W",
+      "url": "/vat-lieu-nuoc/may-nuoc-nong/may-nuoc-nong-truc-tiep-ferroli-amore-gsp-bom-tang-ap"
+    },
+    {
+      "id": 5857,
+      "name": "Bồn cầu 2 khối Memory TOTO CW668J nắp đóng êm TC393VS",
+      "sku": "TOTO-CW668J#W",
+      "url": "/thiet-bi-ve-sinh/bon-cau/bon-cau-hai-khoi-nap-em-t2-toto-cw668j-memory-t2-thoat-san"
+    }
+  ],
+  "verifiedRelations": [
+    {
+      "listing": "/thiet-bi-ve-sinh/bon-cau?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/bon-cau",
+      "id": 676,
+      "sku": "MS636DT2#XW",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/bon-cau?brand=inax",
+      "source": "/api/search?q=AC-2700VN&limit=8",
+      "id": 249,
+      "sku": "AC-2700VN/BW1",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/lavabo?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/lavabo",
+      "id": 202,
+      "sku": "LW818JW/F#W",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/sen-tam?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/sen-tam",
+      "id": 570,
+      "sku": "TVSM104NSR/DM907CS",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/voi-chau?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/voi-chau",
+      "id": 590,
+      "sku": "TVLC101NSR",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/bon-tam?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/bon-tam",
+      "id": 630,
+      "sku": "PAY1720V#W/TVBF411",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/nap-bon-cau?brand=inax",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/nap-bon-cau",
+      "id": 1002,
+      "sku": "CW-S15VN/BW1",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/bon-tieu?brand=inax",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/bon-tieu",
+      "id": 300,
+      "sku": "U-411V/BW1",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-ve-sinh/phu-kien-phong-tam?brand=toto",
+      "source": "/api/catalogue/listings/thiet-bi-ve-sinh/phu-kien-phong-tam",
+      "id": 6705,
+      "sku": "YH902V#PN",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/bep-dien-tu?brand=elica",
+      "source": "/api/catalogue/listings/thiet-bi-bep/bep-dien-tu",
+      "id": 398,
+      "sku": "H7 EVCH7520BL",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/bep-dien-tu?brand=kaff",
+      "source": "/api/catalogue/listings/thiet-bi-bep/bep-dien-tu",
+      "id": 4829,
+      "sku": "KF-330C",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/chau-rua-chen?brand=kluger",
+      "source": "/api/catalogue/listings/thiet-bi-bep/chau-rua-chen",
+      "id": 376,
+      "sku": "KF7848FS - S78 Plus",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/may-hut-mui?brand=elica",
+      "source": "/api/catalogue/listings/thiet-bi-bep/may-hut-mui",
+      "id": 4851,
+      "sku": "TUBE IX/A/43",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/voi-rua-chen?brand=inax",
+      "source": "/api/catalogue/listings/thiet-bi-bep/voi-rua-chen",
+      "id": 302,
+      "sku": "SF-NB454SX-J",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/thiet-bi-bep/voi-rua-chen?brand=kluger",
+      "source": "/api/catalogue/listings/thiet-bi-bep/voi-rua-chen",
+      "id": 5065,
+      "sku": "KLF0009S",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/gach-op-lat/gach-inax-ecocarat?brand=inax",
+      "source": "/api/catalogue/listings/gach-op-lat/gach-inax-ecocarat",
+      "id": 7822,
+      "sku": "ECP-303/RBM2N",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/gach-op-lat/gach-op-tuong?brand=inax",
+      "source": "/api/catalogue/listings/gach-op-lat/gach-op-tuong",
+      "id": 7830,
+      "sku": "DCF-20BNET/WAB-1",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/vat-lieu-nuoc/bon-chua-nuoc?brand=dai-thanh",
+      "source": "/api/catalogue/listings/vat-lieu-nuoc/bon-chua-nuoc",
+      "id": 5348,
+      "sku": "BNDTl1000D",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/vat-lieu-nuoc/loc-nuoc?brand=karofi",
+      "source": "/api/catalogue/listings/vat-lieu-nuoc/loc-nuoc",
+      "id": 422,
+      "sku": "KAQ-U99",
+      "priceAbsent": true
+    },
+    {
+      "listing": "/vat-lieu-nuoc/may-nuoc-nong?brand=ferroli",
+      "source": "/api/catalogue/listings/vat-lieu-nuoc/may-nuoc-nong",
+      "id": 409,
+      "sku": "AMORE GDP 4500W",
+      "priceAbsent": true
+    }
+  ]
+}
