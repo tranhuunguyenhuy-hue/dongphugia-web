@@ -15,7 +15,7 @@ export const maxLane = (...lanes) => lanes.reduce((a, b) => (laneRank(b) > laneR
 // Pipeline-only files (.github/workflows, scripts/release, scripts/backup) are NOT full: they do not change a hosted database,
 // function or binding, so they rate `extended` (TL review once) and never block future Worker-only releases.
 export const FULL_CATEGORIES = Object.freeze({
-  sql: [/^prisma\//, /^db\//, /^supabase\/(?!functions\/)/, /^scripts\/(db|migration|m6)\//],
+  sql: [/^prisma\//, /^db\//, /^supabase\/(?!functions\/)/, /^scripts\/(db|migration|m6)\//, /^release\/plans\//],
   function: [/^supabase\/functions\//],
   bindings: [/(^|\/)wrangler[^/]*\.jsonc?$/],
 })

@@ -18,7 +18,7 @@ export function readiness(e, links = {}) {
   if (e.PACKAGED !== 'success') blockers.push(`packaged verify ${mark(e.PACKAGED)}`)
   if (e.MODE === 'manual' && e.MEDIA !== 'success') blockers.push(`media test object ${mark(e.MEDIA)}`)
   if (!e.PRODUCTION_SHA || e.PRODUCTION_SHA === 'UNKNOWN' || !touch) blockers.push('release scope UNKNOWN')
-  else if (Object.keys(touch).length) blockers.push(`full scope (${Object.keys(touch).join('+')}): not publishable by this Worker-only lane — escalate to Owner/TL (protected full process)`)
+  else if (Object.keys(touch).length) blockers.push(`full scope (${Object.keys(touch).join('+')}): released by its reviewed plan — the GO carries PLAN + PREFLIGHT-RUN (Production plan-check), not this verify`)
   if (links.qualityState !== 'success') blockers.push(`quality on main ${links.qualityState ?? 'UNKNOWN'}`)
   return { status: blockers.length ? 'NOT READY' : 'READY', blockers }
 }

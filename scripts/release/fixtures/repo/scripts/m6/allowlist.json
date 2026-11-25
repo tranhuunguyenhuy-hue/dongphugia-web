@@ -1,0 +1,334 @@
+{
+  "schema": 1,
+  "target": {
+    "project_name": "dongphugia-runtime",
+    "region": "ap-southeast-1",
+    "environment": "preview",
+    "ceiling_bytes": 367001600,
+    "project_ref": "bonxyxluzlxfkdetryoo",
+    "effective_role": "postgres"
+  },
+  "min_headroom_bytes": 8388608,
+  "backup": {
+    "workflow": ".github/workflows/m4-production-backup.yml",
+    "max_age_minutes": 120,
+    "backup_step": "Row-count manifest, encrypted dump and checksums",
+    "restore_job": "restore-rehearsal"
+  },
+  "sql": {
+    "apply-004": [
+      {
+        "id": "p470-004",
+        "file": "supabase/prod-prep/470/004_commerce_direct_access_lock.sql",
+        "sha256": "029b37962ee3bbc885d1de0034590156b116b1b876ad96fce900c00242a291b3",
+        "vars": {}
+      }
+    ],
+    "apply-schema": [
+      {
+        "id": "p470-001",
+        "file": "supabase/prod-prep/470/001_canonical_price_columns.sql",
+        "sha256": "c08fcda917884ada0ebbf7d1089ca427092e635f6a8e689297c7670b7b8827a1",
+        "vars": {}
+      },
+      {
+        "id": "p470-002",
+        "file": "supabase/prod-prep/470/002_canonical_price_grants.sql",
+        "sha256": "a7560699fa3d0f550664a4a3693619fb56dded0a9a6ec6a15e6036e47ae63a1a",
+        "vars": {}
+      },
+      {
+        "id": "commerce-001",
+        "file": "supabase/commerce-v1/001_commerce_schema.sql",
+        "sha256": "1fed39146dbd4fb559d040c04b56c37b865cdce72c5ce620fb2084a098468315",
+        "vars": {
+          "target": "production",
+          "admin_role": "dpg_admin_api"
+        }
+      }
+    ],
+    "rollback-schema": [
+      {
+        "id": "commerce-001-rollback",
+        "file": "supabase/commerce-v1/001_commerce_schema_rollback.sql",
+        "sha256": "f51d9dccfbc4f75fb9a9217dbe868373ec21afdb3033af88ae355ba5569b3eca",
+        "vars": {
+          "target": "production"
+        }
+      },
+      {
+        "id": "p470-002-rollback",
+        "file": "supabase/prod-prep/470/002_canonical_price_grants_rollback.sql",
+        "sha256": "d422a04d0e4fcc0ac46e7277068b960218bfa7a19fe5a4cc28a1b7bcb819508f",
+        "vars": {}
+      },
+      {
+        "id": "p470-001-rollback",
+        "file": "supabase/prod-prep/470/001_canonical_price_columns_rollback.sql",
+        "sha256": "8091c1e559d510fcf87a2f4af79f8f7517849253c43bdbd8f32f9cc335e7e520",
+        "vars": {}
+      }
+    ]
+  },
+  "scope_index": {
+    "file": "docs/ops/hita-448/owner-accepted-candidates/scope-index.csv",
+    "sha256": "b280a9512530e51fa00815accc8fe9c7bca06423eb30afe3b1cc3b58e7405249"
+  },
+  "planner": {
+    "file": "scripts/hita-price-audit/prod-import.mts",
+    "sha256": "7e1844df2b0107b88b759192a8792e5d4f513137fe670c34af864a7933640d97"
+  },
+  "lanes": [
+    {
+      "id": "A-toto-active",
+      "group": "prices",
+      "mode": "archived-direct",
+      "brand": "toto",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-active/archived-direct.csv",
+        "sha256": "796fe50fc5f467740b627163383edd7fbbe292738f7a51a9a859c23770769565"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-active/archived-direct-approval.json",
+        "sha256": "8865e2bf2462c96584dd523895f5c1bead202c85671895a7d30b3e821569eb1e"
+      }
+    },
+    {
+      "id": "A-toto-inactive",
+      "group": "prices",
+      "mode": "archived-direct",
+      "brand": "toto",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-inactive/archived-direct.csv",
+        "sha256": "0f0d202ccc35cf1765cc5291a29b5ce6eac1060f0d8d0d89d2156491771d49bb"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-inactive/archived-direct-approval.json",
+        "sha256": "1b2a19abd1c983ab93b0ac596ca0d498720db94ddc452908fbc958cd28819b0a"
+      }
+    },
+    {
+      "id": "A-inax-active",
+      "group": "prices",
+      "mode": "archived-direct",
+      "brand": "inax",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/archived-direct.csv",
+        "sha256": "03af3ba9e63681d23eaad59dfba36bc9b3b6cdd49896e90ba43def67d11b739d"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/archived-direct-approval.json",
+        "sha256": "f2f5c40163a4132c004194af11a4a897073f34464845e459fc005a4f875f2504"
+      }
+    },
+    {
+      "id": "A-inax-inactive",
+      "group": "prices",
+      "mode": "archived-direct",
+      "brand": "inax",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-inactive/archived-direct.csv",
+        "sha256": "e8d7646fc5b71239968072c950905bb7ece787bf33cb545007e3dfbf89799eab"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-inactive/archived-direct-approval.json",
+        "sha256": "73272f62a36c88b269347f87b795babe05ae1620293524cafe50c59406838f6a"
+      }
+    },
+    {
+      "id": "B-toto-active",
+      "group": "prices",
+      "mode": "candidates",
+      "brand": "toto",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-active/candidate.csv",
+        "sha256": "be316fa43325a016a2897ba94b5fc2cf0f9691a3714df6d6f464e4c9839b7b92"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-active/owner-approval.json",
+        "sha256": "3357fbb5c1a5d0ec0a86b38ba7747e9e40b7edd6230b6fb35e64c2b36ffee13b"
+      }
+    },
+    {
+      "id": "B-toto-inactive",
+      "group": "prices",
+      "mode": "candidates",
+      "brand": "toto",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-inactive/candidate.csv",
+        "sha256": "5113c8eaa9a396f10acbeace59e1fb030217f78e61b9a68eb89ce8c542078686"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/toto-inactive/owner-approval.json",
+        "sha256": "84a27f25ce0fec9e324c6b120520cefa2a51f288951b459c52f6628bfbc96219"
+      }
+    },
+    {
+      "id": "B-inax-active",
+      "group": "prices",
+      "mode": "candidates",
+      "brand": "inax",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/candidate.csv",
+        "sha256": "0fab79307bd76ebc33c2cf81fbc6cfeb74321cd36d8361048b734426e3884e7a"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/owner-approval.json",
+        "sha256": "577a12b29a71282bce591a4674b6ac68e71b91fb52ed5269ab478b6dc0d429c0"
+      }
+    },
+    {
+      "id": "B-inax-inactive",
+      "group": "prices",
+      "mode": "candidates",
+      "brand": "inax",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-inactive/candidate.csv",
+        "sha256": "69d56924d1436d536fbeeda7a91e3e21ed1b0fcecbb4bb89abe31281a55f6636"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-inactive/owner-approval.json",
+        "sha256": "7a8968282b1998d312561571bd6e8b05df21c49e4a27f26bfe7875a36ebbacef"
+      }
+    },
+    {
+      "id": "C-inax-active",
+      "group": "prices",
+      "mode": "baseline",
+      "brand": "inax",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/inax-baseline-hold.csv",
+        "sha256": "24538be864405485ef09f334cf0ad58da1ea1d9648d70b8d061441b8fba624c1"
+      },
+      "approval": {
+        "file": "docs/ops/hita-448/owner-accepted-candidates/inax-active/inax-baseline-owner-decision.json",
+        "sha256": "3488b3d6dde819e3f881da31a205fe8b33a1072a59f6a941188844c8f1dbc8e4"
+      }
+    },
+    {
+      "id": "D-toto-active",
+      "group": "prices",
+      "mode": "status",
+      "brand": "toto",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/import-handoff/toto-active/status-review.csv",
+        "sha256": "00d70d7039d462f915d2eda01ff89d0f831356c63d4b108cf98026d999016b53"
+      }
+    },
+    {
+      "id": "D-toto-inactive",
+      "group": "prices",
+      "mode": "status",
+      "brand": "toto",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/import-handoff/toto-inactive/status-review.csv",
+        "sha256": "a79bdb0bcff2a5a1c228cdf3f648333392c3a6ad86ee46d4820ec78ae83b3c2d"
+      }
+    },
+    {
+      "id": "D-inax-active",
+      "group": "prices",
+      "mode": "status",
+      "brand": "inax",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/hita-448/import-handoff/inax-active/status-review.csv",
+        "sha256": "a8861d99fe9612e7ad2cdee62d7bb96de69c820633f3afa83a61c5c6f1046d68"
+      }
+    },
+    {
+      "id": "D-inax-inactive",
+      "group": "prices",
+      "mode": "status",
+      "brand": "inax",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/hita-448/import-handoff/inax-inactive/status-review.csv",
+        "sha256": "65546c08c84113fcaedd5d643d8de52aadfa0637fad49d356f6e1688696eba7c"
+      }
+    },
+    {
+      "id": "E-toto-active",
+      "group": "voucher",
+      "mode": "voucher",
+      "brand": "toto",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approved.csv",
+        "sha256": "894f0ac92dd05372e73f77fd7bc389872838678884b4bafbc88f7714805a4a08"
+      },
+      "approval": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approval.json",
+        "sha256": "4f802391bf6d1dd57ccc4524d537b824db6874676c4f8e1b5929e190d989233e"
+      }
+    },
+    {
+      "id": "E-toto-inactive",
+      "group": "voucher",
+      "mode": "voucher",
+      "brand": "toto",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approved.csv",
+        "sha256": "894f0ac92dd05372e73f77fd7bc389872838678884b4bafbc88f7714805a4a08"
+      },
+      "approval": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approval.json",
+        "sha256": "4f802391bf6d1dd57ccc4524d537b824db6874676c4f8e1b5929e190d989233e"
+      }
+    },
+    {
+      "id": "E-inax-active",
+      "group": "voucher",
+      "mode": "voucher",
+      "brand": "inax",
+      "state": "active",
+      "csv": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approved.csv",
+        "sha256": "894f0ac92dd05372e73f77fd7bc389872838678884b4bafbc88f7714805a4a08"
+      },
+      "approval": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approval.json",
+        "sha256": "4f802391bf6d1dd57ccc4524d537b824db6874676c4f8e1b5929e190d989233e"
+      }
+    },
+    {
+      "id": "E-inax-inactive",
+      "group": "voucher",
+      "mode": "voucher",
+      "brand": "inax",
+      "state": "inactive",
+      "csv": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approved.csv",
+        "sha256": "894f0ac92dd05372e73f77fd7bc389872838678884b4bafbc88f7714805a4a08"
+      },
+      "approval": {
+        "file": "docs/ops/price-release-470/voucher-lane/voucher-approval.json",
+        "sha256": "4f802391bf6d1dd57ccc4524d537b824db6874676c4f8e1b5929e190d989233e"
+      }
+    }
+  ],
+  "expected": {
+    "prices": {
+      "rows": 4648,
+      "lanes": 9
+    },
+    "status": {
+      "rows": 1284
+    },
+    "voucher": {
+      "rows": 1101
+    }
+  }
+}

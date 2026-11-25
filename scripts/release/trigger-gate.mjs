@@ -49,9 +49,11 @@ export function evaluateTrigger({ target, event, repo, ref, actor, githubSha, in
     if (w.actor !== OWNER || actor !== OWNER) return skip('UNTRUSTED_TRIGGER actor')
     if (!SHA.test(w.headSha ?? '') || w.headSha !== githubSha || mainHead !== githubSha) return skip(`SUPERSEDED main=${mainHead ?? 'UNKNOWN'}`)
     if (scopeLane === 'none') return skip('NO_RUNTIME_CHANGE_VS_PRODUCTION')
-    if (scopeLane === 'full' || !scopeLane) return skip('FULL_LANE_OR_UNKNOWN_SCOPE_SEPARATE_GATES')
+    // #511: the read-only M4 verify also runs for full/unknown scope (it shows whether the new Worker works with the CURRENT
+    // Production schema). The combined Staging never auto-publishes a full scope: its TEST dependencies run first, by plan.
+    if (target === 'staging' && (scopeLane === 'full' || !scopeLane)) return skip('FULL_LANE_OR_UNKNOWN_SCOPE_RUNS_BY_PLAN')
     if (target === 'staging' && !lock?.allowed) return skip(lock?.reason ?? 'LOCK_STATE_UNKNOWN')
-    return { run: true, fail: false, sha: githubSha, mode: 'auto', operation: target === 'm4' ? 'verify' : 'publish-m3', uatIssue: '', reason: `AUTO_PREFLIGHT lane=${scopeLane}` }
+    return { run: true, fail: false, sha: githubSha, mode: 'auto', operation: target === 'm4' ? 'verify' : 'publish-m3', uatIssue: '', reason: `AUTO_PREFLIGHT lane=${scopeLane ?? 'UNKNOWN'}` }
   }
   return refuse('EVENT_NOT_ALLOWED')
 }

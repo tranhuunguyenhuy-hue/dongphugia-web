@@ -9,16 +9,23 @@
 //   UAT PASS <sha>                       Owner UAT on fixed Staging (GO comment or an earlier Owner comment), required for fast+
 //   UAT-WAIVER <sha> <reason>            explicit Owner deferral/waiver instead of UAT, only in the GO comment
 //   FLAGS-CHANGE <key=value;...>         required exactly when the reviewed flags differ from the active version
+//   PLAN <plan-id> <64-hex digest>       full scope (#511): the reviewed release plan this GO approves (one per release)
+//   PREFLIGHT-RUN <run id>               full scope: the read-only Production plan-check run (M6 plan-check) passed before this GO
+//   STEP-GO <sha> <plan-id> <step-id>    a destructive or privileged plan step: SEPARATE unedited Owner comment after the GO
+//   ROLLBACK-GO <sha> <plan-id> <step-id>   an SQL rollback of a plan step: SEPARATE unedited Owner comment after the GO
 //   NO-GO <sha> | GO-PROD-REVOKE <sha> | UAT FAIL <sha>   withdraw approval (also after the GO, up to the pre-deploy recheck);
 //                                        withdrawals count even from an edited comment, approvals only from unedited ones
-// A release scope with real SQL, Supabase function or Worker binding changes is NOT publishable by this Worker-only lane: no
-// existing lane evidence proves which operation ran and that every required change and postcondition holds, so it fails closed
-// (FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS) and is escalated to Owner/TL under the existing protected full process.
+// Full scope (real SQL, Supabase function or Worker binding changes) is publishable only through a reviewed release PLAN (#511):
+// the plan must cover every full-scope file, its TEST chain must be applied before the UAT, and every dependency of the step being
+// executed must have trusted per-step evidence (plan-evidence.mjs) on this candidate and plan digest. Without a valid plan it fails
+// closed (FULL_SCOPE_REQUIRES_PLAN).
 import {
   DEFAULT_REPOSITORY, M4_WORKFLOW, QUALITY_WORKFLOW, SHA, STAGING_WORKFLOW, appendSummary, byTime, currentMainHead, github,
   githubList, isMain, isOwnerComment, plainLines, qualityFromRuns,
 } from './lib.mjs'
-import { LANES, laneRank, maxLane } from './risk-lane.mjs'
+import { FUNCTION_LANE, SQL_LANE, dependencyGaps, preflightOk, stepStates } from './plan-evidence.mjs'
+import { ancestors, coverageGaps, loadPlan } from './plan.mjs'
+import { LANES, laneRank, maxLane, releaseScope } from './risk-lane.mjs'
 
 const DIRECTIVE = [
   ['go', /^GO-PROD ([0-9a-f]{40})$/],
@@ -30,6 +37,10 @@ const DIRECTIVE = [
   ['verifyRun', /^VERIFY-RUN ([1-9][0-9]*)$/],
   ['lane', new RegExp(`^LANE (${LANES.filter((l) => l !== 'none').join('|')})$`)],
   ['flags', /^FLAGS-CHANGE ([a-z_]+=[a-z,-]+(?:;[a-z_]+=[a-z,-]+)*)$/],
+  ['plan', /^PLAN ([a-z0-9][a-z0-9-]{2,60}) ([0-9a-f]{64})$/],
+  ['preflightRun', /^PREFLIGHT-RUN ([1-9][0-9]*)$/],
+  ['stepGo', /^STEP-GO ([0-9a-f]{40}) ([a-z0-9][a-z0-9-]{2,60}) ([a-z][a-z0-9-]{1,40})$/],
+  ['rollbackGo', /^ROLLBACK-GO ([0-9a-f]{40}) ([a-z0-9][a-z0-9-]{2,60}) ([a-z][a-z0-9-]{1,40})$/],
 ]
 
 export function parseDirectives(body) {
@@ -37,7 +48,7 @@ export function parseDirectives(body) {
   for (const line of plainLines(body)) {
     for (const [type, re] of DIRECTIVE) {
       const m = line.match(re)
-      if (m) found.push({ type, value: m[1], extra: m[2] })
+      if (m) found.push({ type, value: m[1], extra: m[2], args: m.slice(1) })
     }
   }
   return found
@@ -64,6 +75,14 @@ export const DEPLOY_STEP = 'Publish with the Admin secrets'
 export const STAGING_STEP = 'Publish only named staging'
 export const COMBINED_STAGING_JOB = 'publish-m3' // the legacy M2 `publish` job writes a Public-only artifact under the same SHA tag
 
+// TEST chain (Worker ancestors + Worker, or the whole plan) must be applied in TEST before the Owner's UAT PASS.
+function planTestChainLate(plan, uatAt) {
+  const p = plan.loaded.plan
+  const worker = p.steps.find((s) => s.type === 'worker')
+  const chain = worker ? [...ancestors(p, worker.id), worker.id] : p.steps.map((s) => s.id)
+  return chain.some((id) => { const st = plan.testStates?.get(id); return st?.state !== 'applied' || !(st.at < uatAt) })
+}
+
 export function trustedRun(run, { path, repo = DEFAULT_REPOSITORY, sha }) {
   return run?.path === path && run.head_branch === 'main' && run.head_repository?.full_name === repo
     && ['workflow_dispatch', 'workflow_run'].includes(run.event) && (!sha || run.head_sha === sha)
@@ -85,7 +104,10 @@ export function stagingAt(stagingRuns, T, repo = DEFAULT_REPOSITORY) {
 /** Pure evaluation; returns every failed check so one run shows the full picture. */
 export function evaluateGo(input) {
   const { url, comment, issue, issueComments = [], m4Runs = [], stagingRuns = [], qualityRuns = [], candidateSha, lane,
-    fullTouch = null, flagsChange = '', currentRunId = null, repo = DEFAULT_REPOSITORY } = input
+    fullTouch = null, flagsChange = '', currentRunId = null, repo = DEFAULT_REPOSITORY, plan = null, purpose = 'publish' } = input
+  const fullCategoryList = Object.keys(fullTouch ?? {})
+  // Plan mode: full-scope publish, or any Production plan step (SQL/function) whatever the Worker scope.
+  const planMode = fullCategoryList.length > 0 || purpose !== 'publish'
   const reasons = []
   const fail = (code) => { reasons.push(code); return { ok: false, reasons } }
   if (!SHA.test(candidateSha ?? '')) return fail('CANDIDATE_SHA_INVALID')
@@ -119,11 +141,13 @@ export function evaluateGo(input) {
   }
 
   // Verify: bound to one trusted verify OPERATION of this SHA, finished before the GO, not invalidated by a newer failure.
+  // Plan mode uses the Production plan-check (PREFLIGHT-RUN) instead: the new Worker may need the new schema, and the publish run
+  // re-verifies the packaged Worker against the migrated Production database before it deploys.
   const trusted = m4Runs.filter((r) => trustedRun(r, { path: M4_WORKFLOW, repo, sha: candidateSha }) && r.id !== currentRunId)
-  if (trusted.some((r) => r.status !== 'completed')) reasons.push('VERIFY_STATE_AMBIGUOUS_RUN_IN_PROGRESS')
+  if (!planMode && trusted.some((r) => r.status !== 'completed')) reasons.push('VERIFY_STATE_AMBIGUOUS_RUN_IN_PROGRESS')
   const vr = only('verifyRun')
   const bound = vr && trusted.find((r) => String(r.id) === vr.value)
-  if (!vr) reasons.push('VERIFY_RUN_MISSING')
+  if (planMode) { /* verify not required */ } else if (!vr) reasons.push('VERIFY_RUN_MISSING')
   else if (!bound || bound.status !== 'completed' || bound.conclusion !== 'success' || !isVerifyOperation(bound)
     || step(bound, VERIFY_STEP)?.conclusion !== 'success' || step(bound, FLAGS_STEP)?.conclusion !== 'success') reasons.push('VERIFY_RUN_NOT_A_TRUSTED_VERIFY_PASS')
   else {
@@ -163,14 +187,34 @@ export function evaluateGo(input) {
       else if (served.sha !== candidateSha) reasons.push('UAT_STAGING_NOT_CANDIDATE')
       else if (served.job !== COMBINED_STAGING_JOB) reasons.push('UAT_STAGING_NOT_COMBINED_ARTIFACT')
       else if (served.conclusion !== 'success' || !(served.completed < lastPass.c.created_at)) reasons.push('UAT_STAGING_NOT_PASSED')
+      else if (planMode && plan?.loaded && planTestChainLate(plan, lastPass.c.created_at)) reasons.push('UAT_BEFORE_TEST_CHAIN_APPLIED')
       else uat = 'pass'
     }
   }
 
-  // Full scope is never published by this Worker-only lane (see header). An explicitly raised LANE full without such changes is fine.
+  // Full scope / plan steps: a valid reviewed plan for this candidate, covering the scope, with every dependency evidenced.
   if (!fullTouch && effective === 'full') reasons.push('FULL_SCOPE_UNKNOWN')
-  const fullCategories = Object.keys(fullTouch ?? {})
-  if (fullCategories.length) reasons.push(`FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS:${fullCategories.sort().join('+')}`)
+  if (planMode) {
+    const planLine = only('plan')
+    if (!planLine) reasons.push('FULL_SCOPE_REQUIRES_PLAN')
+    else if (!plan?.loaded) reasons.push(`PLAN_INVALID:${plan?.error ?? 'not loaded'}`)
+    else if (plan.loaded.plan.id !== planLine.args[0] || plan.loaded.digest !== planLine.args[1]) reasons.push('PLAN_DIGEST_MISMATCH')
+    else {
+      const gaps = coverageGaps(plan.loaded, plan.categories ?? {})
+      if (plan.categories === undefined) reasons.push('PLAN_SCOPE_UNKNOWN')
+      for (const gap of gaps) reasons.push(`PLAN_COVERAGE_GAP:${gap}`)
+      const pf = only('preflightRun')
+      if (!pf) reasons.push('PREFLIGHT_RUN_MISSING')
+      else { const bad = preflightOk(plan.loaded, plan.sqlRuns?.production, pf.value, comment.created_at, { candidateSha, repo }); if (bad) reasons.push(bad) }
+      const target = purpose === 'publish' ? 'publish' : purpose.step
+      for (const gap of dependencyGaps(plan.loaded, 'production', target, { testStates: plan.testStates, prodStates: plan.prodStates })) reasons.push(gap)
+      const step = purpose === 'publish' ? null : plan.loaded.plan.steps.find((s) => s.id === purpose.step)
+      const separate = (type) => after.filter(unedited).some((c) => parseDirectives(c.body).some((d) => d.type === type
+        && d.args[0] === candidateSha && d.args[1] === plan.loaded.plan.id && d.args[2] === step?.id))
+      if (step && (step.destructive || step.privileged) && purpose.op !== 'rollback' && !separate('stepGo')) reasons.push(`STEP_GO_REQUIRED:${step.id}`)
+      if (step && purpose.op === 'rollback' && !separate('rollbackGo')) reasons.push(`ROLLBACK_GO_REQUIRED:${step.id}`)
+    }
+  }
 
   // CI: the exact candidate needs a successful trusted `quality` push run on main (no bypass through manual dispatch).
   const quality = qualityFromRuns(qualityRuns, candidateSha, repo)
@@ -189,7 +233,7 @@ async function withJobs(request, repo, runs) {
   return Promise.all(runs.map(async (run) => ({ ...run, jobs: (await request(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`)).jobs })))
 }
 
-export async function collectGoInputs({ url, candidateSha, request, repo = DEFAULT_REPOSITORY }) {
+export async function collectGoInputs({ url, candidateSha, request, repo = DEFAULT_REPOSITORY, root = process.cwd(), withHistory = false }) {
   const { issue: number, commentId } = parseCommentUrl(url, repo)
   const file = (path) => path.split('/').at(-1)
   const [comment, issue, issueComments, m4List, stagingForSha, qualityRuns] = await Promise.all([
@@ -203,8 +247,25 @@ export async function collectGoInputs({ url, candidateSha, request, repo = DEFAU
   // Every Staging run (any SHA) since the first one for this candidate: needed to prove what Staging served at UAT time.
   const since = stagingForSha.map((r) => r.created_at).sort()[0]
   const stagingList = since ? await githubList(request, `/repos/${repo}/actions/workflows/${file(STAGING_WORKFLOW)}/runs?created=%3E%3D${since}`, { key: 'workflow_runs', maxPages: 3 }) : []
-  return { url, comment, issue, issueComments, candidateSha, repo, qualityRuns,
-    m4Runs: await withJobs(request, repo, m4List), stagingRuns: await withJobs(request, repo, stagingList) }
+  const m4Runs = await withJobs(request, repo, m4List)
+  const stagingRuns = await withJobs(request, repo, stagingList)
+  // Plan mode inputs (#511): the plan named by the GO's PLAN line, at this checkout (= candidate), and per-step lane evidence.
+  let plan = null
+  const planLine = parseDirectives(comment.body).find((d) => d.type === 'plan')
+  if (planLine) {
+    plan = {}
+    try { plan.loaded = loadPlan(root, planLine.args[0]) } catch (error) { plan.error = error.message }
+    const runsOf = async (path) => withJobs(request, repo, await githubList(request, `/repos/${repo}/actions/workflows/${file(path)}/runs?head_sha=${candidateSha}`, { key: 'workflow_runs', maxPages: 2 }))
+    const [testLane, sqlProd, fnProd] = await Promise.all([runsOf(SQL_LANE.test), runsOf(SQL_LANE.production), runsOf(FUNCTION_LANE.production)])
+    plan.sqlRuns = { production: sqlProd }
+    if (plan.loaded) {
+      plan.testStates = stepStates(plan.loaded, 'test', [...testLane, ...stagingRuns], { candidateSha, repo })
+      plan.prodStates = stepStates(plan.loaded, 'production', [...sqlProd, ...fnProd, ...m4Runs], { candidateSha, repo })
+    }
+    const scope = await releaseScope(candidateSha, { withHistory })
+    plan.categories = scope.unknown ? undefined : scope.categories
+  }
+  return { url, comment, issue, issueComments, candidateSha, repo, qualityRuns, m4Runs, stagingRuns, plan }
 }
 
 async function main() {
@@ -212,8 +273,13 @@ async function main() {
   const repo = env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY
   const fullTouch = env.FULL_TOUCH && env.FULL_TOUCH !== 'unknown' ? JSON.parse(env.FULL_TOUCH) : null
   const request = github()
-  const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo })
-  const result = evaluateGo({ ...inputs, lane: env.RISK_LANE, fullTouch, flagsChange: env.FLAGS_CHANGE ?? '', currentRunId: Number(env.GITHUB_RUN_ID) || null })
+  const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo, withHistory: env.SCOPE_WITH_HISTORY === 'true' })
+  // GO_PURPOSE=step (M6 plan-apply/rollback, Production function lane) names PLAN_STEP_ID and PLAN_OP; default = the Worker publish.
+  const purpose = env.GO_PURPOSE === 'step' ? { step: env.PLAN_STEP_ID, op: env.PLAN_OP } : 'publish'
+  if (purpose !== 'publish' && (env.PLAN_ID || env.PLAN_DIGEST) && inputs.plan?.loaded
+    && (inputs.plan.loaded.plan.id !== env.PLAN_ID || inputs.plan.loaded.digest !== env.PLAN_DIGEST)) inputs.plan.error = 'DISPATCH_PLAN_DIFFERS_FROM_GO_PLAN'
+  if (inputs.plan?.error === 'DISPATCH_PLAN_DIFFERS_FROM_GO_PLAN') inputs.plan.loaded = undefined
+  const result = evaluateGo({ ...inputs, lane: env.RISK_LANE || 'full', fullTouch, flagsChange: env.FLAGS_CHANGE ?? '', currentRunId: Number(env.GITHUB_RUN_ID) || null, purpose })
   if (env.CHECK_MAIN_HEAD === 'true') {
     // Right before publish: main must still be the approved candidate (no newer merge slipped in after the GO).
     const head = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
