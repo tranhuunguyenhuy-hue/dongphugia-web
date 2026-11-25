@@ -31,7 +31,7 @@ on:
         description: '#470 Public canonical prices (sanitary x TOTO). off = unchanged Public. on ONLY with the Owner GO for #449 (schema, import and reconciliation done).'
         required: true
         type: choice
-        options: [off, on]
+        options: ['off', 'on']
         default: 'off'
       canonical_brands:
         description: '#470 brands priced when canonical_pricing=on (each can be switched on separately). Ignored when canonical_pricing=off.'
@@ -43,7 +43,7 @@ on:
         description: '#470 commerce v1 (guest cart, orders, quotes). off = closed (404). on ONLY with the Owner release GO: needs vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID (intake login role, caching disabled) and the dpg_commerce schema applied.'
         required: true
         type: choice
-        options: [off, on]
+        options: ['off', 'on']
         default: 'off'
 
 permissions:
