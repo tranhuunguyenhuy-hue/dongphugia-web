@@ -10,12 +10,14 @@ type ReadScope = {
   peak: number
   waiters: Waiter[]
   signal?: AbortSignal
+  /** #457: identical SELECTs of ONE request share one round trip (vinext probes a Flight page before rendering it). */
+  reads: Map<string, Promise<unknown>>
 }
 const scopes = new AsyncLocalStorage<ReadScope>()
 
 /** Keep the scope alive through asynchronous render/stream continuations. */
 export function withPublicReadScope<T>(signal: AbortSignal | undefined, render: () => T): T {
-  return scopes.run({ active: 0, peak: 0, waiters: [], signal }, render)
+  return scopes.run({ active: 0, peak: 0, waiters: [], signal, reads: new Map() }, render)
 }
 
 export function publicReadScope() {
