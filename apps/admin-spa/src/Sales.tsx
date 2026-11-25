@@ -1,8 +1,8 @@
 // Commerce v1 inbox: guest ORDERS and QUOTE REQUESTS (schema dpg_commerce). Staff read the exact snapshot the customer submitted, move the status
 // (Mới -> Đang xử lý -> Hoàn tất, or Huỷ), write an internal note and assign the record. Nothing here edits totals/lines/customer data and nothing says "paid":
 // payment, delivery and cost are confirmed with the customer outside the system.
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Search } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Loader2, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,14 +21,23 @@ const REASON: Record<string, string> = { NO_PRICE: 'Chưa có giá bán trực t
 const KIND_LABEL: Record<SalesKind, { title: string; one: string; nav: string }> = { orders: { title: 'Đơn hàng', one: 'Đơn hàng', nav: 'orders' }, quotes: { title: 'Yêu cầu báo giá', one: 'Yêu cầu báo giá', nav: 'quotes' } }
 const dateText = (value: string) => new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 const tone = (status: SalesStatus): 'secondary' | 'outline' | 'destructive' | 'default' => (status === 'done' ? 'secondary' : status === 'cancelled' ? 'destructive' : status === 'new' ? 'default' : 'outline')
-const Link = ({ to, go, children }: { to: string; go: Go; children: ReactNode }) => <a className="font-medium hover:underline" href={BASE + to} onClick={(e) => { e.preventDefault(); go(to) }}>{children}</a>
+const Link = ({ to, go, children }: { to: string; go: Go; children: ReactNode }) => <a className="font-medium text-brand underline underline-offset-2" href={BASE + to} onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(to) }}>{children}</a>
 const PAGE = 20
+// Keep search / status tab / page when the user opens a record and comes back (sessionStorage; never throws).
+const listKey = (kind: SalesKind) => `dpg-sales-list:${kind}`
+const readList = (kind: SalesKind): { q: string; status: string; page: number } => {
+  try { const v = JSON.parse(sessionStorage.getItem(listKey(kind)) ?? '{}'); return { q: typeof v.q === 'string' ? v.q : '', status: typeof v.status === 'string' ? v.status : '', page: Number.isInteger(v.page) && v.page > 0 ? v.page : 1 } } catch { return { q: '', status: '', page: 1 } }
+}
+const writeList = (kind: SalesKind, v: { q: string; status: string; page: number }) => { try { sessionStorage.setItem(listKey(kind), JSON.stringify(v)) } catch { /* storage unavailable: filters just reset */ } }
 
 export function SalesList({ kind, user, go }: { kind: SalesKind; user: User; go: Go }) {
   void user
-  const [q, setQ] = useState(''), [term, setTerm] = useState(''), [status, setStatus] = useState(''), [page, setPage] = useState(1)
+  const saved = useState(() => readList(kind))[0]
+  const [q, setQ] = useState(saved.q), [term, setTerm] = useState(saved.q.trim()), [status, setStatus] = useState(saved.status), [page, setPage] = useState(saved.page)
+  const firstTerm = useRef(true)
+  useEffect(() => { writeList(kind, { q, status, page }) }, [kind, q, status, page])
   const [data, setData] = useState<{ items: SalesRow[]; total: number; counts: Record<SalesStatus, number> } | null>(null), [error, setError] = useState('')
-  useEffect(() => { const t = setTimeout(() => { setTerm(q.trim()); setPage(1) }, 300); return () => clearTimeout(t) }, [q])
+  useEffect(() => { if (firstTerm.current) { firstTerm.current = false; return } const t = setTimeout(() => { setTerm(q.trim()); setPage(1) }, 300); return () => clearTimeout(t) }, [q])
   useEffect(() => { let live = true; commerce.list(kind, { q: term, status, page, limit: PAGE }).then((d) => { if (live) { setData(d); setError('') } }).catch((e) => { if (live) setError(errorText(e)) }); return () => { live = false } }, [kind, term, status, page])
   const label = KIND_LABEL[kind], pages = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE))
   return (
@@ -45,12 +54,13 @@ export function SalesList({ kind, user, go }: { kind: SalesKind; user: User; go:
       <Card className="py-0"><CardContent className="p-0">
         {!data ? <SkeletonRows rows={6} cols={6} /> : data.items.length === 0 ? <EmptyState title={`Chưa có ${label.title.toLowerCase()}`} hint="Khi khách gửi từ website, dữ liệu xuất hiện tại đây." /> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Mã</TableHead><TableHead>Khách hàng</TableHead><TableHead>Điện thoại</TableHead>{kind === 'orders' && <TableHead className="text-right">Tổng</TableHead>}<TableHead>Sản phẩm</TableHead><TableHead>Trạng thái</TableHead><TableHead>Gửi lúc</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Mã</TableHead><TableHead>Khách hàng</TableHead><TableHead>Điện thoại</TableHead>{kind === 'orders' && <TableHead className="text-right">Tổng</TableHead>}<TableHead>Sản phẩm</TableHead><TableHead>Trạng thái</TableHead><TableHead>Gửi lúc</TableHead><TableHead className="sticky right-0 bg-card text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">Thao tác</TableHead></TableRow></TableHeader>
             <TableBody>{data.items.map((r) => (
-              <TableRow key={r.id}>
+              <TableRow key={r.id} className="cursor-pointer" onClick={() => go(`/${label.nav}/${r.id}`)}>
                 <TableCell><Link go={go} to={`/${label.nav}/${r.id}`}>{r.code}</Link></TableCell><TableCell>{r.customer_name}</TableCell><TableCell>{r.customer_phone}</TableCell>
                 {kind === 'orders' && <TableCell className="text-right tabular-nums">{money(r.total_vnd)}</TableCell>}
                 <TableCell>{r.line_count}</TableCell><TableCell><Badge variant={tone(r.status)}>{SALES_STATUS[r.status]}</Badge></TableCell><TableCell className="text-muted-foreground">{dateText(r.created_at)}</TableCell>
+                <TableCell className="sticky right-0 bg-card text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"><Button asChild variant="outline" size="sm"><a href={`${BASE}/${label.nav}/${r.id}`} aria-label={`Xem chi tiết ${r.code}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(`/${label.nav}/${r.id}`) }}><Eye />Xem chi tiết</a></Button></TableCell>
               </TableRow>))}</TableBody>
           </Table>)}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 text-sm">
@@ -63,7 +73,7 @@ export function SalesList({ kind, user, go }: { kind: SalesKind; user: User; go:
 }
 
 export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: number; user: User; go: Go }) {
-  const [row, setRow] = useState<SalesDetail | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [note, setNote] = useState(''), [users, setUsers] = useState<{ id: number; name: string }[]>([])
+  const [row, setRow] = useState<SalesDetail | null>(null), [error, setError] = useState(''), [busy, setBusy] = useState(false), [pending, setPending] = useState<string>(''), [note, setNote] = useState(''), [users, setUsers] = useState<{ id: number; name: string }[]>([])
   const confirm = useConfirm(), label = KIND_LABEL[kind]
   const canAssign = can(user, 'orders:assign')
   const load = useCallback(async () => { try { const d = await commerce.get(kind, id); setRow(d); setNote(d.staff_note ?? ''); setError('') } catch (e) { setError(errorText(e)) } }, [kind, id])
@@ -84,14 +94,15 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
       ? [{ status: 'done', label: 'Hoàn tất', permission: kind === 'orders' ? 'orders:update_status' : 'quotes:update' }, { status: 'cancelled', label: 'Huỷ', danger: true, permission: kind === 'orders' ? 'orders:cancel' : 'quotes:update' }]
       : []
   const change = async (status: Exclude<SalesStatus, 'new'>, danger?: boolean) => {
-    if (danger && !(await confirm({ title: `Huỷ ${label.one.toLowerCase()} ${row.code}?`, description: 'Trạng thái "Đã huỷ" không thể đổi lại.', confirmLabel: 'Huỷ' }))) return
+    if (danger && !(await confirm({ title: `Huỷ ${label.one.toLowerCase()} ${row.code}?`, description: 'Trạng thái "Đã huỷ" không thể đổi lại. Chọn "Hủy" để giữ nguyên.', confirmLabel: `Huỷ ${label.one.toLowerCase()}`, destructive: true }))) return
+    setPending(status)
     await run(() => commerce.setStatus(kind, id, status, row.version, note.trim() && note.trim() !== (row.staff_note ?? '') ? note.trim() : undefined), 'Đã cập nhật trạng thái.')
   }
   const isOrder = kind === 'orders'
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <PageHeader title={<>{label.one} {row.code} <Badge variant={tone(row.status)} className="ml-2 align-middle">{SALES_STATUS[row.status]}</Badge></>} description={`Gửi lúc ${dateText(row.created_at)} · cập nhật ${dateText(row.updated_at)}`}
-        actions={<Button variant="outline" onClick={() => go(`/${label.nav}`)}>Danh sách</Button>} />
+        actions={<Button variant="outline" onClick={() => go(`/${label.nav}`)}><ArrowLeft />Quay lại danh sách</Button>} />
       {error && <Alert>{error}</Alert>}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
@@ -112,16 +123,20 @@ export function SalesDetailPage({ kind, id, user, go }: { kind: SalesKind; id: n
             <ul className="grid gap-1 text-sm">{row.events.map((e, i) => <li key={i} className="flex justify-between gap-3"><span>{e.action === 'created' ? 'Khách gửi' : e.action === 'status' ? `${SALES_STATUS[(e.from_status ?? 'new') as SalesStatus]} → ${SALES_STATUS[(e.to_status ?? 'new') as SalesStatus]}` : e.action === 'assign' ? 'Giao việc' : 'Ghi chú'} <span className="text-muted-foreground">· {e.actor === 'guest' ? 'khách' : e.actor.replace('admin:', 'nhân viên #')}</span></span><span className="text-muted-foreground">{dateText(e.at)}</span></li>)}</ul>
           </CardContent></Card>
         </div>
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
+        <div className="order-first grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4 lg:order-none">
+          <Card><CardHeader><CardTitle>Xử lý</CardTitle></CardHeader><CardContent className="grid gap-3">
+            <p className="text-sm text-muted-foreground">Trạng thái hiện tại: <b>{SALES_STATUS[row.status]}</b></p>
+            {next.filter((n) => can(user, n.permission)).map((n) => <Button key={n.status} type="button" size="lg" disabled={busy} variant={n.danger ? 'destructive' : 'default'} className={n.danger ? undefined : CTA} onClick={() => void change(n.status, n.danger)}>{busy && pending === n.status ? <Loader2 className="animate-spin" /> : null}{n.label}</Button>)}
+            {next.length === 0 && <p className="text-sm text-muted-foreground">Trạng thái cuối — không thể thay đổi.</p>}
+            {next.length > 0 && !next.some((n) => can(user, n.permission)) && <p className="text-sm text-muted-foreground">Bạn không có quyền đổi trạng thái bản ghi này.</p>}
+          </CardContent></Card>
           <Card><CardHeader><CardTitle>Khách hàng</CardTitle></CardHeader><CardContent className="grid gap-1 text-sm">
             <p className="font-medium">{row.customer_name}</p><p><a className="text-brand hover:underline" href={`tel:${row.customer_phone}`}>{row.customer_phone}</a></p>
             {row.customer_email && <p>{row.customer_email}</p>}{row.delivery_address && <p>{row.delivery_address}</p>}{row.note && <p className="mt-2 rounded-md bg-muted p-2 text-muted-foreground">Ghi chú của khách: {row.note}</p>}
           </CardContent></Card>
-          <Card><CardHeader><CardTitle>Xử lý</CardTitle></CardHeader><CardContent className="grid gap-3">
+          <Card><CardHeader><CardTitle>Ghi chú &amp; giao việc</CardTitle></CardHeader><CardContent className="grid gap-3">
             <label className="grid gap-1 text-sm">Ghi chú nội bộ<Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} disabled={busy} /></label>
             <Button type="button" variant="outline" disabled={busy || note.trim() === (row.staff_note ?? '')} onClick={() => void run(() => commerce.setNote(kind, id, note.trim(), row.version), 'Đã lưu ghi chú.')}>Lưu ghi chú</Button>
-            {next.filter((n) => can(user, n.permission)).map((n) => <Button key={n.status} type="button" disabled={busy} variant={n.danger ? 'destructive' : 'default'} className={n.danger ? undefined : CTA} onClick={() => void change(n.status, n.danger)}>{busy ? <Loader2 className="animate-spin" /> : null}{n.label}</Button>)}
-            {next.length === 0 && <p className="text-sm text-muted-foreground">Trạng thái cuối — không thể thay đổi.</p>}
             {canAssign && <label className="grid gap-1 text-sm">Giao cho<NativeSelect aria-label="Giao cho" disabled={busy} value={row.assigned_to ?? ''} onChange={(e) => void run(() => commerce.assign(kind, id, e.target.value === '' ? null : Number(e.target.value), row.version), 'Đã giao việc.')}><option value="">Chưa giao</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</NativeSelect></label>}
           </CardContent></Card>
         </div>
