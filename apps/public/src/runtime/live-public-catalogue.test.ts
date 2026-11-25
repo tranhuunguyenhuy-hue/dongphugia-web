@@ -137,7 +137,8 @@ describe('Live public catalogue projection', () => {
     expect(mocks.readPublicRows.mock.calls[2][1]).toEqual(['thiet-bi-bep', 'voi-rua-chen', 48])
     expect(mocks.readPublicRows.mock.calls[2][2]).toBe('category-root-featured')
     expect(mocks.readPublicRows.mock.calls[0][0]).toContain('AND c.slug=$1 GROUP BY')
-    expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND b.slug IS NOT NULL')
+    expect(mocks.readPublicRows.mock.calls[1][0]).toContain('AND c.slug=$1 AND p.brand_id IS NOT NULL) x JOIN dpg_app.brands b')
+    expect(mocks.readPublicRows.mock.calls[1][0]).toContain('WHERE b.slug IS NOT NULL ORDER BY x.category_slug,b.slug LIMIT 500')
   })
 
   it('does not scan all Public products for global homepage brand facets', async () => {
@@ -239,6 +240,9 @@ describe('Live public catalogue projection', () => {
     expect(statement).toContain('SELECT DISTINCT b.slug,b.name')
     expect(statement).toContain('b.is_active=true')
     expect(statement).toContain('LIMIT 32')
+    // #457: brands (RLS policy with an EXISTS over products) is joined to DISTINCT brand ids, never per product row.
+    expect(statement).toMatch(/^SELECT DISTINCT b\.slug,b\.name FROM \(SELECT DISTINCT p\.brand_id FROM dpg_app\.products p .* AND c\.slug=\$1 AND s\.slug=\$2 AND p\.brand_id IS NOT NULL\) x JOIN dpg_app\.brands b ON b\.id=x\.brand_id AND b\.is_active=true WHERE b\.slug IS NOT NULL ORDER BY b\.slug LIMIT 32$/)
+    expect(statement.indexOf('dpg_app.brands')).toBe(statement.lastIndexOf('dpg_app.brands'))
     expect(values).toEqual(['thiet-bi-bep', 'voi-rua-chen'])
   })
 
