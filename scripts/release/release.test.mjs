@@ -172,6 +172,9 @@ describe('#505 fixed Staging UAT lock', () => {
     expect(evaluateLock({ holders: [holder(7)], requestIssue: 7, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
     const twoInOne = holder(7, ownerComment(`${lockLine(A)}\n${lockLine(B)}`, '2026-11-25T10:00:00Z'))
     expect(evaluateLock({ holders: [twoInOne], requestIssue: 7, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
+    // Editing a lock line must not re-point a held lock to another SHA without release + re-acquire.
+    const edited = holder(7, ownerComment(lockLine(B), '2026-11-25T10:00:00Z', { updated_at: '2026-11-25T10:05:00Z' }))
+    expect(evaluateLock({ holders: [edited], requestIssue: 7, candidateSha: B })).toMatchObject({ state: 'unknown', allowed: false })
     expect(evaluateLock({ holders: [holder(1), holder(2)], candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
     expect(evaluateLock({ holders: undefined, candidateSha: A })).toMatchObject({ state: 'unknown', allowed: false })
   })
@@ -271,6 +274,9 @@ describe('#505 D3-A GO-PROD evidence', () => {
     expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, legacy] })).toContain('UAT_STAGING_NOT_CANDIDATE')
     const sameShaM2 = stagingRun(204, A, '2026-11-25T13:08:00Z', '2026-11-25T13:12:00Z', 'success', 'publish')
     expect(reasonsFor(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [STAGE, sameShaM2] })).toContain('UAT_STAGING_NOT_COMBINED_ARTIFACT')
+    // M2 first, then the combined M3 publish of the same SHA: Staging serves the combined artifact again, so the UAT counts.
+    const m2First = stagingRun(205, A, '2026-11-25T12:50:00Z', '2026-11-25T12:55:00Z', 'success', 'publish')
+    expect(evaluateGo(goInput(body, { issueComments: uatAt('2026-11-25T13:15:00Z'), stagingRuns: [m2First, STAGE] }))).toMatchObject({ ok: true, uat: 'pass' })
     expect(reasonsFor(GOOD, { stagingRuns: [] })).toContain('UAT_PASS_WITHOUT_STAGING_DEPLOYMENT')
     expect(stagingAt([STAGE], '2026-11-25T13:10:00Z')).toMatchObject({ sha: A, conclusion: 'success' })
   })

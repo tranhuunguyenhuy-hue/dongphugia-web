@@ -12,13 +12,14 @@ export const LOCK_LABEL = 'staging-uat-lock'
 const LOCK_LINE = /^STAGING-UAT-LOCK ([0-9a-f]{40})$/
 const isWorkflowBot = (c) => c?.user?.login === 'github-actions[bot]' && c?.user?.type === 'Bot'
 
-/** Newest trusted lock SHA; `ambiguous` when one comment names two different SHAs. Untrusted authors, quotes, code are ignored. */
+/** Newest trusted lock SHA; `ambiguous` when one comment names two different SHAs or a lock comment was edited (editing must not
+ *  re-point a held lock without the release/re-acquire step). Untrusted authors, quotes and code are ignored. */
 export function lockedSha(comments) {
   let sha = null
   for (const c of [...(comments ?? [])].sort(byTime)) {
     if (!isOwnerComment(c) && !isWorkflowBot(c)) continue
     const shas = new Set(plainLines(c.body).map((line) => line.match(LOCK_LINE)?.[1]).filter(Boolean))
-    if (shas.size > 1) return { sha: null, ambiguous: true }
+    if (shas.size > 1 || (shas.size && c.created_at !== c.updated_at)) return { sha: null, ambiguous: true }
     if (shas.size === 1) sha = [...shas][0]
   }
   return { sha, ambiguous: false }
