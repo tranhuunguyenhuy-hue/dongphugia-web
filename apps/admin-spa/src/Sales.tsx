@@ -21,7 +21,7 @@ const REASON: Record<string, string> = { NO_PRICE: 'Chưa có giá bán trực t
 const KIND_LABEL: Record<SalesKind, { title: string; one: string; nav: string }> = { orders: { title: 'Đơn hàng', one: 'Đơn hàng', nav: 'orders' }, quotes: { title: 'Yêu cầu báo giá', one: 'Yêu cầu báo giá', nav: 'quotes' } }
 const dateText = (value: string) => new Date(value).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 const tone = (status: SalesStatus): 'secondary' | 'outline' | 'destructive' | 'default' => (status === 'done' ? 'secondary' : status === 'cancelled' ? 'destructive' : status === 'new' ? 'default' : 'outline')
-const Link = ({ to, go, children }: { to: string; go: Go; children: ReactNode }) => <a className="font-medium text-brand underline underline-offset-2" href={BASE + to} onClick={(e) => { e.preventDefault(); go(to) }}>{children}</a>
+const Link = ({ to, go, children }: { to: string; go: Go; children: ReactNode }) => <a className="font-medium text-brand underline underline-offset-2" href={BASE + to} onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(to) }}>{children}</a>
 const PAGE = 20
 // Keep search / status tab / page when the user opens a record and comes back (sessionStorage; never throws).
 const listKey = (kind: SalesKind) => `dpg-sales-list:${kind}`
@@ -54,13 +54,13 @@ export function SalesList({ kind, user, go }: { kind: SalesKind; user: User; go:
       <Card className="py-0"><CardContent className="p-0">
         {!data ? <SkeletonRows rows={6} cols={6} /> : data.items.length === 0 ? <EmptyState title={`Chưa có ${label.title.toLowerCase()}`} hint="Khi khách gửi từ website, dữ liệu xuất hiện tại đây." /> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Mã</TableHead><TableHead>Khách hàng</TableHead><TableHead>Điện thoại</TableHead>{kind === 'orders' && <TableHead className="text-right">Tổng</TableHead>}<TableHead>Sản phẩm</TableHead><TableHead>Trạng thái</TableHead><TableHead>Gửi lúc</TableHead><TableHead className="text-right">Thao tác</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Mã</TableHead><TableHead>Khách hàng</TableHead><TableHead>Điện thoại</TableHead>{kind === 'orders' && <TableHead className="text-right">Tổng</TableHead>}<TableHead>Sản phẩm</TableHead><TableHead>Trạng thái</TableHead><TableHead>Gửi lúc</TableHead><TableHead className="sticky right-0 bg-card text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">Thao tác</TableHead></TableRow></TableHeader>
             <TableBody>{data.items.map((r) => (
               <TableRow key={r.id} className="cursor-pointer" onClick={() => go(`/${label.nav}/${r.id}`)}>
                 <TableCell><Link go={go} to={`/${label.nav}/${r.id}`}>{r.code}</Link></TableCell><TableCell>{r.customer_name}</TableCell><TableCell>{r.customer_phone}</TableCell>
                 {kind === 'orders' && <TableCell className="text-right tabular-nums">{money(r.total_vnd)}</TableCell>}
                 <TableCell>{r.line_count}</TableCell><TableCell><Badge variant={tone(r.status)}>{SALES_STATUS[r.status]}</Badge></TableCell><TableCell className="text-muted-foreground">{dateText(r.created_at)}</TableCell>
-                <TableCell className="text-right"><Button asChild variant="outline" size="sm"><a href={`${BASE}/${label.nav}/${r.id}`} aria-label={`Xem chi tiết ${r.code}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(`/${label.nav}/${r.id}`) }}><Eye />Xem chi tiết</a></Button></TableCell>
+                <TableCell className="sticky right-0 bg-card text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"><Button asChild variant="outline" size="sm"><a href={`${BASE}/${label.nav}/${r.id}`} aria-label={`Xem chi tiết ${r.code}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(`/${label.nav}/${r.id}`) }}><Eye />Xem chi tiết</a></Button></TableCell>
               </TableRow>))}</TableBody>
           </Table>)}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3 text-sm">
