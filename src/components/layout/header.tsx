@@ -9,6 +9,7 @@ import { useState, useEffect, useId } from "react"
 import { CommerceCartIcon } from '@/components/commerce/cart-icon'
 import { SearchBar } from '@/components/home/search-bar'
 import { trackGenerateLead } from '@/lib/tracking'
+import { MegaSaleLink } from './mega-sale-link'
 
 import { NAV_MAIN_LINKS as NAV_LINKS, NAV_ABOUT_LINKS as ABOUT_LINKS, NAV_PRODUCT_CATEGORIES } from "@/config/site"
 
@@ -36,7 +37,7 @@ function ProductsDropdown() {
             <button
                 type="button"
                 onClick={() => setIsOpen(true)}
-                className="flex h-[38px] items-center gap-1.5 rounded-full bg-transparent px-4 py-2 text-[15px] font-medium leading-[20px] text-stone-700 transition-all duration-300 hover:bg-brand-50 hover:text-brand-600 focus:outline-none"
+                className="flex h-[38px] items-center gap-1.5 rounded-full bg-transparent px-3 py-2 xl:px-4 text-[15px] font-medium leading-[20px] text-stone-700 transition-all duration-300 hover:bg-brand-50 hover:text-brand-600 focus:outline-none"
                 aria-label="Xem sản phẩm"
                 aria-haspopup="menu"
                 aria-expanded={isOpen}
@@ -79,7 +80,7 @@ function AboutDropdown() {
                 aria-expanded={isOpen}
                 aria-controls={menuId}
                 aria-haspopup="menu"
-                className={`flex items-center gap-1.5 font-medium text-[15px] leading-[20px] focus:outline-none px-4 py-2 transition-all duration-300 rounded-full h-[38px] ${isOpen ? 'bg-brand-50 text-brand-600' : 'bg-transparent text-stone-700 hover:bg-brand-50 hover:text-brand-600'}`}
+                className={`flex items-center gap-1.5 font-medium text-[15px] leading-[20px] focus:outline-none px-3 py-2 xl:px-4 transition-all duration-300 rounded-full h-[38px] ${isOpen ? 'bg-brand-50 text-brand-600' : 'bg-transparent text-stone-700 hover:bg-brand-50 hover:text-brand-600'}`}
             >
                 Về chúng tôi
                 <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
@@ -119,33 +120,34 @@ export function Header({ commerce = false }: { commerce?: boolean }) {
                 {/* Navigation Bar */}
                 <div className={`relative z-10 w-full transition-colors duration-300 ${isScrolled ? 'bg-white shadow-[0_4px_20px_rgba(0,0,0,0.08)]' : 'bg-white border-b border-stone-200'}`}>
                     <div className="max-w-[1280px] mx-auto px-6 lg:px-8">
-                        <div className="h-[72px] lg:h-[88px] flex items-center justify-between transition-all duration-300 w-full">
+                        <div className="h-[72px] lg:h-[88px] flex items-center justify-between gap-2 transition-all duration-300 w-full">
                             {/* Logo */}
                             {/* Use a full document navigation for Home: the client RSC return transition can fail under Production load. */}
-                        <a href="/" className="flex items-center shrink-0" aria-label="Đông Phú Gia - Trang chủ">
+                        <a href="/" className="flex min-w-0 items-center" aria-label="Đông Phú Gia - Trang chủ">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src="/images/Logo.png"
                                     alt="Đông Phú Gia"
                                     width={245}
                                     height={48}
-                                    className="w-[204px] lg:w-[245px] h-auto object-contain"
+                                    className="h-auto w-[204px] max-w-full object-contain lg:w-[245px]"
                                 />
                             </a>
 
                             {/* Desktop Nav */}
-                            <nav className="hidden lg:flex items-center gap-1 h-full" aria-label="Menu chính">
+                            <nav className="hidden h-full shrink-0 items-center lg:flex xl:gap-1" aria-label="Menu chính">
                                 <ProductsDropdown />
                                 <AboutDropdown />
                                 {NAV_LINKS.map((link) => (
-                                    <Link prefetch={false} key={link.href} href={link.href} className="px-4 py-2 rounded-full font-medium text-[15px] leading-[20px] text-stone-700 hover:text-brand-600 hover:bg-brand-50 transition-all duration-300 h-[38px] flex items-center bg-transparent">
+                                    <Link prefetch={false} key={link.href} href={link.href} className="px-3 py-2 xl:px-4 rounded-full font-medium text-[15px] leading-[20px] text-stone-700 hover:text-brand-600 hover:bg-brand-50 transition-all duration-300 h-[38px] flex items-center bg-transparent">
                                         {link.label}
                                     </Link>
                                 ))}
+                                <MegaSaleLink className="ml-1" />
                             </nav>
 
                             {/* Desktop: Search + Cart + CTA */}
-                            <div className="hidden lg:flex items-center gap-4">
+                            <div className="hidden shrink-0 items-center gap-3 lg:flex xl:gap-4">
                                 <SearchBar />
                                 <div className="h-6 w-px bg-stone-200 ml-1"></div>
                                 {commerce && <CommerceCartIcon />}
@@ -158,7 +160,8 @@ export function Header({ commerce = false }: { commerce?: boolean }) {
                             </div>
 
                             {/* Mobile: Search + Cart + Menu */}
-                            <div className="flex lg:hidden items-center gap-0.5">
+                            <div className="flex shrink-0 items-center gap-0.5 lg:hidden">
+                                <MegaSaleLink className="mr-1 hidden min-[520px]:inline-flex" />
                                 <SearchBar />
                                 {commerce && <CommerceCartIcon />}
                                 {mobileMenuRequested ? (
