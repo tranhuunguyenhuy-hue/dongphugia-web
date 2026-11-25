@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react'
+import Link from 'next/link'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PUBLIC_NAVIGATION_START, type PublicNavigationStart } from './public-navigation-event'
 import { ProductVariantLink, PublicContent, PublicNavigationFeedback } from './public-navigation-feedback'
@@ -32,7 +33,7 @@ function page() {
                     </ProductVariantLink>
                 ))}
                 <a href="#main-content">Bỏ qua</a>
-                <a href="/blog">Blog</a>
+                <Link href="/blog">Blog</Link>
             </PublicContent>
         </PublicNavigationFeedback>
     )
