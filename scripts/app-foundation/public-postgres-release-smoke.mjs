@@ -124,16 +124,19 @@ async function checkedCanonicalPlp(slug) {
 await checkedCanonicalPlp('bon-cau')
 if (selectedListing !== 'bon-cau') await checkedCanonicalPlp(selectedListing)
 
+// #470: a database-only SKU without a price shows 'Liên hệ báo giá' (legacy / CONTACT) or, with canonical pricing ON and no verified source,
+// 'Cần liên hệ xác nhận giá' (the contract's two unpriced labels). Never a number; the PDP must show the very label the search API returned.
+const UNPRICED_LABELS = ['Liên hệ báo giá', 'Cần liên hệ xác nhận giá']
 const search = await checked('/api/search?q=A-LFV-402S-1&limit=8', 'application/json', 'search-api')
 let searchBody
 try { searchBody = JSON.parse(search.body) } catch { fail('SEARCH_JSON') }
 const product = searchBody.results?.find(value => value.sku === 'A-LFV-402S-1')
 if (!product || typeof product.url !== 'string' || !/^\/(?:thiet-bi-ve-sinh|thiet-bi-bep|vat-lieu-nuoc|gach-op-lat)\/[a-z0-9-]+\/[a-z0-9-]+$/.test(product.url)
-  || product.price !== null || product.price_display !== 'Liên hệ báo giá' || searchBody.total < 1) fail('DATABASE_ONLY_SKU')
+  || product.price !== null || !UNPRICED_LABELS.includes(product.price_display) || searchBody.total < 1) fail('DATABASE_ONLY_SKU')
 const searchPage = await checked('/tim-kiem?q=A-LFV-402S-1', 'text/html', 'search-page')
 if (!searchPage.body.includes('Tìm kiếm sản phẩm') || !searchPage.body.includes('A-LFV-402S-1')) fail('SEARCH_PAGE')
 const pdp = await checked(product.url, 'text/html', 'pdp')
-if (!pdp.body.includes('<h1') || !pdp.body.includes('A-LFV-402S-1') || !pdp.body.includes('Liên hệ báo giá')) fail('PDP')
+if (!pdp.body.includes('<h1') || !pdp.body.includes('A-LFV-402S-1') || !pdp.body.includes(product.price_display)) fail('PDP')
 
 const blog = await checked('/blog', 'text/html', 'blog-index')
 const articlePaths = [...new Set([...blog.body.matchAll(/href=["'](\/blog\/[a-z0-9-]+\/[a-z0-9-]+)(?:[?#][^"']*)?["']/g)].map(m => m[1]))]

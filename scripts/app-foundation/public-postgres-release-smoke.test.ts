@@ -12,8 +12,8 @@ function send(response: ServerResponse, source: string, type: string, status = 2
   response.end(source)
 }
 
-async function createFixture({ failPlp = false, failImage = false, blogCount = 10, includeBlogHeading = true, duplicateLastArticle = false }: {
-  failPlp?: boolean; failImage?: boolean; blogCount?: number; includeBlogHeading?: boolean; duplicateLastArticle?: boolean
+async function createFixture({ failPlp = false, failImage = false, blogCount = 10, includeBlogHeading = true, duplicateLastArticle = false, unpricedLabel = 'Liên hệ báo giá', searchPrice = null as number | null }: {
+  failPlp?: boolean; failImage?: boolean; blogCount?: number; includeBlogHeading?: boolean; duplicateLastArticle?: boolean; unpricedLabel?: string; searchPrice?: number | null
 } = {}) {
   const hits: string[] = []
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
@@ -50,13 +50,13 @@ async function createFixture({ failPlp = false, failImage = false, blogCount = 1
     if (path === '/api/search') {
       return send(response, JSON.stringify({
         total: 1,
-        results: [{ sku: 'A-LFV-402S-1', url: '/thiet-bi-ve-sinh/bon-cau/product-one', price: null,
-          price_display: 'Liên hệ báo giá', image_main_url: `http://127.0.0.1:${server.address()?.port}/images/product.png` }],
+        results: [{ sku: 'A-LFV-402S-1', url: '/thiet-bi-ve-sinh/bon-cau/product-one', price: searchPrice,
+          price_display: unpricedLabel, image_main_url: `http://127.0.0.1:${server.address()?.port}/images/product.png` }],
       }), 'application/json')
     }
     if (path === '/tim-kiem') return send(response, '<main><h1>Tìm kiếm sản phẩm</h1><p>A-LFV-402S-1</p></main>', 'text/html')
     if (path === '/thiet-bi-ve-sinh/bon-cau/product-one') {
-      return send(response, '<main><h1>Sản phẩm</h1><p>A-LFV-402S-1</p><p>Liên hệ báo giá</p></main>', 'text/html')
+      return send(response, '<main><h1>Sản phẩm</h1><p>A-LFV-402S-1</p><p>' + unpricedLabel + '</p></main>', 'text/html')
     }
     if (path === '/blog') {
       const articles = Array.from({ length: blogCount }, (_, index) => {
@@ -134,6 +134,23 @@ describe('packaged Public PostgreSQL release smoke', () => {
       expect(blogContent).toContain('"uniqueArticleCount":10')
     } finally {
       await fixture.close()
+    }
+  })
+
+  it('#470: accepts the canonical unverified label for a database-only SKU, but never a number or an unknown label', async () => {
+    const ok = await createFixture({ unpricedLabel: 'Cần liên hệ xác nhận giá' })
+    try {
+      const result = await runSmoke(ok.base)
+      expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0)
+      expect(result.stdout).toContain('PUBLIC_POSTGRES_SMOKE status=PASS')
+    } finally { await ok.close() }
+    for (const bad of [{ searchPrice: 1000000 }, { unpricedLabel: 'Giá tốt nhất' }]) {
+      const fixture = await createFixture(bad)
+      try {
+        const result = await runSmoke(fixture.base)
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toContain('PUBLIC_POSTGRES_SMOKE_DATABASE_ONLY_SKU')
+      } finally { await fixture.close() }
     }
   })
 
