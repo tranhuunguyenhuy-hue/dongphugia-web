@@ -102,6 +102,9 @@ jobs:
           echo "M4_FUNCTION status=PASS stage=token_scope project=$PRODUCTION_PROJECT_REF functions_listed=$(grep -c . /tmp/functions-before.txt)"
           # The same token must NOT be able to manage the TEST project (project-scoped), otherwise it is broader than agreed.
           if supabase functions list --project-ref "$TEST_PROJECT_REF" >/dev/null 2>&1; then echo 'M4_FUNCTION note=token_also_reaches_test_project'; else echo 'M4_FUNCTION token_scoped_to_production=true'; fi
+      - name: Refuse a function change outside a reviewed plan (#511 legacy deploys only)
+        if: inputs.operation == 'deploy' && inputs.plan_id == ''
+        run: node scripts/release/risk-lane.mjs legacy-function "$GITHUB_SHA"
       - name: Require the GO comment for this exact plan function step (#511 plan deploys only)
         if: inputs.operation == 'deploy' && inputs.plan_id != ''
         env:

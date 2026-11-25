@@ -99,8 +99,23 @@ export async function releaseScope(candidate, { fetchImpl = fetch, run = execFil
   }
 }
 
+/** #511: a deploy outside a reviewed plan (legacy function lane) must not ship a function change; unknown scope = refuse. */
+export function legacyFunctionBlock(scope) {
+  if (!scope || scope.unknown) return 'RELEASE_SCOPE_UNKNOWN (fail closed: deploy the function as a plan step)'
+  const files = scope.categories?.function ?? []
+  return files.length ? `FUNCTION_CHANGE_REQUIRES_PLAN files=${files.length} (deploy it as the function step of a reviewed release plan)` : null
+}
+
 async function main() {
   const [command, a, b] = process.argv.slice(2)
+  if (command === 'legacy-function') {
+    if (!SHA.test(a ?? '')) throw new Error('SCOPE_SHA_INVALID')
+    const blocked = legacyFunctionBlock(await releaseScope(a))
+    appendSummary(`- Legacy function deploy scope check: ${blocked ? `**REFUSED** — ${blocked}` : 'PASS (no function change since live Production)'}`)
+    if (blocked) throw new Error(blocked)
+    console.error('RISK_LANE legacy-function=PASS')
+    return
+  }
   if (command === 'diff') {
     // Lane of one change set (auto-preflight: the pushed commit against its first parent).
     const result = classifyLane(changedPaths(a, b))
@@ -118,7 +133,7 @@ async function main() {
     console.error(`RELEASE_SCOPE production=${scope.productionSha} lane=${scope.lane} files=${scope.count}`)
     return
   }
-  throw new Error('USAGE: risk-lane.mjs diff <base> <head> | scope <candidate>')
+  throw new Error('USAGE: risk-lane.mjs diff <base> <head> | scope <candidate> | legacy-function <candidate>')
 }
 
 if (isMain(import.meta.url)) main().catch((error) => { console.error(`RISK_LANE status=FAIL reason=${error.message}`); process.exit(1) })

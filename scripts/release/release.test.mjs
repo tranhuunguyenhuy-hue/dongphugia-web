@@ -5,7 +5,7 @@ import { diffFlags, flagsDigest, flagsFromBindings, formatFlagsChange, loadFlags
 import { evaluateGo, isVerifyOperation, parseDirectives, stagingAt } from './go-evidence.mjs'
 import { activeVersionId, isCombinedStagingIdentity, plainLines, qualityFromRuns } from './lib.mjs'
 import { readiness, renderEvidence } from './release-evidence.mjs'
-import { classifyLane, fullCategory, laneForPath } from './risk-lane.mjs'
+import { classifyLane, fullCategory, laneForPath, legacyFunctionBlock } from './risk-lane.mjs'
 import { evaluateLock, lockedSha } from './staging-lock.mjs'
 import { evaluateTrigger } from './trigger-gate.mjs'
 
@@ -73,6 +73,13 @@ describe('#505 risk lane floor and full categories', () => {
     const mixed = classifyLane(['src/components/x.tsx', 'supabase/migrations/2.sql'])
     expect(mixed).toMatchObject({ lane: 'full', categories: { sql: ['supabase/migrations/2.sql'] } })
     expect(classifyLane([]).lane).toBe('none')
+  })
+
+  it('#511 refuses a legacy (plan-less) Production function deploy when the release changes a function or its scope is unknown', () => {
+    expect(legacyFunctionBlock(classifyLane(['src/components/x.tsx']))).toBeNull()
+    expect(legacyFunctionBlock(classifyLane(['supabase/functions/admin-api/index.ts']))).toMatch(/^FUNCTION_CHANGE_REQUIRES_PLAN files=1/)
+    expect(legacyFunctionBlock({ unknown: true, categories: {} })).toMatch(/^RELEASE_SCOPE_UNKNOWN/)
+    expect(legacyFunctionBlock(undefined)).toMatch(/^RELEASE_SCOPE_UNKNOWN/)
   })
 })
 
