@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { ProductVariantLink } from '@/components/layout/public-navigation-feedback'
 
 // The PDP supplies the current SKU and eligible siblings with their canonical URLs.
 export type VerifiedVariantOption = {
@@ -37,10 +37,9 @@ export function VerifiedVariantSelector({ currentSku, options }: {
                     const current = option.sku === currentSku
                     return (
                         <li key={option.sku}>
-                            <Link
+                            <ProductVariantLink
                                 href={option.href}
-                                prefetch={false}
-                                aria-current={current ? 'page' : undefined}
+                                current={current}
                                 className={`flex min-h-11 flex-col justify-center rounded-md border px-3 py-2 text-sm ${
                                     current ? 'border-[#2E7A96] bg-[#2E7A96]/8' : 'border-neutral-200 hover:border-[#2E7A96]'
                                 }`}
@@ -49,7 +48,7 @@ export function VerifiedVariantSelector({ currentSku, options }: {
                                     <span key={attribute.label}>{attribute.label}: {attribute.value}</span>
                                 ))}
                                 <span className="text-xs text-neutral-600">{option.sku}</span>
-                            </Link>
+                            </ProductVariantLink>
                         </li>
                     )
                 })}
