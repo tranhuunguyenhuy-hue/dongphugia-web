@@ -5,7 +5,13 @@ name: M4 Production Admin release
 # Builds the exact main SHA once, verifies the packaged artifact against the Production PostgreSQL read-only role and, only for
 # operation=publish, deploys it to the existing Production Worker with the Admin secrets passed atomically (--secrets-file),
 # then smokes the real domain. No automatic rollback: the recorded previous version is restored by a separate explicit command.
+# #505: flags come from the reviewed release/production-flags.json (no dispatch inputs, no default off); a SUCCESSFUL `quality` push on
+# main auto-runs a read-only verify (never publish); publish needs a GO-PROD comment for the exact SHA posted after a verify PASS.
 on:
+  workflow_run:
+    workflows: [quality]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       approved_source_sha:
@@ -22,35 +28,18 @@ on:
         description: Publish only. Cloudflare version id that is active right now (the recorded Public rollback target)
         required: false
         type: string
-      owner_ready_confirmed:
-        description: Publish only. true = backup verified, production_writes_allowed set, 001/002 verified, function deployed and fail-closed, first admin created
-        required: true
-        type: boolean
-        default: false
-      canonical_pricing:
-        description: '#470 Public canonical prices (sanitary x TOTO). off = unchanged Public. on ONLY with the Owner GO for #449 (schema, import and reconciliation done).'
-        required: true
-        type: choice
-        options: ['off', 'on']
-        default: 'off'
-      canonical_brands:
-        description: '#470 brands priced when canonical_pricing=on (each can be switched on separately). Ignored when canonical_pricing=off.'
-        required: true
-        type: choice
-        options: [toto, inax, 'toto,inax']
-        default: toto
-      commerce:
-        description: '#470 commerce v1 (guest cart, orders, quotes). off = closed (404). on ONLY with the Owner release GO: needs vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID (intake login role, caching disabled) and the dpg_commerce schema applied.'
-        required: true
-        type: choice
-        options: ['off', 'on']
-        default: 'off'
+      go_comment_url:
+        description: 'Publish only. URL of the Owner comment on the release issue with the line GO-PROD <exact sha>, posted after a verify PASS'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
+# Publish stays serialized with every Production Worker release; read-only verifies queue per candidate SHA instead, so an
+# auto-verify can never replace a pending publish.
 concurrency:
-  group: v1-production-worker-release
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.operation == 'publish' && 'v1-production-worker-release' || format('m4-verify-{0}', github.event.workflow_run.head_sha || inputs.approved_source_sha) }}
   cancel-in-progress: false
 
 env:
@@ -65,27 +54,79 @@ env:
   M4_MEDIA_STORAGE_HOST: ${{ vars.M4_PRODUCTION_MEDIA_STORAGE_HOST || 'sg.storage.bunnycdn.com' }}
 
 jobs:
+  gate:
+    name: Trigger gate (no secrets)
+    # Untrusted workflow_run sources (PR runs, forks, failed quality) never start a job; the script re-checks everything.
+    if: >-
+      github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      sha: ${{ steps.gate.outputs.sha }}
+      mode: ${{ steps.gate.outputs.mode }}
+      operation: ${{ steps.gate.outputs.operation }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.approved_source_sha }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          WR_PATH: ${{ github.event.workflow_run.path }}
+          WR_EVENT: ${{ github.event.workflow_run.event }}
+          WR_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WR_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WR_ACTOR: ${{ github.event.workflow_run.actor.login }}
+        run: node scripts/release/trigger-gate.mjs m4
+
   release:
     name: Build, verify and optionally publish the Production Admin Worker
+    needs: gate
     if: >-
+      needs.gate.outputs.run == 'true' &&
       github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && github.ref == 'refs/heads/main' &&
-      github.actor == 'tranhuunguyenhuy-hue' && inputs.approved_source_sha == github.sha
+      github.actor == 'tranhuunguyenhuy-hue' && needs.gate.outputs.sha == github.sha
     runs-on: ubuntu-24.04
     environment: Production
     timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      issues: read
+    env:
+      CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
+      OPERATION: ${{ needs.gate.outputs.operation }}
+      MODE: ${{ needs.gate.outputs.mode }}
+      # Publish is reachable only from a manual dispatch; the auto path is verify-only by construction (gate + this expression).
+      PUBLISH: ${{ needs.gate.outputs.operation == 'publish' && github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Verify protected main, exact SHA and publish prerequisites
         shell: bash
+        env:
+          ROLLBACK_VERSION_ID: ${{ inputs.rollback_version_id }}
+          GO_COMMENT_URL: ${{ inputs.go_comment_url }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/main
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          if [ '${{ inputs.operation }}' = 'publish' ]; then
-            test '${{ inputs.owner_ready_confirmed }}' = 'true' || { echo 'M4_RELEASE status=FAIL reason=owner_ready_confirmation_required'; exit 1; }
-            [[ '${{ inputs.rollback_version_id }}' =~ ^[a-f0-9-]{36}$ ]] || { echo 'M4_RELEASE status=FAIL reason=rollback_version_id_required'; exit 1; }
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
+          if [ "$OPERATION" = 'publish' ]; then
+            [ "$PUBLISH" = 'true' ] || { echo 'M4_RELEASE status=FAIL reason=publish_only_by_manual_dispatch'; exit 1; }
+            [[ "$ROLLBACK_VERSION_ID" =~ ^[a-f0-9-]{36}$ ]] || { echo 'M4_RELEASE status=FAIL reason=rollback_version_id_required'; exit 1; }
+            [[ "$GO_COMMENT_URL" =~ ^https://github\.com/tranhuunguyenhuy-hue/dongphugia-web/issues/[0-9]+#issuecomment-[0-9]+$ ]] || { echo 'M4_RELEASE status=FAIL reason=go_comment_url_required'; exit 1; }
           fi
       - uses: actions/setup-node@v4
         with:
@@ -94,6 +135,29 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             apps/public/package-lock.json
+      # Cheap, dependency-free gates first: a wrong flag file, unknown live state, stale rollback target or missing GO fails in seconds.
+      - name: Load the reviewed Production flags (release/production-flags.json, strict, no defaults)
+        id: flags
+        run: node scripts/release/flags.mjs load release/production-flags.json
+      - name: Compute release scope and risk lane floor (live Production SHA to candidate)
+        id: scope
+        run: node scripts/release/risk-lane.mjs scope "$CANDIDATE_SHA"
+      - name: Read the active Production version and compare live flags (read-only)
+        id: active
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          EXPECT_ROLLBACK_VERSION: ${{ env.PUBLISH == 'true' && inputs.rollback_version_id || '' }}
+        run: node scripts/release/flags.mjs active release/production-flags.json
+      - name: Require GO-PROD evidence for the exact candidate (publish only)
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GO_COMMENT_URL: ${{ inputs.go_comment_url }}
+          RISK_LANE: ${{ steps.scope.outputs.risk_lane }}
+          FLAGS_CHANGE: ${{ steps.active.outputs.flags_change }}
+          GO_PHASE: before build
+        run: node scripts/release/go-evidence.mjs
       - name: Install locked toolchains
         run: |
           npm ci
@@ -106,15 +170,18 @@ jobs:
         env:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
           V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
+          CANONICAL_PRICING: ${{ steps.flags.outputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ steps.flags.outputs.canonical_brands }}
+          COMMERCE: ${{ steps.flags.outputs.commerce }}
         run: |
           set -euo pipefail
           test "$V1_PUBLIC_HYPERDRIVE_ID" = '905f5791e9d84cf285f7533b92d03f49'
           cp apps/public/wrangler.production.jsonc apps/public/wrangler.jsonc
           node scripts/app-foundation/configure-v1-m1-worker-source.mjs apps/public/wrangler.jsonc "$PUBLIC_CATALOGUE_SOURCE" "$V1_PUBLIC_HYPERDRIVE_ID"
-          # #470: the pricing flag is part of the reviewed artifact (default off); it is never edited on the Worker directly.
-          node scripts/m4/configure-canonical-pricing.mjs apps/public/wrangler.jsonc '${{ inputs.canonical_pricing }}' '${{ inputs.canonical_brands }}'
-          # #470 commerce v1: flag + separate intake Hyperdrive binding are part of the reviewed artifact (default off).
-          node scripts/m4/configure-commerce.mjs apps/public/wrangler.jsonc '${{ inputs.commerce }}' "$V1_PUBLIC_COMMERCE_HYPERDRIVE_ID" "$V1_PUBLIC_HYPERDRIVE_ID"
+          # #470/#505: the pricing flag is part of the reviewed artifact, read from release/production-flags.json; never edited on the Worker.
+          node scripts/m4/configure-canonical-pricing.mjs apps/public/wrangler.jsonc "$CANONICAL_PRICING" "$CANONICAL_BRANDS"
+          # #470/#505 commerce v1: flag + separate intake Hyperdrive binding are part of the reviewed artifact (flags file).
+          node scripts/m4/configure-commerce.mjs apps/public/wrangler.jsonc "$COMMERCE" "$V1_PUBLIC_COMMERCE_HYPERDRIVE_ID" "$V1_PUBLIC_HYPERDRIVE_ID"
           npm run build:public-worker
           npm run app:assemble-public-worker -- --repository-root . --server-dir apps/public/dist/server --assets-dir apps/public/dist/client --output "$RUNNER_TEMP/v1-release" --source-sha "$GITHUB_SHA"
       - name: Add the Admin (SPA, dispatch, upload, Images binding) to the release
@@ -125,9 +192,9 @@ jobs:
         shell: bash
         env:
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
-          CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
-          CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
-          COMMERCE: ${{ inputs.commerce }}
+          CANONICAL_PRICING: ${{ steps.flags.outputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ steps.flags.outputs.canonical_brands }}
+          COMMERCE: ${{ steps.flags.outputs.commerce }}
           V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
@@ -139,6 +206,7 @@ jobs:
           const v = x.vars ?? {};
           if (v.APP_ENV !== 'production' || v.APP_BUILD_TARGET !== 'public' || v.APP_ORIGIN !== 'https://www.dongphugia.vn' || v.PREVIEW_NOINDEX === 'true') fail('vars');
           if (v.PUBLIC_CATALOGUE_SOURCE !== 'postgresql') fail('source');
+          if (v.PUBLIC_SERIES_VARIANT !== undefined) fail('series-variant'); // #505: Series pilot stays off in Production
           const pricing = process.env.CANONICAL_PRICING;
           if (pricing === 'off' ? (v.PUBLIC_CANONICAL_PRICING !== undefined || v.PUBLIC_CANONICAL_PRICE_BRANDS !== undefined)
             : (pricing !== 'on' || v.PUBLIC_CANONICAL_PRICING !== 'on' || v.PUBLIC_CANONICAL_PRICE_BRANDS !== process.env.CANONICAL_BRANDS)) fail('canonical-pricing');
@@ -192,6 +260,8 @@ jobs:
           node scripts/m4/admin-smoke.mjs http://127.0.0.1:8793 unconfigured "$GITHUB_SHA"
       - name: Verify the Production media target with a unique test object (no overwrite)
         id: media
+        # #505: auto-preflight is strictly read-only, so the PUT/DELETE test object runs only for manual runs (always before a publish).
+        if: needs.gate.outputs.mode == 'manual'
         continue-on-error: true
         shell: bash
         env:
@@ -222,7 +292,7 @@ jobs:
           echo 'verified=true' >> "$GITHUB_OUTPUT"
       - name: Verify the active version equals the recorded rollback target before publishing
         id: rollback
-        if: inputs.operation == 'publish'
+        if: env.PUBLISH == 'true'
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -243,9 +313,19 @@ jobs:
           NODE
           curl --fail --silent --show-error --max-time 20 https://www.dongphugia.vn/api/health -o "$RUNNER_TEMP/m4-health-before.json"
           echo "version_id=$EXPECTED_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Recheck main HEAD and the GO-PROD evidence right before publishing
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GO_COMMENT_URL: ${{ inputs.go_comment_url }}
+          RISK_LANE: ${{ steps.scope.outputs.risk_lane }}
+          FLAGS_CHANGE: ${{ steps.active.outputs.flags_change }}
+          GO_PHASE: right before publish
+          CHECK_MAIN_HEAD: 'true'
+        run: node scripts/release/go-evidence.mjs
       - name: Publish with the Admin secrets passed atomically
         id: deploy
-        if: inputs.operation == 'publish'
+        if: env.PUBLISH == 'true'
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -265,10 +345,10 @@ jobs:
           node "$GITHUB_WORKSPACE/apps/public/node_modules/wrangler/bin/wrangler.js" deploy --config wrangler.json --secrets-file "$RUNNER_TEMP/m4-secrets.json" --message "M4 Admin release ${GITHUB_SHA:0:12}"
           shred -u "$RUNNER_TEMP/m4-secrets.json" 2>/dev/null || rm -f "$RUNNER_TEMP/m4-secrets.json"
       - name: Wait for the exact Production identity
-        if: inputs.operation == 'publish'
+        if: env.PUBLISH == 'true'
         run: node scripts/app-foundation/wait-public-production-identity.mjs "$GITHUB_SHA"
       - name: Smoke the real Production domain (Public parity and Admin)
-        if: inputs.operation == 'publish'
+        if: env.PUBLISH == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -276,15 +356,15 @@ jobs:
           SMOKE_PACE_MS=700 SMOKE_SHA_RETRY_MS=120000 node scripts/app-foundation/public-postgres-release-smoke.mjs https://www.dongphugia.vn "$GITHUB_SHA" production
           node scripts/m4/admin-smoke.mjs https://www.dongphugia.vn configured "$GITHUB_SHA"
       - name: Verify the deployed version bindings and record rollback evidence
-        if: inputs.operation == 'publish'
+        if: env.PUBLISH == 'true'
         shell: bash
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           V1_PUBLIC_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_HYPERDRIVE_ID }}
-          CANONICAL_PRICING: ${{ inputs.canonical_pricing }}
-          CANONICAL_BRANDS: ${{ inputs.canonical_brands }}
-          COMMERCE: ${{ inputs.commerce }}
+          CANONICAL_PRICING: ${{ steps.flags.outputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ steps.flags.outputs.canonical_brands }}
+          COMMERCE: ${{ steps.flags.outputs.commerce }}
           V1_PUBLIC_COMMERCE_HYPERDRIVE_ID: ${{ vars.V1_PUBLIC_COMMERCE_HYPERDRIVE_ID }}
         run: |
           set -euo pipefail
@@ -311,21 +391,24 @@ jobs:
           if (!ok) { console.error('M4_VERSION_BINDINGS_FAIL'); process.exit(1); }
           console.log(`M4_VERSION_BINDINGS_PASS names=${b.map((x) => x.name).sort().join(',')}`);
           NODE
+          node scripts/release/flags.mjs check-version release/production-flags.json "$RUNNER_TEMP/m4-version.json"
           echo "DEPLOYED_WORKER_VERSION=$version" >> "$GITHUB_STEP_SUMMARY"
           echo "ROLLBACK_TARGET_VERSION=${{ steps.rollback.outputs.version_id }}" >> "$GITHUB_STEP_SUMMARY"
-      - name: Summary
+      - name: Release evidence (#505, no secrets)
         if: always()
-        shell: bash
-        run: |
-          {
-            echo "### M4 Production Admin release (${{ inputs.operation }})"
-            echo "- Source SHA: $GITHUB_SHA"
-            echo "- Canonical pricing (#470): ${{ inputs.canonical_pricing }} brands=${{ inputs.canonical_brands }}"
-            echo "- Commerce v1 (#470): ${{ inputs.commerce }}"
-            echo "- Packaged verification: ${{ steps.packaged.outcome }}"
-            echo "- Media target verified (unique test object, removed): ${{ steps.media.outputs.verified }}"
-            echo "- Publish: ${{ steps.deploy.outcome }}"
-            echo "- Previous Worker version (rollback target): ${{ steps.rollback.outputs.version_id }}"
-            echo "- Worker rollback: wrangler rollback <version> --name dongphugia-v1-public-production (does not undo SQL)"
-            echo "- Automatic rollback: none (explicit command only)"
-          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          CANONICAL_PRICING: ${{ steps.flags.outputs.canonical_pricing }}
+          CANONICAL_BRANDS: ${{ steps.flags.outputs.canonical_brands }}
+          COMMERCE: ${{ steps.flags.outputs.commerce }}
+          SERIES_VARIANT: ${{ steps.flags.outputs.series_variant }}
+          FLAGS_DIGEST: ${{ steps.flags.outputs.flags_digest }}
+          PRODUCTION_SHA: ${{ steps.scope.outputs.production_sha }}
+          RISK_LANE: ${{ steps.scope.outputs.risk_lane }}
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files }}
+          ACTIVE_VERSION: ${{ steps.active.outputs.active_version }}
+          FLAGS_CHANGE: ${{ steps.active.outputs.flags_change }}
+          PACKAGED: ${{ steps.packaged.outcome }}
+          MEDIA: ${{ steps.media.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/release/release-evidence.mjs

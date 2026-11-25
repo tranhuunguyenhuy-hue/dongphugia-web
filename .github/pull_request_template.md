@@ -2,6 +2,7 @@
 
 - Issue: #
 - Lane (UI = Codex / Infra-DB-Ops-Docs = Claude): 
+- Risk lane floor (computed on the PR; may only be raised): 
 - Files I declared in the issue as touched:
 - What changed (no unrelated features):
 
