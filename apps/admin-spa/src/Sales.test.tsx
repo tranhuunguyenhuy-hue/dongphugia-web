@@ -71,6 +71,35 @@ describe('commerce v1 inbox (Admin SPA)', () => {
     render(<SalesList kind="orders" user={admin} go={vi.fn()} />)
     await screen.findByText('DH-0123456789'); expect(screen.getByText('Đang xử lý (2)')).toBeInTheDocument(); expect(screen.getByText('Tất cả (10)')).toBeInTheDocument()
   })
+  it('every list row has an explicit "Xem chi tiết" action that opens the right record (no hover needed)', async () => {
+    vi.spyOn(commerce, 'list').mockResolvedValue({ items: [{ id: 7, code: 'BG-7B0E48A71E', status: 'new', customer_name: 'Test', customer_phone: '0900000000', line_count: 1, assigned_to: null, created_at: '2026-11-24T01:00:00Z', updated_at: '2026-11-24T01:00:00Z' }], total: 1, counts: { new: 1, processing: 0, done: 0, cancelled: 0 } })
+    const go = vi.fn(); render(<SalesList kind="quotes" user={admin} go={go} />)
+    fireEvent.click(await screen.findByRole('link', { name: 'Xem chi tiết BG-7B0E48A71E' })); expect(go).toHaveBeenCalledWith('/quotes/7'); expect(go).toHaveBeenCalledTimes(1)
+  })
+  it('code link, "Xem chi tiết" button and row click each navigate exactly once to the right record', async () => {
+    vi.spyOn(commerce, 'list').mockResolvedValue({ items: [{ id: 9, code: 'DH-0000000009', status: 'new', customer_name: 'Test', customer_phone: '0900000000', total_vnd: 1_000_000, line_count: 1, assigned_to: null, created_at: '2026-11-24T01:00:00Z', updated_at: '2026-11-24T01:00:00Z' }], total: 1, counts: { new: 1, processing: 0, done: 0, cancelled: 0 } })
+    const go = vi.fn(); render(<SalesList kind="orders" user={admin} go={go} />)
+    const code = await screen.findByRole('link', { name: 'DH-0000000009' })
+    fireEvent.click(code); expect(go).toHaveBeenCalledTimes(1); expect(go).toHaveBeenLastCalledWith('/orders/9')
+    fireEvent.click(screen.getByRole('link', { name: 'Xem chi tiết DH-0000000009' })); expect(go).toHaveBeenCalledTimes(2); expect(go).toHaveBeenLastCalledWith('/orders/9')
+    fireEvent.click(screen.getByText('Test')); expect(go).toHaveBeenCalledTimes(3); expect(go).toHaveBeenLastCalledWith('/orders/9')
+  })
+  it('list keeps the status tab / page when the user comes back from a record', async () => {
+    sessionStorage.setItem('dpg-sales-list:orders', JSON.stringify({ q: '', status: 'processing', page: 2 }))
+    const list = vi.spyOn(commerce, 'list').mockResolvedValue({ items: [], total: 0, counts: { new: 0, processing: 0, done: 0, cancelled: 0 } })
+    render(<SalesList kind="orders" user={admin} go={vi.fn()} />); await waitFor(() => expect(list).toHaveBeenCalledWith('orders', { q: '', status: 'processing', page: 2, limit: 20 })); sessionStorage.clear()
+  })
+  it('cancelling asks for confirmation first; declining sends nothing', async () => {
+    vi.spyOn(commerce, 'get').mockResolvedValue(order()); const set = vi.spyOn(commerce, 'setStatus').mockResolvedValue(order() as SalesDetail)
+    page(admin); fireEvent.click(await screen.findByRole('button', { name: 'Huỷ' }))
+    expect(await screen.findByText(/không thể đổi lại/)).toBeInTheDocument(); expect(set).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' })); expect(set).not.toHaveBeenCalled()
+  })
+  it('a 403 on a status change shows the error and leaves the status unchanged', async () => {
+    vi.spyOn(commerce, 'get').mockResolvedValue(order()); vi.spyOn(commerce, 'setStatus').mockRejectedValue(new ApiError(403, 'FORBIDDEN'))
+    page(admin); fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu xử lý' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Hoàn tất' })).not.toBeInTheDocument(); expect(screen.getByRole('button', { name: 'Bắt đầu xử lý' })).toBeEnabled()
+  })
   it('dashboard for a sale user (scope own): own work only, no catalogue size; admin still sees it', async () => {
     const base = { new_orders: [], new_quotes: [] }
     const spy = vi.spyOn(commerce, 'dashboard').mockResolvedValueOnce({ scope: 'own', stats: { new_orders: 1, new_quotes: 0, processing_orders: 0, processing_quotes: 0, total_products: null, active_products: null }, ...base })
