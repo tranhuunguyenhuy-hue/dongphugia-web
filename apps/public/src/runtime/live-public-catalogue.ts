@@ -73,7 +73,16 @@ const vnd=(input:number|string|null|undefined)=>{
  const value=Number(input)
  return Number.isSafeInteger(value)&&value>0&&value<=9_999_999_999_999?value:null
 }
-const FROM=" FROM dpg_app.products p JOIN dpg_app.categories c ON c.id=p.category_id AND c.is_active=true AND c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' JOIN dpg_app.subcategories s ON s.id=p.subcategory_id AND s.category_id=c.id AND s.is_active=true AND s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' LEFT JOIN dpg_app.brands b ON b.id=p.brand_id AND b.is_active=true"
+const FROM_WITHOUT_BRANDS=" FROM dpg_app.products p JOIN dpg_app.categories c ON c.id=p.category_id AND c.is_active=true AND c.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$' JOIN dpg_app.subcategories s ON s.id=p.subcategory_id AND s.category_id=c.id AND s.is_active=true AND s.slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+const FROM=FROM_WITHOUT_BRANDS+" LEFT JOIN dpg_app.brands b ON b.id=p.brand_id AND b.is_active=true"
+// #457: the Production public role reads dpg_app.brands through an RLS policy with an EXISTS over products. Joined per product
+// row, a brand facet evaluated it once per SKU (~4.7k for sanitary: mean 2.0 s, max 5.0 s = the read timeout -> 500). Facets
+// therefore reduce to DISTINCT brand ids first (a DISTINCT subquery is never flattened) and join brands for those ids only.
+// Same rows: active brand, non-null slug, identical WHERE/ORDER/LIMIT.
+const brandFacet=(byCategory:boolean,where:string,order:string,limit:number)=>
+ 'SELECT DISTINCT '+(byCategory?'x.category_slug,':'')+'b.slug,b.name FROM (SELECT DISTINCT '+(byCategory?'c.slug AS category_slug,':'')+'p.brand_id'+FROM_WITHOUT_BRANDS+
+ ' WHERE '+where+' AND p.brand_id IS NOT NULL) x JOIN dpg_app.brands b ON b.id=x.brand_id AND b.is_active=true'+
+ ' WHERE b.slug IS NOT NULL ORDER BY '+order+' LIMIT '+limit
 // Keep malformed canonical paths out of every Public query. The mapper and
 // route layer fail closed on these fields, so letting one row into a page would
 // turn a valid listing/search/PDP request into a 503 instead of omitting it.
@@ -226,8 +235,7 @@ async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCatego
  // once the listing counts are known: run them together instead of three serial round-trips.
  const categorySlugs=categoryFilter?[categoryFilter]:['thiet-bi-ve-sinh','thiet-bi-bep','vat-lieu-nuoc','gach-op-lat']
  const brandsPromise=categoryFilter
-  ?readPublicRows<Brand>('SELECT DISTINCT c.slug AS category_slug,b.slug,b.name'+FROM+
-    ' WHERE '+PUBLIC+' AND '+LIST+categoryClause+' AND b.slug IS NOT NULL ORDER BY c.slug,b.slug LIMIT 500',values,
+  ?readPublicRows<Brand>(brandFacet(true,PUBLIC+' AND '+LIST+categoryClause,'x.category_slug,b.slug',500),values,
     'category-brand-facets')
   :Promise.resolve([] as Brand[])
  brandsPromise.catch(()=>undefined) // awaited below; avoids an unhandled rejection when no category matches
@@ -248,8 +256,7 @@ async function loadLiveCategories(categoryFilter?:string):Promise<SnapshotCatego
 export const getLiveBrandsForListing=cache(async(category:string,listing:string)=>{
  if(![category,listing].every(s=>SLUG.test(s)))return [] as {slug:string;name:string}[]
  return readPublicRows<{slug:string;name:string}>(
-  'SELECT DISTINCT b.slug,b.name'+FROM+' WHERE '+PUBLIC+' AND '+LIST+
-  ' AND c.slug=$1 AND s.slug=$2 AND b.slug IS NOT NULL ORDER BY b.slug LIMIT 32',
+  brandFacet(false,PUBLIC+' AND '+LIST+' AND c.slug=$1 AND s.slug=$2','b.slug',32),
   [category,listing], 'listing-brand-facets')
 })
 const detailSelect=`
