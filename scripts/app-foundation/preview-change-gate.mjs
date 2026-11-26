@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { classifyLane } from '../release/risk-lane.mjs'
 
 const APPLICATION_SOURCE_PREFIXES = {
   // The Cloudflare storefront reuses legacy Public components and assets.
@@ -158,6 +159,8 @@ export function runPreviewChangeGate({ baseSha, headSha, outputPath }) {
     integration_required: String(result.integrationRequired),
     b11_required: String(result.b11Required),
     ci_required: String(result.ciRequired),
+    // #505: computed risk lane floor (none/fast/standard/extended/full); informational on PRs, enforced by the release gates.
+    risk_lane: classifyLane(changedPaths).lane,
   }
 
   if (outputPath) {

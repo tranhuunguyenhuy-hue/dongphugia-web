@@ -24,6 +24,7 @@ jobs:
       integration_required: ${{ steps.detect.outputs.integration_required }}
       b11_required: ${{ steps.detect.outputs.b11_required }}
       ci_required: ${{ steps.detect.outputs.ci_required }}
+      risk_lane: ${{ steps.detect.outputs.risk_lane }}
     steps:
       - name: Checkout the complete candidate history
         uses: actions/checkout@v4
@@ -192,9 +193,11 @@ jobs:
           CI_RESULT: ${{ needs.required-ci.result }}
           CI_REQUIRED: ${{ needs.repo-code-gate.outputs.ci_required }}
           PREVIEW_REQUIRED: ${{ needs.repo-code-gate.outputs.preview_required }}
+          RISK_LANE: ${{ needs.repo-code-gate.outputs.risk_lane }}
         shell: bash
         run: |
           set -euo pipefail
+          echo "### Risk lane floor (#505): ${RISK_LANE:-UNKNOWN}" >> "$GITHUB_STEP_SUMMARY"
           if [[ "$REPO_GATE_RESULT" != "success" ]]; then
             echo 'Exact source change gate failed.' >> "$GITHUB_STEP_SUMMARY"
             exit 1

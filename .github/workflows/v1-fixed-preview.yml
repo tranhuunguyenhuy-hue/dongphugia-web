@@ -1,5 +1,11 @@
 name: M2 fixed Preview
+# #505: a SUCCESSFUL `quality` push on main auto-publishes the combined M3 candidate to fixed Staging unless an Owner UAT lock is held
+# (label `staging-uat-lock` on one open issue). Manual publish-m3 with `uat_issue` acquires that lock after a successful deploy.
 on:
+  workflow_run:
+    workflows: [quality]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       approved_source_sha:
@@ -9,9 +15,13 @@ on:
       operation:
         description: M2 Public capture/preflight/publication, or M3 combined Admin preparation/publication
         type: choice
-        options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3]
+        options: [verify-read-access, capture-snapshot, prepare-preview, publish, prepare-m3, publish-m3, lock-uat]
         default: verify-read-access
         required: true
+      uat_issue:
+        description: 'publish-m3 / lock-uat: open issue that holds the Staging UAT lock for this exact SHA (lock-uat pins the live SHA without redeploying)'
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -20,8 +30,47 @@ concurrency:
   group: m2-fixed-staging
   cancel-in-progress: false
 jobs:
-  prepare:
+  gate:
+    name: Trigger gate and UAT lock (no secrets)
     if: >-
+      github.event_name == 'workflow_dispatch' || (github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      actions: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      sha: ${{ steps.gate.outputs.sha }}
+      mode: ${{ steps.gate.outputs.mode }}
+      operation: ${{ steps.gate.outputs.operation }}
+      uat_issue: ${{ steps.gate.outputs.uat_issue }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.approved_source_sha }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_UAT_ISSUE: ${{ inputs.uat_issue }}
+          WR_PATH: ${{ github.event.workflow_run.path }}
+          WR_EVENT: ${{ github.event.workflow_run.event }}
+          WR_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WR_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          WR_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WR_ACTOR: ${{ github.event.workflow_run.actor.login }}
+        run: node scripts/release/trigger-gate.mjs staging
+  prepare:
+    needs: gate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
       !endsWith(inputs.operation, '-m3') && github.ref == 'refs/heads/main' && github.actor == 'tranhuunguyenhuy-hue' &&
       github.repository == 'tranhuunguyenhuy-hue/dongphugia-web' && inputs.approved_source_sha == github.sha
     runs-on: ubuntu-24.04
@@ -174,10 +223,22 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   publish:
-    needs: prepare
+    # DISABLED (#505, archival #510): the legacy M2 publisher writes a Public-only artifact over the combined fixed Staging under the
+    # same SHA tag. The gate refuses `operation=publish`, and the recheck below refuses again. Re-enable only by a reviewed PR.
+    needs: [gate, prepare]
     if: inputs.operation == 'publish' && needs.prepare.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: read
+    env:
+      CANDIDATE_SHA: ${{ github.sha }}
+      MODE: manual
+      UAT_ISSUE: ${{ inputs.uat_issue }}
+      LEGACY_M2: 'true'
     # Reuse the existing non-Production credential environment only. Its legacy
     # label does not select a Worker: publisher code pins the parent and staging.
     environment: cloudflare-staging
@@ -199,7 +260,13 @@ jobs:
         with:
           name: m2-fixed-preview-${{ github.sha }}
           path: ${{ runner.temp }}/m2-preview-artifact
+      - name: Recheck newest main and the UAT lock right before deploying (legacy M2)
+        id: recheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/staging-lock.mjs recheck
       - name: Publish only named staging and run real hosted acceptance
+        if: steps.recheck.outputs.go == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -214,8 +281,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   prepare-m3:
+    needs: gate
     if: >-
-      inputs.operation == 'prepare-m3' || inputs.operation == 'publish-m3'
+      needs.gate.outputs.run == 'true' &&
+      (needs.gate.outputs.operation == 'prepare-m3' || needs.gate.outputs.operation == 'publish-m3')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Non-secret Preview configuration (Hyperdrive IDs, media target names) lives in this existing
@@ -224,7 +293,7 @@ jobs:
     steps:
       - name: Identity gate
         env:
-          APPROVED_SOURCE_SHA: ${{ inputs.approved_source_sha }}
+          APPROVED_SOURCE_SHA: ${{ needs.gate.outputs.sha }}
         run: |
           [ "$GITHUB_REF" = refs/heads/main ] && [ "$GITHUB_ACTOR" = tranhuunguyenhuy-hue ] \
             && [ "$GITHUB_REPOSITORY" = tranhuunguyenhuy-hue/dongphugia-web ] \
@@ -273,11 +342,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   publish-m3:
-    needs: prepare-m3
-    if: inputs.operation == 'publish-m3' && needs.prepare-m3.result == 'success'
+    needs: [gate, prepare-m3]
+    if: needs.gate.outputs.operation == 'publish-m3' && needs.prepare-m3.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: cloudflare-staging
+    # issues: write only to record the UAT lock on the requesting issue (label + lock line); nothing else is written.
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: write
+    env:
+      CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
+      MODE: ${{ needs.gate.outputs.mode }}
+      UAT_ISSUE: ${{ needs.gate.outputs.uat_issue }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -286,6 +365,11 @@ jobs:
         with:
           node-version: 24.13.0
           cache: npm
+      - name: Cache Playwright browsers (keyed by OS/arch and lockfiles; browser binaries only, no credentials)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json', 'tools/m2-preview/package-lock.json') }}
       - name: Install locked tools before publication credentials
         run: |
           npm ci
@@ -296,7 +380,14 @@ jobs:
         with:
           name: m3-fixed-preview-${{ github.sha }}
           path: ${{ runner.temp }}/m3-preview-artifact
+      - name: Recheck newest main and the UAT lock right before deploying
+        id: recheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release/staging-lock.mjs recheck
       - name: Publish only named staging and run hosted smoke
+        id: publish
+        if: steps.recheck.outputs.go == 'true'
         env:
           CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -304,6 +395,14 @@ jobs:
           M3_ADMIN_API_HMAC_SECRET: ${{ secrets.M3_ADMIN_API_HMAC_SECRET }}
           GH_TOKEN: ${{ github.token }}
         run: npx --no-install tsx scripts/app-foundation/publish-m3-fixed-preview.mjs "$RUNNER_TEMP/m3-preview-artifact" "$GITHUB_SHA"
+      - name: Take the Staging UAT lock for the requesting issue (manual publish with uat_issue)
+        if: steps.publish.outcome == 'success' && env.MODE == 'manual' && env.UAT_ISSUE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/release/staging-lock.mjs acquire
       - name: Upload sanitized hosted evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -312,3 +411,29 @@ jobs:
           path: ${{ runner.temp }}/m3-hosted-evidence
           if-no-files-found: ignore
           retention-days: 30
+  lock-uat:
+    # Pin the SHA that fixed Staging ACTUALLY serves (e.g. after an auto publish) for Owner UAT, without rebuilding or redeploying.
+    # Same concurrency group as every Staging publish; refuses unless the lock is free (or already this issue + SHA), the SHA is
+    # still main HEAD and the live Staging deployment carries exactly this SHA.
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.operation == 'lock-uat'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: cloudflare-staging
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Take the Staging UAT lock on the live Staging SHA (no redeploy)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.gate.outputs.sha }}
+          MODE: manual
+          UAT_ISSUE: ${{ needs.gate.outputs.uat_issue }}
+          CLOUDFLARE_ACCOUNT_ID: d54f3402b9d112ab64d6135e0e3f1fb1
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/release/staging-lock.mjs acquire

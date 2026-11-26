@@ -1,0 +1,25 @@
+{
+  "_source": "#505 read-only Cloudflare API, active version of dongphugia-v1-public-production on 2026-11-25 (bindings only; secret values are never returned by the API)",
+  "id": "298c38ba-2c0a-445a-a66a-998aa5095b2b",
+  "resources": {
+    "bindings": [
+      { "name": "ADMIN_API_HMAC_SECRET", "type": "secret_text" },
+      { "name": "ADMIN_API_URL", "type": "plain_text", "text": "https://bonxyxluzlxfkdetryoo.supabase.co/functions/v1/admin-api" },
+      { "name": "ADMIN_PRODUCTION_MEDIA_KEY", "type": "secret_text" },
+      { "name": "APP_BUILD_TARGET", "type": "plain_text", "text": "public" },
+      { "name": "APP_ENV", "type": "plain_text", "text": "production" },
+      { "name": "APP_ORIGIN", "type": "plain_text", "text": "https://www.dongphugia.vn" },
+      { "name": "ASSETS", "type": "assets" },
+      { "name": "BUNNY_CDN_HOSTNAME", "type": "plain_text", "text": "dpg-products.b-cdn.net" },
+      { "name": "BUNNY_STORAGE_HOSTNAME", "type": "plain_text", "text": "sg.storage.bunnycdn.com" },
+      { "name": "BUNNY_STORAGE_ZONE_NAME", "type": "plain_text", "text": "dpg-products" },
+      { "name": "IMAGES", "type": "images" },
+      { "name": "ORDER_INTAKE_DB", "type": "hyperdrive", "id": "<intake-hyperdrive-id-omitted>" },
+      { "name": "PUBLIC_CANONICAL_PRICE_BRANDS", "type": "plain_text", "text": "toto,inax" },
+      { "name": "PUBLIC_CANONICAL_PRICING", "type": "plain_text", "text": "on" },
+      { "name": "PUBLIC_CATALOGUE_SOURCE", "type": "plain_text", "text": "postgresql" },
+      { "name": "PUBLIC_COMMERCE", "type": "plain_text", "text": "on" },
+      { "name": "PUBLIC_DB", "type": "hyperdrive", "id": "905f5791e9d84cf285f7533b92d03f49" }
+    ]
+  }
+}
