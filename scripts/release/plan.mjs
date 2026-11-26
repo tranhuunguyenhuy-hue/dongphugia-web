@@ -117,6 +117,17 @@ export function validatePlanShape(plan) {
     const before = ancestors(plan, workers[0].id).map((id) => plan.steps.find((s) => s.id === id))
     if (before.some((s) => ['sql', 'backfill'].includes(s.type)) && !plan.compatibility.old_worker_with_new_schema) fail('PLAN_INCOMPATIBLE_REQUIRES_MAINTENANCE_PLAN')
     if (before.some((s) => s.destructive)) fail('PLAN_CONTRACT_BEFORE_WORKER') // contract only after the new Worker serves traffic
+    // Every step is explicitly before the Worker (its ancestor: required before publish) or after it (its descendant); a disconnected
+    // step could otherwise be skipped by the publish gate, or a destructive step could run before the Worker.
+    for (const s of plan.steps) {
+      if (s.id === workers[0].id) continue
+      const pre = before.some((b) => b.id === s.id)
+      const post = ancestors(plan, s.id).includes(workers[0].id)
+      if (!pre && !post) fail('PLAN_STEP_NOT_ORDERED_AROUND_WORKER', s.id)
+      if (s.destructive && !post) fail('PLAN_DESTRUCTIVE_MUST_FOLLOW_WORKER', s.id)
+    }
+  } else if (plan.steps.some((s) => s.destructive)) {
+    fail('PLAN_DESTRUCTIVE_REQUIRES_WORKER_STEP', 'unsupported without a Worker step; write an explicit maintenance plan')
   }
   return plan
 }

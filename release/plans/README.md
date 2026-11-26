@@ -44,3 +44,14 @@ backup is never automatic (isolated rehearsal only).
   (`node scripts/release/plan.mjs digest test-readonly-probe`). `release-check` is read-only; applying it would only create one empty
   table `dpg_release.pilot_probe` in TEST.
 - `lock-uat` for a full-scope candidate needs `plan_id` + `plan_digest` and the TEST chain including the Worker step.
+
+## TL review rules (#511)
+- **DAG**: with a Worker step, every other step is explicitly before it (a Worker ancestor = required before publish) or after it
+  (depends on the Worker); a disconnected step, a destructive step that is not after the Worker, or a destructive step in a plan
+  without a Worker is refused (`PLAN_STEP_NOT_ORDERED_AROUND_WORKER`, `PLAN_DESTRUCTIVE_*`; write an explicit maintenance plan).
+- **Worker evidence is bound to the plan**: dispatch `publish-m3` (TEST) and M4 `publish` (Production) with `plan_id` + `plan_digest`;
+  the run-name tag `op=worker` is the evidence. A publish of the same SHA without it, or under another plan/digest, never counts.
+  Staging also checks plan coverage. First full publish-m3 **without** `uat_issue`, then `lock-uat` (a combined publish+lock is refused).
+- A Worker with `bindings: true` needs a separate `STEP-GO <sha> <plan-id> <worker-step>` like a destructive step.
+- TEST plan writes need the exact `main` HEAD (superseded/unknown = refuse). M6 rechecks GO + `main` right before the Production write.
+- `FLAGS-CHANGE` in a plan GO is checked only at the Worker publish, not on SQL/function steps.

@@ -194,6 +194,22 @@ jobs:
           PLAN_MODE: check
           PLAN_OUT: ${{ runner.temp }}/m6-out
         run: node scripts/release/plan-sql.mjs
+      - name: Recheck the GO comment and main HEAD immediately before the Production write (#511)
+        if: inputs.operation == 'release-apply' || inputs.operation == 'release-rollback'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GO_COMMENT_ID: ${{ inputs.go_comment_id }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          GO_PURPOSE: step
+          PLAN_ID: ${{ inputs.plan_id }}
+          PLAN_DIGEST: ${{ inputs.plan_digest }}
+          PLAN_STEP_ID: ${{ inputs.step_id }}
+          PLAN_OP: ${{ inputs.operation == 'release-rollback' && 'rollback' || 'apply' }}
+          RISK_LANE: full
+          FULL_TOUCH: '{}'
+          GO_PHASE: immediately before the Production write (after the backup proof)
+          CHECK_MAIN_HEAD: 'true'
+        run: node scripts/release/go-evidence.mjs
       - name: Apply the reviewed plan step
         if: inputs.operation == 'release-apply'
         env:

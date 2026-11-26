@@ -212,9 +212,13 @@ export function evaluateGo(input) {
       const step = purpose === 'publish' ? null : plan.loaded.plan.steps.find((s) => s.id === purpose.step)
       const opTypes = { apply: ['sql', 'backfill'], rollback: ['sql', 'backfill'], function: ['function'] }
       if (purpose !== 'publish' && (!step || !opTypes[purpose.op]?.includes(step.type))) reasons.push(`PLAN_OP_DOES_NOT_MATCH_STEP:${purpose.op}/${step?.type ?? 'unknown'}`)
+      // The gated step: the named step, or the Worker for a publish. A Worker with `bindings: true` (wrangler/infra change) needs its own
+      // separate STEP-GO like a destructive or privileged step; no GO line alone ships a binding change.
+      const gated = step ?? plan.loaded.plan.steps.find((s) => s.type === 'worker')
       const separate = (type) => after.filter(unedited).some((c) => parseDirectives(c.body).some((d) => d.type === type
-        && d.args[0] === candidateSha && d.args[1] === plan.loaded.plan.id && d.args[2] === step?.id))
-      if (step && (step.destructive || step.privileged) && purpose.op !== 'rollback' && !separate('stepGo')) reasons.push(`STEP_GO_REQUIRED:${step.id}`)
+        && d.args[0] === candidateSha && d.args[1] === plan.loaded.plan.id && d.args[2] === gated?.id))
+      const needsStepGo = gated && (gated.destructive || gated.privileged || gated.bindings === true) && !(purpose !== 'publish' && purpose.op === 'rollback')
+      if (needsStepGo && !separate('stepGo')) reasons.push(`STEP_GO_REQUIRED:${gated.id}`)
       if (step && purpose.op === 'rollback' && !separate('rollbackGo')) reasons.push(`ROLLBACK_GO_REQUIRED:${step.id}`)
       if (step && purpose.op === 'rollback') reasons.push(...rollbackBlockers(plan.loaded, step.id, plan.prodStates))
     }
@@ -226,9 +230,13 @@ export function evaluateGo(input) {
   else if (quality.state !== 'success') reasons.push(`QUALITY_NOT_PASSED state=${quality.state}`)
 
   // Flags: a live flag change must be stated exactly; a stale FLAGS-CHANGE line is rejected too.
+  // Only the Worker publish knows the live flag diff: SQL/function plan steps (purpose = step) must not reject a FLAGS-CHANGE line
+  // that the same plan GO carries for the later Worker publish; the real live check stays at publish.
   const flagLine = only('flags')
-  if (flagsChange && flagLine?.value !== flagsChange) reasons.push('FLAGS_CHANGE_NOT_APPROVED')
-  if (!flagsChange && flagLine) reasons.push('FLAGS_CHANGE_STALE')
+  if (purpose === 'publish') {
+    if (flagsChange && flagLine?.value !== flagsChange) reasons.push('FLAGS_CHANGE_NOT_APPROVED')
+    if (!flagsChange && flagLine) reasons.push('FLAGS_CHANGE_STALE')
+  }
 
   return { ok: reasons.length === 0, reasons: [...new Set(reasons)], lane: effective, uat, verifyRunId: bound?.id ?? null }
 }
@@ -282,8 +290,8 @@ async function main() {
   const inputs = await collectGoInputs({ url: env.GO_COMMENT_URL, candidateSha: env.CANDIDATE_SHA, request, repo, withHistory: env.SCOPE_WITH_HISTORY === 'true' })
   // GO_PURPOSE=step (M6 plan-apply/rollback, Production function lane) names PLAN_STEP_ID and PLAN_OP; default = the Worker publish.
   const purpose = env.GO_PURPOSE === 'step' ? { step: env.PLAN_STEP_ID, op: env.PLAN_OP } : 'publish'
-  if (purpose !== 'publish' && (env.PLAN_ID || env.PLAN_DIGEST) && inputs.plan?.loaded
-    && (inputs.plan.loaded.plan.id !== env.PLAN_ID || inputs.plan.loaded.digest !== env.PLAN_DIGEST)) inputs.plan.error = 'DISPATCH_PLAN_DIFFERS_FROM_GO_PLAN'
+  // The dispatch must name the plan of the GO (also for the Worker publish: its run is the plan's Worker evidence, bound by that tag).
+  if (inputs.plan?.loaded && (inputs.plan.loaded.plan.id !== env.PLAN_ID || inputs.plan.loaded.digest !== env.PLAN_DIGEST)) inputs.plan.error = 'DISPATCH_PLAN_DIFFERS_FROM_GO_PLAN'
   if (inputs.plan?.error === 'DISPATCH_PLAN_DIFFERS_FROM_GO_PLAN') inputs.plan.loaded = undefined
   const result = evaluateGo({ ...inputs, lane: env.RISK_LANE || 'full', fullTouch, flagsChange: env.FLAGS_CHANGE ?? '', currentRunId: Number(env.GITHUB_RUN_ID) || null, purpose })
   if (env.CHECK_MAIN_HEAD === 'true') {

@@ -61,7 +61,7 @@ describe.skipIf(!ADMIN_URL)('#511 end-to-end Full Release pilot (isolated databa
     expect(await q(test, "select price_label from dpg_app.products where name = 'Bồn cầu B'")).toEqual([{ price_label: 'Liên hệ báo giá' }])
     testRuns.push(laneRun('m3-admin-api-deploy.yml', `M3 TEST deploy ${tag('function', 'function', 'test')}`, 'Deploy function and set secrets (TEST project only)'))
     expect(dependencyGaps(L, 'test', 'worker', states())).toEqual([])
-    testRuns.push({ ...laneRun('v1-fixed-preview.yml', 'M2 fixed Preview', 'Publish only named staging and run hosted smoke', true, 'publish-m3') })
+    testRuns.push({ ...laneRun('v1-fixed-preview.yml', `M2 fixed Preview ${tag('*', 'worker', 'test')}`, 'Publish only named staging and run hosted smoke', true, 'publish-m3') })
     expect(states().testStates.get('worker').state).toBe('applied')
 
     // 2. Owner UAT on the combined Staging, after the whole TEST chain.
@@ -96,7 +96,7 @@ describe.skipIf(!ADMIN_URL)('#511 end-to-end Full Release pilot (isolated databa
     expect(gate({ step: 'function', op: 'function' })).toMatchObject({ ok: true })
     prodRuns.push(laneRun('m4-production-function-deploy.yml', `M4 function deploy ${tag('function', 'function', 'production')}`, 'Deploy function and set its secrets (Production only)'))
     expect(gate('publish')).toMatchObject({ ok: true }) // the M4 publish may now run (it re-verifies the packaged Worker itself)
-    prodRuns.push(laneRun('m4-production-admin-release.yml', 'M4 Production Admin release', 'Publish with the Admin secrets passed atomically'))
+    prodRuns.push(laneRun('m4-production-admin-release.yml', `M4 Production Admin release ${tag('*', 'worker', 'production')}`, 'Publish with the Admin secrets passed atomically'))
 
     // 6. Contract: needs the TEST contract first and a SEPARATE STEP-GO; then the destructive change runs once.
     expect(gate({ step: 'contract', op: 'apply' }).reasons).toEqual(expect.arrayContaining(['TEST_CHAIN_NOT_APPLIED:contract=none', 'STEP_GO_REQUIRED:contract']))

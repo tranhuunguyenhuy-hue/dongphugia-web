@@ -86,6 +86,10 @@ async function main() {
     const scope = await releaseScope(sha)
     const gaps = scope.unknown ? ['RELEASE_SCOPE_UNKNOWN'] : await testChainForStaging({ request, repo, sha, planId: env.PLAN_ID, planDigest: env.PLAN_DIGEST,
       includeWorker: command === 'acquire', categories: scope.categories }).catch((error) => [`PLAN_EVIDENCE_UNKNOWN:${error.message}`])
+    if (!gaps.length && command === 'recheck' && issue && Object.keys(scope.categories ?? {}).length) {
+      // The lock line needs the COMPLETED publish-m3 of this plan as evidence, which a same-run lock step can never have: refuse before any write.
+      gaps.push('FULL_SCOPE_PUBLISH_AND_LOCK_NOT_COMBINED (run publish-m3 without uat_issue, then lock-uat with uat_issue)')
+    }
     if (gaps.length) blocked = gaps.join(',')
   }
   if (command === 'recheck') {

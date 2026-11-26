@@ -1,11 +1,11 @@
 // #511 per-step evidence for a release plan, read from the EXISTING lanes' runs on the exact candidate SHA (no orchestrator).
 // SQL and function steps are identified by a run-name tag that each lane validates before acting:
-//   [release plan=<id> step=<step> digest=<64 hex> env=<test|production> op=<apply|rollback|check|function>]
-// Worker steps need no tag: one per plan, identified by the candidate SHA (fixed Staging publish-m3 / M4 publish).
+//   [release plan=<id> step=<step> digest=<64 hex> env=<test|production> op=<apply|rollback|check|function|worker>]
+// The Worker step (op=worker, step=*) is the tagged dispatch of fixed Staging publish-m3 / M4 publish: bound to the plan and digest, never to the SHA alone.
 // State of a step per environment = its NEWEST trusted run: success → applied (or rolled-back); failure, cancel or in progress →
 // unknown, which blocks everything downstream until it is reconciled. Plan-check runs never change state.
-import { DEFAULT_REPOSITORY, M4_WORKFLOW, SHA, STAGING_WORKFLOW, appendSummary, byTime, github, githubList, isMain } from './lib.mjs'
-import { ancestors, loadPlan } from './plan.mjs'
+import { DEFAULT_REPOSITORY, M4_WORKFLOW, SHA, STAGING_WORKFLOW, appendSummary, byTime, currentMainHead, github, githubList, isMain } from './lib.mjs'
+import { ancestors, coverageGaps, loadPlan } from './plan.mjs'
 import { lockStatus, validateUatIssue } from './staging-lock.mjs'
 
 export const SQL_LANE = { test: '.github/workflows/m3-admin-api-deploy.yml', production: '.github/workflows/m6-production-sql-apply.yml' }
@@ -15,7 +15,7 @@ export const STEP_NAMES = {
   function: { test: 'Deploy function and set secrets (TEST project only)', production: 'Deploy function and set its secrets (Production only)' },
   worker: { test: 'Publish only named staging and run hosted smoke', production: 'Publish with the Admin secrets passed atomically' },
 }
-const TAG = /\[release plan=([a-z0-9][a-z0-9-]{2,60}) step=([a-z][a-z0-9-]{1,40}|\*) digest=([0-9a-f]{64}) env=(test|production) op=(apply|rollback|check|function)\]/
+const TAG = /\[release plan=([a-z0-9][a-z0-9-]{2,60}) step=([a-z][a-z0-9-]{1,40}|\*) digest=([0-9a-f]{64}) env=(test|production) op=(apply|rollback|check|function|worker)\]/
 
 export function parseTag(title) {
   const m = String(title ?? '').match(TAG)
@@ -34,6 +34,19 @@ export function stepStates(loaded, environment, runs, { candidateSha, repo = DEF
     const outcome = (ok, success) => (!done ? 'unknown' : run.conclusion === 'success' && ok ? success : 'unknown')
     const tag = parseTag(run.display_title ?? run.name)
     if (tag && tag.plan === loaded.plan.id && tag.digest === loaded.digest && tag.env === environment) {
+      if (tag.op === 'worker') {
+        // Worker evidence is bound to THIS plan + digest by the dispatch tag (a Worker publish of the same SHA under another plan, or
+        // none, never counts). A verify-only or skipped publish is not a deployment.
+        const worker = loaded.plan.steps.find((s) => s.type === 'worker')
+        const path = environment === 'test' ? STAGING_WORKFLOW : M4_WORKFLOW
+        const name = STEP_NAMES.worker[environment]
+        if (worker && tag.step === '*' && run.path === path && run.head_sha === candidateSha && run.head_branch === 'main'
+          && run.head_repository?.full_name === repo && run.event === 'workflow_dispatch') {
+          const attempted = (run.jobs ?? []).flatMap((j) => j.steps ?? []).some((x) => x.name.startsWith(name) && x.conclusion !== 'skipped' && x.started_at)
+          if (attempted || !done) events.push({ step: worker.id, state: outcome(stepOk(run, name, environment === 'test' ? 'publish-m3' : undefined), 'applied'), run })
+        }
+        continue
+      }
       const step = loaded.plan.steps.find((s) => s.id === tag.step)
       if (!step) continue
       if (['apply', 'rollback'].includes(tag.op) && ['sql', 'backfill'].includes(step.type) && trusted(run, SQL_LANE[environment], candidateSha, repo)) {
@@ -44,15 +57,7 @@ export function stepStates(loaded, environment, runs, { candidateSha, repo = DEF
       }
       continue
     }
-    const worker = loaded.plan.steps.find((s) => s.type === 'worker')
-    if (!worker) continue
-    const path = environment === 'test' ? STAGING_WORKFLOW : M4_WORKFLOW
-    if (run.path !== path || run.head_sha !== candidateSha || run.head_branch !== 'main' || run.head_repository?.full_name !== repo) continue
-    if (!['workflow_dispatch', 'workflow_run'].includes(run.event)) continue
-    const name = STEP_NAMES.worker[environment]
-    const attempted = (run.jobs ?? []).flatMap((j) => j.steps ?? []).some((s) => s.name.startsWith(name) && s.conclusion !== 'skipped' && s.started_at)
-    if (!attempted && done) continue // a verify-only or skipped run is not a Worker deployment
-    events.push({ step: worker.id, state: outcome(stepOk(run, name, environment === 'test' ? 'publish-m3' : undefined), 'applied'), run })
+    continue
   }
   const states = new Map(loaded.plan.steps.map((s) => [s.id, { state: 'none', runId: null, at: null }]))
   for (const e of events.sort((a, b) => byTime(a.run, b.run))) states.set(e.step, { state: e.state, runId: e.run.id, at: e.run.updated_at })
@@ -103,10 +108,12 @@ export function rollbackBlockers(loaded, stepId, states) {
 const OP_TYPES = { apply: ['sql', 'backfill'], rollback: ['sql', 'backfill'], function: ['function'], worker: ['worker'], check: null }
 
 /** Pure TEST-writer gate: plan identity, op/type match, TEST dependencies and the shared Staging/TEST UAT lock. */
-export function evaluateTestGate({ loaded, expectedDigest, stepId, op, testStates, lock }) {
+export function evaluateTestGate({ loaded, expectedDigest, stepId, op, testStates, lock, mainHead, candidateSha }) {
   const reasons = []
   if (loaded.digest !== expectedDigest) return ['PLAN_DIGEST_MISMATCH']
   if (op === 'check') return []
+  // A stale queued/manual run must never write the shared TEST schema/function after main moved on (unknown = refuse).
+  if (mainHead !== candidateSha) reasons.push(`SUPERSEDED main=${mainHead ?? 'UNKNOWN'}`)
   const step = loaded.plan.steps.find((s) => s.id === stepId)
   if (!step) return [`PLAN_STEP_UNKNOWN:${stepId}`]
   if (!OP_TYPES[op]?.includes(step.type)) return [`PLAN_OP_DOES_NOT_MATCH_STEP:${op}/${step.type}`]
@@ -133,9 +140,16 @@ export async function testChainForStaging({ request, repo, sha, planId, planDige
     return Promise.all(runs.map(async (r) => ({ ...r, jobs: (await request(`/repos/${repo}/actions/runs/${r.id}/jobs?per_page=100`)).jobs })))
   }
   const runs = (await Promise.all([runsOf(SQL_LANE.test), runsOf(STAGING_WORKFLOW)])).flat().filter((r) => String(r.id) !== String(process.env.GITHUB_RUN_ID))
-  const states = stepStates(loaded, 'test', runs, { candidateSha: sha, repo })
+  return stagingChainGaps(loaded, categories, stepStates(loaded, 'test', runs, { candidateSha: sha, repo }), includeWorker)
+}
+
+/** Pure: plan coverage of the release scope + the TEST chain (up to the Worker; with it for lock-uat). */
+export function stagingChainGaps(loaded, categories, states, includeWorker) {
+  const worker = loaded.plan.steps.find((s) => s.type === 'worker')
+  if (!worker) return ['PLAN_HAS_NO_WORKER_STEP']
   const needed = [...ancestors(loaded.plan, worker.id), ...(includeWorker ? [worker.id] : [])]
-  return needed.filter((id) => states.get(id)?.state !== 'applied').map((id) => `TEST_CHAIN_NOT_APPLIED:${id}=${states.get(id)?.state ?? 'none'}`)
+  return [...coverageGaps(loaded, categories).map((g) => `PLAN_COVERAGE_GAP:${g}`),
+    ...needed.filter((id) => states.get(id)?.state !== 'applied').map((id) => `TEST_CHAIN_NOT_APPLIED:${id}=${states.get(id)?.state ?? 'none'}`)]
 }
 
 async function main() {
@@ -157,7 +171,8 @@ async function main() {
   const testStates = stepStates(loaded, 'test', runs, { candidateSha: sha, repo })
   const issue = await validateUatIssue(request, env.UAT_ISSUE, repo).catch(() => { throw new Error('UAT_ISSUE_NOT_OPEN_ISSUE') })
   const lock = await lockStatus(request, { requestIssue: issue, candidateSha: sha, repo })
-  const reasons = evaluateTestGate({ loaded, expectedDigest: env.PLAN_DIGEST, stepId: env.STEP_ID, op: env.PLAN_OP, testStates, lock })
+  const mainHead = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
+  const reasons = evaluateTestGate({ loaded, expectedDigest: env.PLAN_DIGEST, stepId: env.STEP_ID, op: env.PLAN_OP, testStates, lock, mainHead, candidateSha: sha })
   appendSummary(`- TEST plan gate \`${loaded.plan.id}/${env.STEP_ID}\` (${env.PLAN_OP}) digest \`${loaded.short}\`: **${reasons.length ? 'FAIL' : 'PASS'}**${reasons.length ? ` — ${reasons.join(', ')}` : ''} · TEST states: ${[...testStates].map(([k, v]) => `${k}=${v.state}`).join(', ')}`)
   console.error(`PLAN_GATE env=test status=${reasons.length ? 'FAIL' : 'PASS'}${reasons.length ? ` reasons=${reasons.join(',')}` : ''}`)
   if (reasons.length) process.exit(1)

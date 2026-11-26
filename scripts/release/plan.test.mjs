@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { evaluateGo } from './go-evidence.mjs'
-import { dependencyGaps, evaluateTestGate, parseTag, preflightOk, rollbackBlockers, stepStates } from './plan-evidence.mjs'
+import { dependencyGaps, evaluateTestGate, parseTag, preflightOk, rollbackBlockers, stagingChainGaps, stepStates } from './plan-evidence.mjs'
 import { ancestors, coverageGaps, lintSql, loadPlan, validatePlanShape } from './plan.mjs'
 import { fullCategory } from './risk-lane.mjs'
 
@@ -90,10 +90,10 @@ const run = (pathName, title, created, over = {}, steps = {}) => ({
 })
 const testSql = (step, t, over, ok = 'success', op = 'apply') => run('m3-admin-api-deploy.yml', `M3 ${tag(step, op, 'test')}`, t, over, { [op === 'apply' ? 'Apply the reviewed plan step (TEST)' : 'Roll back the reviewed plan step (TEST)']: ok })
 const testFn = (t) => run('m3-admin-api-deploy.yml', `M3 ${tag('function', 'function', 'test')}`, t, {}, { 'Deploy function and set secrets (TEST project only)': 'success' })
-const staging = (t, sha = A) => ({ ...run('v1-fixed-preview.yml', 'M2 fixed Preview', t, { head_sha: sha, event: 'workflow_run' }), jobs: [{ name: 'publish-m3', steps: [{ name: 'Publish only named staging and run hosted smoke', conclusion: 'success', started_at: t, completed_at: t.replace(/:00Z$/, ':20Z') }] }] })
+const staging = (t, sha = A, title = `M2 fixed Preview ${tag('*', 'worker', 'test')}`) => ({ ...run('v1-fixed-preview.yml', title, t, { head_sha: sha }), jobs: [{ name: 'publish-m3', steps: [{ name: 'Publish only named staging and run hosted smoke', conclusion: 'success', started_at: t, completed_at: t.replace(/:00Z$/, ':20Z') }] }] })
 const prodSql = (step, t, over, ok = 'success', op = 'apply') => run('m6-production-sql-apply.yml', `M6 ${tag(step, op, 'production')}`, t, over, { [op === 'apply' ? 'Apply the reviewed plan step' : 'Roll back the reviewed plan step']: ok })
 const prodFn = (t) => run('m4-production-function-deploy.yml', `M4 fn ${tag('function', 'function', 'production')}`, t, {}, { 'Deploy function and set its secrets (Production only)': 'success' })
-const prodWorker = (t) => run('m4-production-admin-release.yml', 'M4 Production Admin release', t, {}, { 'Publish with the Admin secrets passed atomically': 'success' })
+const prodWorker = (t, title = `M4 Production Admin release ${tag('*', 'worker', 'production')}`) => run('m4-production-admin-release.yml', title, t, {}, { 'Publish with the Admin secrets passed atomically': 'success' })
 const preflight = (t, conclusion = 'success') => run('m6-production-sql-apply.yml', `M6 ${tag('*', 'check', 'production')}`, t, { conclusion }, { 'Check the reviewed plan (read-only)': conclusion })
 
 const TEST_RUNS = [testSql('expand', '2026-12-01T09:00:00Z'), testSql('backfill', '2026-12-01T09:05:00Z'), testFn('2026-12-01T09:10:00Z'), staging('2026-12-01T09:20:00Z')]
@@ -128,7 +128,12 @@ describe('#511 per-step evidence and DAG gates', () => {
     // Wrong step type for the op (function op on an SQL step).
     expect(states([run('m4-production-function-deploy.yml', `x ${tag('expand', 'function', 'production')}`, '2026-12-01T11:00:00Z', {}, { 'Deploy function and set its secrets (Production only)': 'success' })]).get('expand').state).toBe('none')
     // A verify-only M4 run is not a Worker deployment.
-    expect(states([run('m4-production-admin-release.yml', 'M4', '2026-12-01T11:00:00Z', {}, { 'Publish with the Admin secrets passed atomically': 'skipped' })]).get('worker').state).toBe('none')
+    expect(states([run('m4-production-admin-release.yml', `M4 ${tag('*', 'worker', 'production')}`, '2026-12-01T11:00:00Z', {}, { 'Publish with the Admin secrets passed atomically': 'skipped' })]).get('worker').state).toBe('none')
+    // Worker evidence is bound to the plan and digest: an untagged publish, another plan or another digest of the SAME SHA never counts.
+    for (const title of ['M4 Production Admin release', `M4 ${tag('*', 'worker', 'production', 'f'.repeat(64))}`, 'M4 [release plan=other-plan step=* digest=' + L.digest + ' env=production op=worker]']) {
+      expect(states([prodWorker('2026-12-01T11:00:00Z', title)]).get('worker').state).toBe('none')
+    }
+    expect(states([prodWorker('2026-12-01T11:00:00Z')]).get('worker').state).toBe('applied')
   })
 
   it('gates each step on its dependencies: TEST ancestors in TEST; Production = TEST chain + Production ancestors', () => {
@@ -303,5 +308,60 @@ describe('#511 TEST-only pilot plan (the safe hosted read-only release-check on 
       issue: { number: 1, state: 'open' }, issueComments: [], m4Runs: [], stagingRuns: [], qualityRuns: [], candidateSha: 'c'.repeat(40), lane: 'full', fullTouch: { sql: 'c'.repeat(40) },
       plan: { loaded: real, categories: { sql: [] }, sqlRuns: { production: [] }, testStates: new Map(), prodStates: new Map() } })
     expect(r.reasons).toContain('PLAN_TEST_ONLY_NOT_FOR_PRODUCTION')
+  })
+})
+
+describe('#511 TL review fixes: DAG ordering, Worker binding, stale TEST writes, FLAGS-CHANGE on steps', () => {
+  const planWith = (mutate) => { const p = JSON.parse(JSON.stringify(L.plan)); mutate(p); return p }
+  it.each([
+    ['disconnected function step', (p) => { p.steps[2].depends_on = []; p.steps[3].depends_on = ['backfill'] }, 'PLAN_STEP_NOT_ORDERED_AROUND_WORKER'],
+    ['disconnected SQL step', (p) => { p.steps.push({ ...p.steps[0], id: 'extra', depends_on: [], sql: '001-expand.sql' }) }, 'PLAN_STEP_NOT_ORDERED_AROUND_WORKER'],
+    ['independent destructive step', (p) => { p.steps[4].depends_on = []; p.steps[4].destructive = true }, 'PLAN_STEP_NOT_ORDERED_AROUND_WORKER'],
+    ['destructive step that is a Worker ancestor', (p) => { p.steps[0].destructive = true }, 'PLAN_CONTRACT_BEFORE_WORKER'],
+    ['destructive step without a Worker step', (p) => { p.steps = p.steps.filter((s) => s.type !== 'worker'); p.steps[3] = { ...p.steps[3], depends_on: ['backfill'] } }, 'PLAN_DESTRUCTIVE_REQUIRES_WORKER_STEP'],
+  ])('refuses a plan with a %s', (_n, mutate, code) => expect(() => validatePlanShape(planWith(mutate))).toThrow(code))
+  it('keeps the legitimate expand → backfill → function → worker → contract', () => expect(() => validatePlanShape(planWith(() => undefined))).not.toThrow())
+
+  it('a Worker with bindings (and a destructive/privileged step) needs a SEPARATE STEP-GO on the publish too', () => {
+    const bindingsPlan = { ...L, plan: planWith((p) => { p.steps[3].bindings = true }) }
+    const input = goInput(GO, { plan: { loaded: bindingsPlan, categories: { sql: [`release/plans/${ID}/plan.json`], function: ['supabase/functions/admin-api/index.ts'], bindings: ['apps/public/wrangler.production.jsonc'] },
+      sqlRuns: { production: [PREFLIGHT, ...PROD_RUNS] }, testStates: stepStates(L, 'test', TEST_RUNS, { candidateSha: A }), prodStates: stepStates(L, 'production', PROD_RUNS, { candidateSha: A }) } })
+    expect(evaluateGo(input).reasons).toContain('STEP_GO_REQUIRED:worker')
+    expect(evaluateGo({ ...input, issueComments: [comment(`STEP-GO ${A} ${ID} worker`, '2026-12-01T11:25:00Z')] }).reasons).not.toContain('STEP_GO_REQUIRED:worker')
+  })
+
+  it('Staging chain: plan coverage and TEST evidence are checked; a different plan/digest on the same SHA does not satisfy it', () => {
+    const ok = stepStates(L, 'test', TEST_RUNS, { candidateSha: A })
+    expect(stagingChainGaps(L, { sql: [`release/plans/${ID}/plan.json`] }, ok, true)).toEqual([])
+    expect(stagingChainGaps(L, { sql: ['supabase/migrations/x.sql'] }, ok, true)).toEqual(['PLAN_COVERAGE_GAP:sql:supabase/migrations/x.sql'])
+    const wrong = stepStates(L, 'test', [...TEST_RUNS.slice(0, 3), staging('2026-12-01T09:20:00Z', A, 'M2 fixed Preview')], { candidateSha: A })
+    expect(stagingChainGaps(L, {}, wrong, true)).toEqual(['TEST_CHAIN_NOT_APPLIED:worker=none'])
+    expect(stagingChainGaps(L, {}, wrong, false)).toEqual([]) // publish-m3 itself needs only the pre-Worker chain
+  })
+
+  it('first full publish-m3 combined with the lock is refused before any write (lock-uat is a separate run)', () => {
+    expect(readFileSync('scripts/release/staging-lock.mjs', 'utf8')).toContain('FULL_SCOPE_PUBLISH_AND_LOCK_NOT_COMBINED')
+  })
+
+  it('TEST plan writes need the exact main HEAD (superseded and unknown refuse); read-only check is unaffected', () => {
+    const g = (mainHead) => evaluateTestGate({ loaded: L, expectedDigest: L.digest, stepId: 'expand', op: 'apply', testStates: new Map(L.plan.steps.map((s) => [s.id, { state: 'none' }])), lock: { state: 'free', allowed: true }, mainHead, candidateSha: A })
+    expect(g(A)).toEqual([])
+    expect(g(B)).toEqual([`SUPERSEDED main=${B}`])
+    expect(g('UNKNOWN')).toEqual(['SUPERSEDED main=UNKNOWN'])
+    expect(evaluateTestGate({ loaded: L, expectedDigest: L.digest, stepId: '*', op: 'check', testStates: new Map(), lock: { state: 'held', allowed: true }, mainHead: B, candidateSha: A })).toEqual([])
+  })
+
+  it('a plan step does not reject a FLAGS-CHANGE line that the same GO carries for the later Worker publish', () => {
+    const body = `${GO}\nFLAGS-CHANGE commerce=off`
+    expect(evaluateGo(goInput(body, { purpose: { step: 'expand', op: 'apply' } })).reasons).not.toContain('FLAGS_CHANGE_STALE')
+    expect(evaluateGo(goInput(body)).reasons).toContain('FLAGS_CHANGE_STALE') // the real live check stays at publish
+  })
+
+  it('the Worker publish dispatches carry the plan tag and the plan inputs', () => {
+    expect(readFileSync('.github/workflows/v1-fixed-preview.yml', 'utf8')).toContain('env=test op=worker')
+    const m4 = readFileSync('.github/workflows/m4-production-admin-release.yml', 'utf8')
+    expect(m4).toContain('env=production op=worker')
+    expect(m4.match(/PLAN_DIGEST: \$\{\{ inputs.plan_digest \}\}/g)).toHaveLength(2)
+    expect(readFileSync('.github/workflows/m6-production-sql-apply.yml', 'utf8')).toContain('Recheck the GO comment and main HEAD immediately before the Production write')
   })
 })
