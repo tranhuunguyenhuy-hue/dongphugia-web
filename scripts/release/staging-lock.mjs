@@ -7,6 +7,8 @@ import {
   DEFAULT_REPOSITORY, SHA, appendSummary, byTime, cloudflare, currentMainHead, github, githubList, isCombinedStagingIdentity, isMain,
   isOwnerComment, liveStagingSha, plainLines, writeOutputs,
 } from './lib.mjs'
+import { testChainForStaging } from './plan-evidence.mjs'
+import { releaseScope } from './risk-lane.mjs'
 
 export const LOCK_LABEL = 'staging-uat-lock'
 const LOCK_LINE = /^STAGING-UAT-LOCK ([0-9a-f]{40})$/
@@ -75,7 +77,21 @@ async function main() {
   const head = await currentMainHead(request, repo).catch(() => 'UNKNOWN')
   const lock = await lockStatus(request, { requestIssue: issue, candidateSha: sha, repo })
   // The legacy M2 publisher is disabled (Public-only artifact under the same SHA tag would overwrite the combined Staging).
-  const blocked = env.LEGACY_M2 === 'true' ? 'LEGACY_M2_PUBLISH_DISABLED' : head !== sha ? `SUPERSEDED main=${head}` : lock.allowed ? null : lock.reason
+  // A TEST DB/function writer (not a Staging Worker publish) is refused under ANY held lock, the holder included (#511).
+  const testWriteUnderLock = env.TEST_WRITER === 'true' && lock.state === 'held' ? `TEST_WRITE_REFUSED_UAT_LOCK_HELD issue=#${lock.holder} (release the label after the verdict, then write)` : null
+  let blocked = env.LEGACY_M2 === 'true' ? 'LEGACY_M2_PUBLISH_DISABLED' : head !== sha ? `SUPERSEDED main=${head}` : testWriteUnderLock ?? (lock.allowed ? null : lock.reason)
+  if (!blocked && (command === 'acquire' || env.STAGING_WRITER === 'worker')) {
+    // #511: a full-scope candidate reaches the combined Staging only with its plan and the TEST chain before the Worker applied;
+    // lock-uat additionally needs the TEST Worker step itself (no UAT before every TEST dependency passed). Unknown scope = refuse.
+    const scope = await releaseScope(sha)
+    const gaps = scope.unknown ? ['RELEASE_SCOPE_UNKNOWN'] : await testChainForStaging({ request, repo, sha, planId: env.PLAN_ID, planDigest: env.PLAN_DIGEST,
+      includeWorker: command === 'acquire', categories: scope.categories }).catch((error) => [`PLAN_EVIDENCE_UNKNOWN:${error.message}`])
+    if (!gaps.length && command === 'recheck' && issue && Object.keys(scope.categories ?? {}).length) {
+      // The lock line needs the COMPLETED publish-m3 of this plan as evidence, which a same-run lock step can never have: refuse before any write.
+      gaps.push('FULL_SCOPE_PUBLISH_AND_LOCK_NOT_COMBINED (run publish-m3 without uat_issue, then lock-uat with uat_issue)')
+    }
+    if (gaps.length) blocked = gaps.join(',')
+  }
   if (command === 'recheck') {
     // Right before deploy: still the newest main (an older queued run never overwrites a newer one) and the lock still allows it.
     writeOutputs({ go: blocked ? 'false' : 'true', reason: blocked ?? lock.reason })

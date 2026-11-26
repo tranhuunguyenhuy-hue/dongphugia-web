@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "id": "pilot-expand-backfill",
+  "issue": 511,
+  "title": "Pilot fixture: expand a column, backfill it in batches, deploy the function, publish the Worker, then contract",
+  "covers": ["supabase/functions/admin-api/index.ts"],
+  "compatibility": { "old_worker_with_new_schema": true, "new_worker_with_old_schema": false },
+  "steps": [
+    { "id": "expand", "type": "sql", "depends_on": [], "sql": "001-expand.sql", "precheck": "001-expand.pre.sql",
+      "postcheck": "001-expand.post.sql", "rollback": { "kind": "sql", "sql": "001-expand.rollback.sql" } },
+    { "id": "backfill", "type": "backfill", "depends_on": ["expand"], "batch": "002-backfill.batch.sql", "precheck": "002-backfill.pre.sql",
+      "postcheck": "002-backfill.post.sql", "max_batches": 50, "rollback": { "kind": "forward-fix", "note": "labels are derived data; recompute" } },
+    { "id": "function", "type": "function", "depends_on": ["backfill"], "function": "admin-api", "rollback": { "kind": "function-redeploy-previous" } },
+    { "id": "worker", "type": "worker", "depends_on": ["function"], "rollback": { "kind": "worker-rollback" } },
+    { "id": "contract", "type": "sql", "depends_on": ["worker"], "destructive": true, "sql": "003-contract.sql", "precheck": "003-contract.pre.sql",
+      "postcheck": "003-contract.post.sql", "rollback": { "kind": "forward-fix", "note": "dropped legacy column is in the pre-release backup only" } }
+  ]
+}

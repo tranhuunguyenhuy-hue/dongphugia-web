@@ -5,7 +5,7 @@ import { diffFlags, flagsDigest, flagsFromBindings, formatFlagsChange, loadFlags
 import { evaluateGo, isVerifyOperation, parseDirectives, stagingAt } from './go-evidence.mjs'
 import { activeVersionId, isCombinedStagingIdentity, plainLines, qualityFromRuns } from './lib.mjs'
 import { readiness, renderEvidence } from './release-evidence.mjs'
-import { classifyLane, fullCategory, laneForPath } from './risk-lane.mjs'
+import { classifyLane, fullCategory, laneForPath, legacyFunctionBlock } from './risk-lane.mjs'
 import { evaluateLock, lockedSha } from './staging-lock.mjs'
 import { evaluateTrigger } from './trigger-gate.mjs'
 
@@ -74,6 +74,13 @@ describe('#505 risk lane floor and full categories', () => {
     expect(mixed).toMatchObject({ lane: 'full', categories: { sql: ['supabase/migrations/2.sql'] } })
     expect(classifyLane([]).lane).toBe('none')
   })
+
+  it('#511 refuses a legacy (plan-less) Production function deploy when the release changes a function or its scope is unknown', () => {
+    expect(legacyFunctionBlock(classifyLane(['src/components/x.tsx']))).toBeNull()
+    expect(legacyFunctionBlock(classifyLane(['supabase/functions/admin-api/index.ts']))).toMatch(/^FUNCTION_CHANGE_REQUIRES_PLAN files=1/)
+    expect(legacyFunctionBlock({ unknown: true, categories: {} })).toMatch(/^RELEASE_SCOPE_UNKNOWN/)
+    expect(legacyFunctionBlock(undefined)).toMatch(/^RELEASE_SCOPE_UNKNOWN/)
+  })
 })
 
 const base = { target: 'm4', repo: REPO, ref: 'refs/heads/main', actor: OWNER, githubSha: A, mainHead: A }
@@ -97,10 +104,14 @@ describe('#505 D1 trigger gate', () => {
     expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: { ...wr, ...over }, scopeLane: 'standard' })).toMatchObject({ run: false, fail: false })
   })
 
-  it('decides on the CUMULATIVE scope: pending full change or unknown scope keeps a UI push out of Worker-only automation', () => {
-    // e.g. an unreleased SQL change merged earlier, then a UI merge: cumulative lane is full → skipped, not routed to Worker-only.
-    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: 'full' }).reason).toBe('FULL_LANE_OR_UNKNOWN_SCOPE_SEPARATE_GATES')
-    expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: undefined }).run).toBe(false)
+  it('decides on the CUMULATIVE scope: a pending full change or unknown scope never auto-publishes Staging; verify stays read-only', () => {
+    // e.g. an unreleased SQL change merged earlier, then a UI merge: cumulative lane is full → combined Staging waits for the plan.
+    for (const scopeLane of ['full', undefined]) {
+      expect(evaluateTrigger({ ...base, target: 'staging', event: 'workflow_run', workflowRun: wr, scopeLane, lock: free }))
+        .toMatchObject({ run: false, fail: false, reason: 'FULL_LANE_OR_UNKNOWN_SCOPE_RUNS_BY_PLAN' })
+      // #511: the M4 verify (read-only, never publish) still runs and shows if the new Worker fits the current Production schema.
+      expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane })).toMatchObject({ run: true, mode: 'auto', operation: 'verify' })
+    }
     expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, scopeLane: 'none' }).reason).toBe('NO_RUNTIME_CHANGE_VS_PRODUCTION')
     expect(evaluateTrigger({ ...base, event: 'workflow_run', workflowRun: wr, mainHead: B, scopeLane: 'standard' }).reason).toMatch(/SUPERSEDED/)
     const locked = { allowed: false, reason: 'STAGING_UAT_LOCKED issue=#499 sha=x' }
@@ -328,13 +339,13 @@ describe('#505 D3-A GO-PROD evidence', () => {
     expect(reasonsFor(GOOD, { lane: undefined, fullTouch: null })).toEqual(expect.arrayContaining(['LANE_ACK_REQUIRED', 'FULL_SCOPE_UNKNOWN']))
   })
 
-  it('full scope (SQL, function, bindings) is never published by the Worker-only lane, whatever evidence is offered', () => {
+  it('full scope (SQL, function, bindings) is never published without a reviewed plan, whatever other evidence is offered', () => {
     // A successful M6 rollback or an unrelated single apply must not count as proof that a schema change was applied.
     const offered = `${GOOD}\nLANE full\nFULL-EVIDENCE sql https://github.com/${REPO}/actions/runs/301`
     for (const touch of [{ sql: C }, { function: C }, { bindings: C }, { sql: C, function: B }]) {
       const r = evaluateGo(goInput(offered, { lane: 'full', fullTouch: touch }))
       expect(r.ok).toBe(false)
-      expect(r.reasons.join()).toMatch(/^.*FULL_SCOPE_REQUIRES_PROTECTED_FULL_PROCESS:/)
+      expect(r.reasons).toContain('FULL_SCOPE_REQUIRES_PLAN')
     }
     // An Owner may still raise a Worker-only release to LANE full voluntarily.
     expect(evaluateGo(goInput(`${GOOD}\nLANE full`, { lane: 'extended', fullTouch: {} })).ok).toBe(true)
@@ -363,7 +374,7 @@ describe('#505 D3-A GO-PROD evidence', () => {
   })
 
   it('only whole column-0 lines outside quotes, code and HTML comments are directives', () => {
-    expect(parseDirectives(`**GO-PROD ${A}**\n\`GO-PROD ${A}\`\n  GO-PROD ${A}\nGO-PROD ${A}  `)).toEqual([{ type: 'go', value: A, extra: undefined }])
+    expect(parseDirectives(`**GO-PROD ${A}**\n\`GO-PROD ${A}\`\n  GO-PROD ${A}\nGO-PROD ${A}  `)).toEqual([{ type: 'go', value: A, extra: undefined, args: [A] }])
     expect(plainLines('a\n~~~\nb\n~~~\n> c\n\tx\n<!-- y -->d')).toEqual(['a', 'd'])
   })
 })
