@@ -1,6 +1,6 @@
 # Đông Phú Gia V1 — technical handbook
 
-[AGENTS.md](../AGENTS.md) is the shared policy; your assigned GitHub issue holds the task; GitHub Issues, PRs and Actions hold progress, and live state is verified at the source (Cloudflare, Supabase, Bunny). Keep scope small; open only the references you need.
+[AGENTS.md](../AGENTS.md) is the shared policy. [Master Roadmap v1.0](MASTER_ROADMAP.md) is the Owner-approved target direction and 120-decision register. Project 00 transition is pending readiness: the existing authorized GitHub issue holds the task until cutover; then Linear is the official work/progress source, with verified sync or link-only fallback. GitHub PRs, Actions and direct release issue approvals remain engineering evidence and release authority. Live state is verified at the source (Cloudflare, Supabase, Bunny). Keep scope small; open only the references you need. The architecture below documents the current runtime, not permission to apply the target schema or design.
 
 ## Architecture
 
@@ -14,7 +14,7 @@
 
 ## Typical task path
 
-Issue (from [template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → agent self-review and self-merge (docs/CI/maintenance) or fixed-staging UAT by the Owner (runtime/UI) → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the live Worker deployment in Cloudflare.
+Explicitly assigned task (existing GitHub issue during transition; Linear after accepted readiness, scoped handoff when needed; [task template](../.github/ISSUE_TEMPLATE/agent-task.md)) → branch `codex/<issue>-<slug>` or `claude/<issue>-<slug>` → PR with evidence → `quality` CI → agent self-review and self-merge (docs/CI/maintenance) or fixed-staging UAT by the Owner (runtime/UI) → serialized Production release by the reviewed lane, only with Owner approval. Merge is not deploy; compare `main` with the live Worker deployment in Cloudflare. Native Linear sync must pass an isolated pilot before enabling on the main repository, or use link-only fallback. Do not mirror release approval directives or import historical backlog wholesale; no new CI/CD paths. The roadmap target is modular monolith, selective reuse and vertical slices, with reviewed migrations and prompt safe legacy retirement. Current runtime identity/URL/price/security contracts apply until the relevant replacement is accepted.
 
 ## References — read only as needed
 
