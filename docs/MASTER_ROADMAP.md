@@ -1,15 +1,15 @@
-# Đông Phú Gia — Master Roadmap v1.0
-Owner-approved 2026-11-26 · 120 decisions across seven Grill me rounds. **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Linear will hold live tasks, milestones and progress after cutover. Do not maintain progress in this file.
+# Đông Phú Gia — Master Roadmap v1.1
+Owner-approved 2026-11-26 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Rounds 1–6 unchanged (104 decisions). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
 
 ## Vision and scope
 Build a specialized sanitary-ware commerce website centered on products: discover, evaluate, order/request quotes and track transactions, with lean sustainable information, data, UX and operations. Preserve business continuity, identity and transaction history. Rebuild information architecture and SEO sitemap from first principles, not legacy SEO constraints. Preserve brand identity, selectively reuse V1. No ERP, compulsory customer account, default infrastructure expansion, or automatic stock/shipping promises.
 
-## Roadmap (one DPG team; initiative DPG Product Transformation if supported)
-Each project owns its deliverable. No arbitrary dates. Milestones guide work, not automatic authorization. Create issues just in time. IA and BA inform data and UX; design-system and data work can iterate with UX, then implement vertical slices; measure baseline before material changes. Project 03 technical pilot and Project 06 R0 share evidence, not duplicated implementation; Project 04 framework pilot evaluates components, not a production migration.
+## Roadmap (one Jira project DPG; eight Epics)
+Each roadmap project maps to one Jira Epic and owns its deliverable. No arbitrary dates. Checkpoints guide work, not automatic authorization. Create Jira Tasks/Subtasks just in time. IA and BA inform data and UX; design-system and data work can iterate with UX, then implement vertical slices; measure baseline before material changes. Project 03 technical pilot and Project 06 R0 share evidence, not duplicated implementation; Project 04 framework pilot evaluates components, not a production migration.
 
-| Project | Milestones in intended order | Output |
+| Epic / roadmap project | Checkpoints in intended order | Output |
 | --- | --- | --- |
-| 00 Project Governance & Foundation | Linear Workspace Setup; Master Roadmap & Decision Register; Linear–GitHub Integration; Agent Operating Instructions; Backlog Transition & Execution Readiness | Operating model verified |
+| 00 Project Governance & Foundation | Jira Workspace Setup; Master Roadmap & Decision Register; Jira–GitHub Handoff & Pilot; Agent Operating Instructions; Backlog Transition & Execution Readiness | Operating model verified |
 | 01 Information Architecture | Information Audit; Product Taxonomy; Discovery Architecture; Page Inventory & Sitemap; URL & SEO Architecture; IA Acceptance | Approved IA |
 | 02 Customer Journey & Business Analysis | Customer Journey Mapping; Discovery & Evaluation; Retail Commerce; Negotiated Commerce; Tracking & Staff Operations; Business Rules Acceptance | Approved flows/rules |
 | 03 Product & Data Architecture | Current Data Audit; Product Domain Model; Catalogue Identity & Configuration Normalization; Attribute & Facet Architecture; Logical Data Architecture; Physical Schema & Security; API & Query Contracts; Migration Design & Mapping; Technical Pilot & Acceptance | Tested data/contracts/migration plan |
@@ -139,27 +139,27 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 6.13 RB: Aggressive retirement as soon as verified replacement, no consumers, reconciled preservation, feasible recovery and required destructive approval; no arbitrary wait. Worker rollback != SQL rollback.
 - 6.14 B: Baseline/per-module performance budget; fix material regressions/quota risks, defer nonblocking optimization.
 
-### 7 — Project Governance & Linear (16)
-- 7.1 B: Existing Leo workspace, one DPG team.
-- 7.2 B: One initiative if supported; eight projects; project views fallback without upgrade.
-- 7.3 B: Project/milestone framework, detail issues just in time.
-- 7.4 B: Backlog → Ready → In Progress → In Review → Acceptance → Done; skip irrelevant states; canceled/duplicate terminal; Todo temporary Ready equivalent pending UI setup.
+### 7 — Project Governance & Jira + GitHub (16)
+- 7.1 v1.1: One existing Jira software project DPG; one V1 repository.
+- 7.2 v1.1: Eight Epics (00–07), 55 checkpoints recorded in this contract and Epic descriptions; no artificial dates or plan upgrade.
+- 7.3 v1.1: Create checkpoint Tasks/Subtasks just in time; no bulk future backlog.
+- 7.4 v1.1: Native Jira Backlog → Ready → In Progress → In Review → Acceptance → Done, skipping irrelevant stages; canceled/duplicate terminal with reason. Until configured, To Do covers Backlog/Ready and In Review plus explicit acceptance-pending label distinguishes Owner acceptance; never mark Done before required acceptance.
 - 7.5 B: TL priority by dependencies, business value and risk; deadlines only grounded.
-- 7.6 B: Native blocked-by/blocking; explicit blocker and resolver, Owner Decision when needed.
-- 7.7 B: Minimal labels and useful views, no redundant statuses.
+- 7.6 v1.1: Native Jira Blocks links; explicit blocker and resolver, Owner Decision when needed.
+- 7.7 v1.1: Minimal labels and views: Master Roadmap, Active Work, Owner Decisions, Blocked & Risks. Exclude governance-pilot evidence from active roadmap.
 - 7.8 B: Default Claude infra/data/backend/ops/docs; Codex frontend/design/UI; authorized cross-lane/full-stack as needed.
 - 7.9 B: One active execution task by default; parallel only independent and Owner-approved; no unauthorized agent/session.
 - 7.10 B: TL plans, prioritizes, creates tasks, coordinates, selects agent/reviews within approved roadmap; Owner strategic/business/design/UAT/cost/Production authority.
-- 7.11 RB: Linear-first native bidirectional sync only after safe pilot; GitHub retains engineering/release authority. No historical mass import. Link issue–PR fallback if unsafe or unavailable; no custom synchronization infrastructure.
-- 7.12 B: Link PR/update technical progress when appropriate; do not auto-Done on merge; no automated acceptance.
+- 7.11 v1.1: Jira-first work management; GitHub engineering and release authority. Link-only task/PR or explicit scoped GitHub execution handoff when agent Jira access is unavailable. No bidirectional issue sync, historical mass import, custom sync or new infrastructure.
+- 7.12 v1.1: Link GitHub technical evidence; no auto-Done on merge or automated acceptance. Direct Owner release approval only in existing GitHub release route.
 - 7.13 B: Event-driven short evidence-linked reports, no daily duplication.
 - 7.14 B: Versioned decision register, rationale and Owner-approved strategic changes.
-- 7.15 B: AGENTS.md single policy; PROJECT.md technical handbook; this stable roadmap/decisions; Linear live progress after readiness.
-- 7.16 B: Governance setup, backlog reconciliation, docs and connectivity readiness before kickoff.
+- 7.15 v1.1: AGENTS.md single policy; PROJECT.md technical handbook; this stable roadmap/decisions; Jira live scope/priority/dependencies/progress/acceptance after readiness.
+- 7.16 v1.1: Governance setup, backlog reconciliation, reviewed docs, safe agent handoff and Owner readiness acceptance before kickoff.
 
 ## Acceptance, security and integration boundaries
 Design, schema, exact migration and library decisions remain to be validated; no automatic authority to execute hosted writes. Price and transaction state from verified source, never invented. All previous runtime safety and identity/slug contracts apply until specific approved replacement; historical order snapshots and IDs persist. TEST uses public/synthetic data, never customer PII. Maintain least privilege, rollback/forward recovery and exact candidate evidence. No production mutations authorized here.
 
-Linear will own scope, priorities, dependency and acceptance; GitHub remains authoritative for code, PR/CI, live release evidence and direct Owner approvals. While Project 00 is not accepted, use the existing authorized GitHub task route; no independent duplicated issue. After cutover, every engineering task links its Linear identifier/URL and GitHub PR, or native synchronized counterpart; only direct GitHub release issues/comments count for release gates. Native sync must not replicate valid command-shaped approvals or alter their attribution, open/close state or UAT lock; use fallback if this cannot be enforced. Do not copy real approval directives, sync release issues blindly, auto-close on PR merge, or delete synchronized items. Preserve release runbooks unchanged. Freeze unrelated merges during exact-SHA full release. UAT on locked SHA and Owner GO as existing pipeline requires. #511 hosted isolated SQL pilot passed; multi-batch hosted/function/worker/full Production chain remains unverified until relevant release. No CI/CD changes needed for this roadmap.
+Jira will own scope, priorities, dependencies and acceptance; GitHub remains authoritative for code, PR/CI, live release evidence and direct Owner approvals. While Project 00 is not accepted, retain existing authorized GitHub execution routes; no independent duplicated backlog. After cutover, engineering work links its Jira identifier/URL and GitHub PR; if an agent cannot access Jira, Tech Lead supplies one scoped linked GitHub handoff, not a second work authority. Only direct GitHub release issues/comments count for release gates. No bidirectional issue sync, copied release commands, auto-close on merge, automatic deployment, or custom integration service. Preserve release runbooks unchanged. Freeze unrelated merges during exact-SHA full release. UAT on locked SHA and Owner GO as existing pipeline requires. #511 hosted isolated SQL pilot passed; multi-batch hosted/function/worker/full Production chain remains unverified until relevant release. No CI/CD changes needed for this roadmap.
 
-Readiness: verify actual workspace/team, plan/permissions, status mapping and integration pilot or fallback; reconcile legacy backlog without deleting/closing active release evidence; publish reviewed governance docs; verify agent receives task + contracts and can report evidence through one route; define next IA task. Product development starts only after readiness acceptance.
+Readiness: verify Jira project, permissions, status mapping, plan/cost constraints and link-only handoff; exclude pilot evidence from roadmap views; reconcile legacy backlog without deleting/closing active release evidence; publish reviewed governance docs; verify agent receives task + contracts and reports evidence through one route; define next IA task. Product development starts only after Owner readiness acceptance.
