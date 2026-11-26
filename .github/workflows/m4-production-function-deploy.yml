@@ -1,4 +1,4 @@
-name: M4 admin-api Edge Function (Production only)
+name: 'Production Backend Deploy'
 run-name: >-
   M4 function ${{ inputs.operation }}${{ inputs.plan_id != '' && format(' [release plan={0} step={1} digest={2} env=production op=function]',
   inputs.plan_id, inputs.step_id, inputs.plan_digest) || '' }}

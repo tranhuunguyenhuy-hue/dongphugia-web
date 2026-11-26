@@ -1,4 +1,4 @@
-name: Existing backup source integration
+name: 'Backup Integration Test'
 on:
   pull_request:
     paths:
@@ -6,7 +6,7 @@ on:
       - scripts/backup/supabase-runtime-target.mjs
       - scripts/backup/certificates/**
       - .github/workflows/existing-backup-source-validation.yml
-      - .github/workflows/existing-state-backup.yml
+      - docs/archive/workflows/existing-state-backup.yml
 permissions:
   contents: read
 concurrency:

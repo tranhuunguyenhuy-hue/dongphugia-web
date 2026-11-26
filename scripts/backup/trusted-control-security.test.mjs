@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = process.cwd()
-const workflow = await readFile(resolve(root, '.github/workflows/runtime-backup.yml'), 'utf8')
+const workflow = await readFile(resolve(root, 'docs/archive/workflows/runtime-backup.yml'), 'utf8')
 const backup = await readFile(resolve(root, 'scripts/backup/create-encrypted-backup.sh'), 'utf8')
 const restore = await readFile(resolve(root, 'scripts/backup/rehearse-isolated-restore.sh'), 'utf8')
 const protectedWorkflow = workflow.slice(workflow.indexOf('  backup:'))

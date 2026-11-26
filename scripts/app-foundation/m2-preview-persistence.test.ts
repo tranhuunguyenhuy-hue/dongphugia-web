@@ -12,7 +12,7 @@ describe('fixed staging survives source-driven Production publication', () => {
     expect(staging.assets.run_worker_first).toEqual(['/uudaicuoinam2026', '/uudaicuoinam2026/*'])
   })
   it('fails the existing Production identity gate if a packaged artifact would disable staging', async () => {
-    const release = await readFile('.github/workflows/v1-worker-release.yml', 'utf8')
+    const release = await readFile('docs/archive/workflows/v1-worker-release.yml', 'utf8')
     expect(release).toContain('if(x.preview_urls!==true) process.exit(1)')
     expect(release).toContain('src.preview_urls=false;') // Only the temporary local/remote smoke config.
     expect(release).toContain('wrangler.public-preflight.json')

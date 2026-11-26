@@ -1,4 +1,4 @@
-name: M4 Production backup and restore rehearsal
+name: 'Production Backup'
 
 # Read-only logical backup of the Production Supabase project (dpg_app + dpg_control) BEFORE any M4 change, encrypted with the
 # existing age recipient, plus a checksum-verified restore into a scratch PostgreSQL service container and an exact row-count
@@ -7,7 +7,7 @@ name: M4 Production backup and restore rehearsal
 #
 # Credential (environment `runtime-backup`): secret M4_BACKUP_DATABASE_URL, a read-only login for the Production project with
 # access to every table (a role that bypasses RLS, or the project owner); falls back to SUPABASE_RUNTIME_DATABASE_URL.
-# The old runtime-backup.yml role `dpg_backup` does not exist in Production, so that workflow cannot run against it.
+# The old runtime-backup.yml role `dpg_backup` does not exist in Production, so that workflow cannot run against it (archived #510).
 on:
   schedule:
     - cron: '41 19 * * *' # 02:41 Vietnam time (quiet), daily encrypted backup + isolated restore rehearsal (M5: replaces the retired runtime-backup schedule)

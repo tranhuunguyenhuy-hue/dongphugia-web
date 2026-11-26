@@ -6,7 +6,7 @@ describe('Supabase runtime psql credential boundary', () => {
     const [wrapper, restore, workflow] = await Promise.all([
       readFile('scripts/backup/supabase-runtime-psql.mjs', 'utf8'),
       readFile('scripts/backup/restore-catalogue-runtime.sh', 'utf8'),
-      readFile('.github/workflows/supabase-runtime-rehome.yml', 'utf8'),
+      readFile('docs/archive/workflows/supabase-runtime-rehome.yml', 'utf8'),
     ])
 
     expect(wrapper).toContain("name !== 'SUPABASE_REHOME_DATABASE_URL'")

@@ -6,7 +6,7 @@ describe('homepage CI risk-based scope', () => {
     for (const path of [
       'docs/PROJECT.md', 'AGENTS.md', 'apps/admin/app/page.tsx',
       'scripts/backup/create-encrypted-backup.sh',
-      '.github/workflows/production-promotion.yml',
+      'docs/archive/workflows/production-promotion.yml',
     ]) expect(needsHomepageChecks([path])).toBe(false)
   })
 
@@ -16,7 +16,7 @@ describe('homepage CI risk-based scope', () => {
       'src/components/layout/Footer.tsx', 'src/lib/catalogue.ts',
       'apps/public/app/page.tsx', 'public/banner.webp', 'prisma/schema.prisma',
       'playwright.homepage.config.ts', 'lighthouserc.toilet-listing.cjs',
-      '.github/workflows/homepage-quality.yml', 'scripts/quality/homepage-scope.mjs',
+      'docs/archive/workflows/homepage-quality.yml', 'scripts/quality/homepage-scope.mjs',
     ]) expect(needsHomepageChecks([path])).toBe(true)
   })
 

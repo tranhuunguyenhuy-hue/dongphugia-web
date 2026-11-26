@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/production-promotion.yml'), 'utf8')
+const workflow = readFileSync(resolve(process.cwd(), 'docs/archive/workflows/production-promotion.yml'), 'utf8')
 const workflowsDirectory = resolve(process.cwd(), '.github/workflows')
 const workflowFiles = readdirSync(workflowsDirectory)
   .filter((file) => /\.(?:yml|yaml)$/.test(file))
@@ -52,7 +52,7 @@ function hasClosedPullRequestTrigger(source: string) {
 
 function reachesProductionPromotion(source: string) {
   return (
-    source.includes('./.github/workflows/production-promotion.yml') ||
+    source.includes('./docs/archive/workflows/production-promotion.yml') ||
     source.includes('cloudflare/wrangler-action@') ||
     /\b(?:wrangler|pages)\s+deploy\b/.test(source)
   )
@@ -110,7 +110,7 @@ env:
   PRODUCTION_PROMOTION_ENABLED: true
 jobs:
   promote:
-    uses: ./.github/workflows/production-promotion.yml
+    uses: ./docs/archive/workflows/production-promotion.yml
     with:
       preview_artifact_name: dongphugia-preview-deadbeef
 `

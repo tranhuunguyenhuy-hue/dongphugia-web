@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
-const workflowPath = '.github/workflows/supabase-runtime-rehome.yml'
+const workflowPath = 'docs/archive/workflows/supabase-runtime-rehome.yml'
 const restorePath = 'scripts/backup/restore-catalogue-runtime.sh'
 const stagingPath = 'scripts/backup/c-actions-container-staging.sh'
 const preflightPath = 'scripts/backup/catalogue-rehome-preflight.sql'

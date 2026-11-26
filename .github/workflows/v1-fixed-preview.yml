@@ -1,4 +1,4 @@
-name: M2 fixed Preview
+name: 'Staging Release'
 run-name: >-
   M2 fixed Preview${{ inputs.operation == 'publish-m3' && inputs.plan_id != '' && format(' [release plan={0} step=* digest={1} env=test op=worker]', inputs.plan_id, inputs.plan_digest) || '' }}
 # #505: a SUCCESSFUL `quality` push on main auto-publishes the combined M3 candidate to fixed Staging unless an Owner UAT lock is held

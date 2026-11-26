@@ -226,7 +226,7 @@ it('bounds every GitHub API response before JSON parsing', async () => {
 })
 
 it('workflow is manual-only, pinned, read-scoped, Environment-bound and secret-scoped to the audit step', async () => {
-  const workflow = await readFile(new URL('../../.github/workflows/catalogue-checkpoint-vault-audit.yml', import.meta.url), 'utf8')
+  const workflow = await readFile(new URL('../../docs/archive/workflows/catalogue-checkpoint-vault-audit.yml', import.meta.url), 'utf8')
   assert.match(workflow, /^on:\n  workflow_dispatch:\s*$/m)
   assert.doesNotMatch(workflow, /^\s*(?:push|pull_request|pull_request_target|schedule|workflow_run):/m)
   assert.match(workflow, /permissions:\n  contents: read/)

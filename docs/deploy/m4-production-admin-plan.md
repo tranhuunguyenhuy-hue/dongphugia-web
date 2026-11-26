@@ -36,7 +36,7 @@ The staging combined Worker is intentionally staging-only. For Production the re
    depend on it. Plan: a small Worker handler `POST /admin-next/api/upload` that validates the session by a signed call to the
    function (`/me`), then runs the unchanged media processing (Images binding) and Bunny upload against the Production media
    zone with a Production-only key. Until then there is no safe upload in Production.
-4. **Release workflow**: adapt `.github/workflows/v1-worker-release.yml` (currently Public-only, `publish=false` verifies, `true`
+4. **Release workflow** _(historical plan; implemented as `.github/workflows/m4-production-admin-release.yml`, Production Release; the Public-only lane below is archived #510)_: adapt `.github/workflows/v1-worker-release.yml` (currently Public-only, `publish=false` verifies, `true`
    deploys) to build the combined Production artifact once and add the new Admin checks to its smoke (`/admin-next/` shell,
    unauthenticated `GET /admin-next/api/me` = 401, `/admin/*` redirects, master-data routes = 403, Public unchanged).
 5. **Function deploy for Production**: a Production counterpart of `m3-admin-api-deploy.yml` (project `bonxyxluzlxfkdetryoo`,
@@ -44,7 +44,7 @@ The staging combined Worker is intentionally staging-only. For Production the re
 
 ## 4. Order of operations (each step verified before the next)
 0. Preconditions: M3 PASS recorded; Owner confirms the M2 recovery artifact and the prerequisites in section 5.
-1. Backup: dispatch `runtime-backup.yml`; verify checksums and a restore into a scratch database; record the artifact ids.
+1. Backup _(historical; current lane: `m4-production-backup.yml`, `runtime-backup.yml` archived #510)_: dispatch `runtime-backup.yml`; verify checksums and a restore into a scratch database; record the artifact ids.
 2. Owner sets `dpg_control.target_contract.production_writes_allowed = true` (nothing else in the contract).
 3. Apply `001`, verify, apply `002`, verify (read-only checks: grants, row counts unchanged, `products.version` backfilled).
 4. Deploy the Production function; unsigned `GET /me` must answer 401 `INVALID_SIGNATURE`.

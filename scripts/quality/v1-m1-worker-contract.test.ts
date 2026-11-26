@@ -20,7 +20,7 @@ describe('M1 read-only source contract', () => {
     expect(src).toContain('await closeClient()')
   })
   it('proves the restricted Hyperdrive login before publishing and verifies a mode-matched rollback target',()=>{
-    const workflow=readFileSync('.github/workflows/v1-worker-release.yml','utf8')
+    const workflow=readFileSync('docs/archive/workflows/v1-worker-release.yml','utf8')
     const databaseProbe=readFileSync('scripts/app-foundation/public-db-preflight-worker.mjs','utf8')
     const publicSmoke=readFileSync('scripts/app-foundation/public-postgres-release-smoke.mjs','utf8')
     const rollback=readFileSync('scripts/app-foundation/verify-public-rollback-candidate.mjs','utf8')
@@ -53,7 +53,7 @@ describe('M1 read-only source contract', () => {
     expect(rollback).toContain("fail('POSTGRES_BINDING_INVALID')")
   })
   it('collects sanitized preflight diagnostics without weakening the packaged PostgreSQL gate',()=>{
-    const workflow=readFileSync('.github/workflows/v1-worker-release.yml','utf8')
+    const workflow=readFileSync('docs/archive/workflows/v1-worker-release.yml','utf8')
     const diagnostics=readFileSync('scripts/app-foundation/v1-worker-preflight-diagnostics.mjs','utf8')
     const publicSmoke=readFileSync('scripts/app-foundation/public-postgres-release-smoke.mjs','utf8')
     expect(workflow).toContain("--noproxy '*' --connect-timeout 1 --max-time 2")

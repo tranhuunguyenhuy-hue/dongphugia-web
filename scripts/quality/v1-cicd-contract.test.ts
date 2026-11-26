@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 const file=(p: string)=>readFileSync(resolve(process.cwd(),p),'utf8')
 describe('V1 fast deployment is the only active release path',()=>{
   it('uses real Public Worker build and exact Worker deployment identity',()=>{
-    const s=file('.github/workflows/v1-worker-release.yml')
+    const s=file('docs/archive/workflows/v1-worker-release.yml')
     expect(s).toContain('workflow_dispatch:')
     expect(s).toContain('default: false')
     expect(s).toContain('refs/heads/main')
@@ -25,7 +25,7 @@ describe('V1 fast deployment is the only active release path',()=>{
     expect(q).toContain('run_app_checks')
     expect(q).toContain('if: needs.scope.outputs.run_app_checks')
     for(const p of [
-      '.github/workflows/homepage-quality.yml'
+      'docs/archive/workflows/homepage-quality.yml'
     ]){
       const s=file(p)
       expect(s).toContain('workflow_dispatch:')

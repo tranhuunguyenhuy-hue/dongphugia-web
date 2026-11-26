@@ -49,18 +49,23 @@ describe('repository identity (renamed to dongphugia-web, #426)', () => {
 })
 
 describe('workflow repository guards', () => {
-  const dir = join(process.cwd(), '.github/workflows')
-  const files = readdirSync(dir).filter((name) => name.endsWith('.yml'))
+  // #510: active workflows live in .github/workflows; archived ones (docs/archive/workflows) are still scanned for retired names.
+  const dirs = ['.github/workflows', 'docs/archive/workflows'].map((d) => join(process.cwd(), d))
+  const files = dirs.flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith('.yml')).map((name) => ({ dir, name })))
 
   it('pin only the current name; no retired name, list or wildcard', () => {
     let guarded = 0
-    for (const name of files) {
+    for (const { dir, name } of files) {
       const text = readFileSync(join(dir, name), 'utf8')
       expect(text, name).not.toContain(RETIRED)
       expect(text, name).not.toMatch(/fromJSON\('\["tranhuunguyenhuy-hue/)
       expect(text, name).not.toMatch(/startsWith\(github\.repository/)
-      if (text.includes(`github.repository == '${CURRENT}'`)) guarded += 1
+      const privileged = /secrets\.(?!GITHUB_TOKEN\b)[A-Z0-9_]+/.test(text) || /^\s+environment:/m.test(text)
+      const pinned = text.includes(`github.repository == '${CURRENT}'`)
+      // Every workflow that can reach a secret or a protected environment pins the exact repository (no count to drift).
+      if (privileged && dir.endsWith('.github/workflows')) expect(pinned, `${name} reaches secrets/environments without the repository pin`).toBe(true)
+      if (pinned && dir.endsWith('.github/workflows')) guarded += 1
     }
-    expect(guarded).toBeGreaterThanOrEqual(13)
+    expect(guarded).toBeGreaterThanOrEqual(7)
   })
 })

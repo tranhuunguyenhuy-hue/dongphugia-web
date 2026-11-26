@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('Supabase backup capability bootstrap workflow', () => {
   it('is manually dispatched from exact main and bound to the durable Owner scope', async () => {
-    const workflow = await readFile('.github/workflows/supabase-backup-role-bootstrap.yml', 'utf8')
+    const workflow = await readFile('docs/archive/workflows/supabase-backup-role-bootstrap.yml', 'utf8')
 
     expect(workflow).toContain('workflow_dispatch:')
     expect(workflow).toContain('approved_source_sha:')

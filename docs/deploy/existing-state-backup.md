@@ -1,5 +1,7 @@
 # Recovered database backup candidate — verify before M4
 
+> **Archived (#510, 26/11/2026):** `existing-state-backup.yml` now lives in `docs/archive/workflows/`. Its `scripts/backup/existing-state/*` code stays active (used by `m4-production-backup.yml`, tested by `existing-backup-source-validation.yml`). Restore steps: [archive README](../archive/workflows/README.md).
+
 This is a technical source reference for the current recovered database, not standing authorization to execute historical Issue #270. The 2026-11-05 inventory is a dated baseline, not current live state. Resolve any drift with exact-target read-only evidence; do not force the old baseline, reset or broaden grants.
 
 Source candidate for Issue #270. The PM approved this replacement plan in chat

@@ -1,5 +1,7 @@
 # LEO-540 runtime backup and recovery
 
+> **Archived (#510, 26/11/2026):** `runtime-backup.yml` now lives in `docs/archive/workflows/` and cannot run. Current Production backup + restore rehearsal: `.github/workflows/m4-production-backup.yml` ([runbook](../ops/m5-backup-recovery-runbook.md)). Kept for history/recovery: see [archive README](../archive/workflows/README.md).
+
 Source contract for encrypted protection of the recovered database. The exact ref below is now Production. Revalidate actual workflow enablement, protected credentials, current capacity, target and M4 approval. This does not authorize a write, new credential, key store, paid backup/PITR or deletion.
 
 ## Design

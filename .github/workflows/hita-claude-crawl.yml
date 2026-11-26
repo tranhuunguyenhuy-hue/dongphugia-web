@@ -1,4 +1,4 @@
-name: Hita crawl (Claude, #464)
+name: 'Hita Price Crawler'
 
 # Manual, read-only crawl of PUBLIC Hita product pages by EXACT SKU (3 price fields) into a downloadable artifact.
 # No secrets, no database access, no deployment. The crawler stops by itself on 401/403/429/503 or a Cloudflare challenge

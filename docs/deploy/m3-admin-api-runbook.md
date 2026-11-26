@@ -83,7 +83,7 @@ The complete, current M4 plan (verified facts, code still to write, order, rollb
 Preconditions that only the Owner can satisfy (none are done):
 1. **Contract**: Production `dpg_control.target_contract.production_writes_allowed` is `false` today (read-only check). The M4
    migration refuses to run until the Owner sets it to `true` (`M4_TARGET_GUARD_FAILED:production_writes_not_authorised`).
-2. **Backup** verified (existing `runtime-backup.yml` workflow) immediately before the migration.
+2. **Backup** verified (historically `runtime-backup.yml`, archived #510; Production now uses `m4-production-backup.yml`) immediately before the migration.
 3. **Schema drift fixed by the migration** (verified read-only against Production): `products.version` is missing on Production
    (present on TEST) → `001` adds it additively; Production `audit_logs` has no `request_id/changed_fields` → the API writes the
    base columns and keeps that metadata in `new_value._meta`. Every other column the Admin queries use exists on Production.

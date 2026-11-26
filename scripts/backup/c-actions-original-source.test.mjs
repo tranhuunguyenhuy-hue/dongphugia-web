@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 
 const workflowPaths = [
-  '.github/workflows/c-actions-original-authentic-recovery-go-6442512635.yml',
+  'docs/archive/workflows/c-actions-original-authentic-recovery-go-6442512635.yml',
 ]
 
 describe('one-time original authentic recovery', () => {

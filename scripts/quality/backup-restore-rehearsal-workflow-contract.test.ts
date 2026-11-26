@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const workflow = readFileSync(
-    resolve(process.cwd(), '.github/workflows/runtime-backup.yml'),
+    resolve(process.cwd(), 'docs/archive/workflows/runtime-backup.yml'),
     'utf8',
 )
 const restoreScript = readFileSync(
@@ -21,7 +21,7 @@ const catalogueRestore = readFileSync(
 )
 const qualityWorkflow = readFileSync(resolve(process.cwd(), '.github/workflows/quality.yml'), 'utf8')
 const rehomeWorkflow = readFileSync(
-    resolve(process.cwd(), '.github/workflows/supabase-runtime-rehome.yml'),
+    resolve(process.cwd(), 'docs/archive/workflows/supabase-runtime-rehome.yml'),
     'utf8',
 )
 const approvedPostgresImage =

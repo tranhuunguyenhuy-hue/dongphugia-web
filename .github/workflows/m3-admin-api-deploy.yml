@@ -1,4 +1,4 @@
-name: M3 admin-api Edge Function (TEST only)
+name: 'TEST Database & Backend'
 run-name: >-
   M3 TEST ${{ inputs.operation || 'deploy' }}${{ inputs.plan_id != '' && format(' [release plan={0} step={1} digest={2} env=test op={3}]',
   inputs.plan_id, inputs.operation == 'release-check' && '*' || inputs.step_id, inputs.plan_digest,

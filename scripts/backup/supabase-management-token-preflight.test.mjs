@@ -4,7 +4,7 @@ import { validateSupabaseManagementResponses } from './supabase-management-respo
 
 describe('Supabase Management token preflight workflow', () => {
   it('is owner-only, exact-main, and uses the protected read-only environment', async () => {
-    const workflow = await readFile('.github/workflows/supabase-management-token-preflight.yml', 'utf8')
+    const workflow = await readFile('docs/archive/workflows/supabase-management-token-preflight.yml', 'utf8')
 
     expect(workflow).toContain('workflow_dispatch:')
     expect(workflow).toContain("github.repository == 'tranhuunguyenhuy-hue/dongphugia-web'")
@@ -18,7 +18,7 @@ describe('Supabase Management token preflight workflow', () => {
   })
 
   it('tests only read-only organization and exact-project endpoints without database access', async () => {
-    const workflow = await readFile('.github/workflows/supabase-management-token-preflight.yml', 'utf8')
+    const workflow = await readFile('docs/archive/workflows/supabase-management-token-preflight.yml', 'utf8')
     const validator = await readFile('scripts/backup/supabase-management-response.mjs', 'utf8')
 
     expect(workflow).toContain('secrets.SUPABASE_MANAGEMENT_TOKEN')
