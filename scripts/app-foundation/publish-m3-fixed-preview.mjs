@@ -9,6 +9,7 @@ import { probeAdminShell } from './m3-admin-shell-probe.mjs'
 import { expectedHyperdriveBindings, validateM3FixedPreviewConfig } from './m3-fixed-preview-config.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
 import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
+import { assertNoProductionWorkerRelease } from './production-release-busy.mjs'
 
 // M3 publisher: ONE combined Public+Admin Worker artifact into the named Preview `staging` of the
 // existing Production Worker. Main-only, exact SHA, owner actor. Never deploys or alters Production.
@@ -51,9 +52,8 @@ async function gh(path) {
   return response.json()
 }
 async function assertNoProductionRelease() {
-  const runs = await gh('actions/workflows/v1-worker-release.yml/runs?per_page=20')
-  const busy = runs.workflow_runs.filter(r => r.status !== 'completed')
-  if (busy.length) { evidence.productionBusyRuns = busy.map(({id,status,head_sha}) => ({id,status,sourceSha:head_sha})); throw new Error('M3_PRODUCTION_RELEASE_BUSY') }
+  // #510: current Production Worker writer (+ any unfinished run of the archived Public-only lane); read errors fail closed.
+  await assertNoProductionWorkerRelease(gh, 'M3', evidence)
 }
 async function health() {
   const origins = ['https://www.dongphugia.vn', 'https://dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev']

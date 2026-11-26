@@ -8,7 +8,7 @@ Actions UI keeps listing these workflows (history) because their runs still exis
 ## Why each is archived
 | File | Reason | Still-needed pieces (kept outside this folder) |
 |---|---|---|
-| `v1-worker-release.yml` | Public-only Worker lane; refused to publish while Production carries the Admin; runbook forbids it | Rollback = `wrangler rollback <rollback_version_id>` recorded by `m4-production-admin-release.yml` ([v1-fast-release](../../ops/v1-fast-release.md)). `publish-m2/m3-fixed-preview.mjs` still query its runs by file name as a "Production busy" guard (API resolves archived names; returns history only) |
+| `v1-worker-release.yml` | Public-only Worker lane; refused to publish while Production carries the Admin; runbook forbids it | Rollback = `wrangler rollback <rollback_version_id>` recorded by `m4-production-admin-release.yml` ([v1-fast-release](../../ops/v1-fast-release.md)). The Staging "Production busy" guard (`scripts/app-foundation/production-release-busy.mjs`) no longer looks it up by file name: it lists the repository's unfinished runs and still reports any unfinished run of this path |
 | `production-promotion.yml` | 0 runs; `workflow_call` with no caller | — |
 | `runtime-backup.yml` | Schedule retired; its role `dpg_backup` does not exist in Production; replaced by `m4-production-backup.yml` | `scripts/backup/*` |
 | `existing-state-backup.yml` | Phase-2 backup capability bootstrap/rehearsal (05/11) | `scripts/backup/existing-state/*` (used by `m4-production-backup.yml`, tested by `existing-backup-source-validation.yml`) |

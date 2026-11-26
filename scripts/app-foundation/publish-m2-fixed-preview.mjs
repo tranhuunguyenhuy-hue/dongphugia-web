@@ -7,6 +7,7 @@ import { sanitizeM2CloudflareApiFailure, sanitizeM2CommandFailure } from './m2-p
 import { digestDirectory } from './public-worker-artifact.mjs'
 import { FIXED_PREVIEW_NAME, FIXED_PREVIEW_WORKER, FIXED_PREVIEW_ORIGIN, isFixedPreviewDeploymentHost } from '../../apps/public/src/config/fixed-preview.mjs'
 import { isAllowedRepository, isAllowedWorkflowRef, currentRepository } from '../lib/repository-identity.mjs'
+import { assertNoProductionWorkerRelease } from './production-release-busy.mjs'
 
 const ACCOUNT = 'd54f3402b9d112ab64d6135e0e3f1fb1'
 const WORKER_ID = 'e50647603f1b4e73bed14e2e79c15d26'
@@ -66,9 +67,8 @@ async function gh(path) {
   return response.json()
 }
 async function assertNoProductionRelease() {
-  const runs = await gh('actions/workflows/v1-worker-release.yml/runs?per_page=20')
-  const busy = runs.workflow_runs.filter(r => r.status !== 'completed')
-  if (busy.length) { evidence.productionBusyRuns = busy.map(({id,status,head_sha}) => ({id,status,sourceSha:head_sha})); throw new Error('M2_PRODUCTION_RELEASE_BUSY') }
+  // #510: current Production Worker writer (+ any unfinished run of the archived Public-only lane); read errors fail closed.
+  await assertNoProductionWorkerRelease(gh, 'M2', evidence)
 }
 async function health() {
   const origins = ['https://www.dongphugia.vn', 'https://dongphugia-v1-public-production.tranhuunguyenhuy.workers.dev']
