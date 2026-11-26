@@ -125,6 +125,7 @@ export function validatePlanShape(plan) {
       const post = ancestors(plan, s.id).includes(workers[0].id)
       if (!pre && !post) fail('PLAN_STEP_NOT_ORDERED_AROUND_WORKER', s.id)
       if (s.destructive && !post) fail('PLAN_DESTRUCTIVE_MUST_FOLLOW_WORKER', s.id)
+      if (s.type === 'function' && !pre) fail('PLAN_FUNCTION_MUST_PRECEDE_WORKER', s.id) // the backend is deployed before the Worker that calls it
     }
   } else if (plan.steps.some((s) => s.destructive)) {
     fail('PLAN_DESTRUCTIVE_REQUIRES_WORKER_STEP', 'unsupported without a Worker step; write an explicit maintenance plan')

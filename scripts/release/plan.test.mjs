@@ -318,6 +318,7 @@ describe('#511 TL review fixes: DAG ordering, Worker binding, stale TEST writes,
     ['disconnected SQL step', (p) => { p.steps.push({ ...p.steps[0], id: 'extra', depends_on: [], sql: '001-expand.sql' }) }, 'PLAN_STEP_NOT_ORDERED_AROUND_WORKER'],
     ['independent destructive step', (p) => { p.steps[4].depends_on = []; p.steps[4].destructive = true }, 'PLAN_STEP_NOT_ORDERED_AROUND_WORKER'],
     ['destructive step that is a Worker ancestor', (p) => { p.steps[0].destructive = true }, 'PLAN_CONTRACT_BEFORE_WORKER'],
+    ['function step after the Worker', (p) => { p.steps[3].depends_on = ['backfill']; p.steps[2].depends_on = ['worker']; p.steps[4].depends_on = ['function'] }, 'PLAN_FUNCTION_MUST_PRECEDE_WORKER'],
     ['destructive step without a Worker step', (p) => { p.steps = p.steps.filter((s) => s.type !== 'worker'); p.steps[3] = { ...p.steps[3], depends_on: ['backfill'] } }, 'PLAN_DESTRUCTIVE_REQUIRES_WORKER_STEP'],
   ])('refuses a plan with a %s', (_n, mutate, code) => expect(() => validatePlanShape(planWith(mutate))).toThrow(code))
   it('keeps the legitimate expand → backfill → function → worker → contract', () => expect(() => validatePlanShape(planWith(() => undefined))).not.toThrow())
