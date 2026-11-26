@@ -84,6 +84,7 @@ export async function executeStep({ root, environment, planId, stepId, expectedD
   if (!['check', 'apply', 'rollback'].includes(mode)) fail('PLAN_MODE_INVALID', mode)
   const target = targetFor(environment, root)
   const loaded = loadPlan(root, planId)
+  if (environment === 'production' && loaded.plan.test_only) fail('PLAN_TEST_ONLY_NOT_FOR_PRODUCTION')
   if (loaded.digest !== expectedDigest) fail('PLAN_DIGEST_MISMATCH', loaded.short)
   const step = loaded.plan.steps.find((s) => s.id === stepId)
   if (!step) fail('PLAN_STEP_UNKNOWN', stepId)
@@ -188,6 +189,7 @@ export async function executeStep({ root, environment, planId, stepId, expectedD
  *  `pending-dependency` (its precheck would describe a future state); any `drift` fails the whole check. */
 export async function checkPlan(args) {
   const loaded = loadPlan(args.root, args.planId)
+  if (args.environment === 'production' && loaded.plan.test_only) fail('PLAN_TEST_ONLY_NOT_FOR_PRODUCTION')
   const results = []
   for (const step of loaded.plan.steps.filter((s) => ['sql', 'backfill'].includes(s.type))) {
     const pending = ancestors(loaded.plan, step.id).filter((id) => ['sql', 'backfill'].includes(loaded.plan.steps.find((s) => s.id === id).type))

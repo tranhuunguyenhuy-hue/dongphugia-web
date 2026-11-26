@@ -32,3 +32,15 @@ Pilot example: [`scripts/release/fixtures/repo/release/plans/pilot-expand-backfi
 and checks; re-running an applied step is a no-op; a changed step after apply is a ledger conflict). `main` must stay at the
 candidate SHA for the whole release (a newer merge = new candidate, new GO). Worker rollback ≠ SQL rollback; restoring data from a
 backup is never automatic (isolated rehearsal only).
+
+## Safety rules added at acceptance (#511)
+- **TEST writers vs UAT**: any TEST SQL/function write is refused while a Staging UAT lock is held — the holder issue and same SHA
+  included (`TEST_WRITE_REFUSED_UAT_LOCK_HELD`). Read-only `release-check` always runs. Release the label after the verdict, then write.
+- **SQL rollback vs runtime**: a step with a Function/Worker descendant that is applied or unknown cannot be rolled back
+  (`ROLLBACK_RUNTIME_DEPENDENT`): fix forward, or first remove that dependent. Rollback also needs `ROLLBACK-GO` in Production.
+- **TEST-only plans** (`test-` id + `"test_only": true`) can run only on TEST: Production lanes and GO refuse them, and their path
+  is not Production release scope. [`test-readonly-probe`](test-readonly-probe/plan.json) is the pilot: run
+  `m3-admin-api-deploy.yml` `operation=release-check` with `plan_id=test-readonly-probe`, `step_id=probe` and its digest
+  (`node scripts/release/plan.mjs digest test-readonly-probe`). `release-check` is read-only; applying it would only create one empty
+  table `dpg_release.pilot_probe` in TEST.
+- `lock-uat` for a full-scope candidate needs `plan_id` + `plan_digest` and the TEST chain including the Worker step.

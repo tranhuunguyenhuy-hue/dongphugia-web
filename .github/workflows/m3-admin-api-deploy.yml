@@ -86,7 +86,7 @@ jobs:
           UAT_ISSUE: ${{ inputs.uat_issue }}
         run: |
           set -euo pipefail
-          if [ -n "$PLAN_ID" ]; then node scripts/release/plan-evidence.mjs gate; else MODE=manual node scripts/release/staging-lock.mjs recheck; fi
+          if [ -n "$PLAN_ID" ]; then node scripts/release/plan-evidence.mjs gate; else TEST_WRITER=true MODE=manual node scripts/release/staging-lock.mjs recheck; fi
       - name: Guard target and secrets
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_TEST_ACCESS_TOKEN }}

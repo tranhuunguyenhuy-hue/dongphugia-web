@@ -4,8 +4,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { evaluateGo } from './go-evidence.mjs'
-import { dependencyGaps, parseTag, preflightOk, stepStates } from './plan-evidence.mjs'
+import { dependencyGaps, evaluateTestGate, parseTag, preflightOk, rollbackBlockers, stepStates } from './plan-evidence.mjs'
 import { ancestors, coverageGaps, lintSql, loadPlan, validatePlanShape } from './plan.mjs'
+import { fullCategory } from './risk-lane.mjs'
 
 const FIXTURE = 'scripts/release/fixtures/repo'
 const ID = 'pilot-expand-backfill'
@@ -257,5 +258,50 @@ describe('#511 lane wiring (static)', () => {
     expect(fn.indexOf('Require the GO comment for this exact plan function step')).toBeLessThan(fn.indexOf('- name: Deploy function and set its secrets'))
     expect(st).toContain('STAGING_WRITER: worker')
     expect((st.match(/PLAN_DIGEST: \$\{\{ inputs\.plan_digest \}\}/g) ?? []).length).toBe(3)
+  })
+})
+
+describe('#511 TEST writer under the UAT lock, and SQL rollback vs running runtime', () => {
+  const applied = (...ids) => new Map(L.plan.steps.map((s) => [s.id, { state: ids.includes(s.id) ? 'applied' : 'none' }]))
+  const gate = (op, step, testStates, lock) => evaluateTestGate({ loaded: L, expectedDigest: L.digest, stepId: step, op, testStates, lock })
+  const held = { state: 'held', holder: 711, allowed: true, reason: 'LOCK_HELD_BY_REQUESTER_SAME_SHA' }
+  const free = { state: 'free', allowed: true, reason: 'LOCK_FREE' }
+
+  it('refuses a TEST write under a held lock even for the holder issue and same SHA; read-only check and a free lock pass', () => {
+    expect(gate('apply', 'expand', applied(), held).join()).toMatch(/TEST_WRITE_REFUSED_UAT_LOCK_HELD issue=#711/)
+    expect(gate('apply', 'expand', applied(), free)).toEqual([])
+    expect(gate('check', '*', applied(), held)).toEqual([])
+    expect(gate('apply', 'expand', applied(), { state: 'unknown', allowed: false, reason: 'LOCK_STATE_UNKNOWN' })).toEqual(['LOCK_STATE_UNKNOWN'])
+  })
+
+  it('blocks an SQL rollback while a dependent Function/Worker is applied or unknown (forward-fix), allows it when none is', () => {
+    const workerStep = L.plan.steps.find((s) => s.type === 'worker')
+    const dependsOnExpand = L.plan.steps.filter((s) => ['function', 'worker'].includes(s.type) && ancestors(L.plan, s.id).includes('expand')).map((s) => s.id)
+    expect(dependsOnExpand.length).toBeGreaterThan(0)
+    expect(rollbackBlockers(L, 'expand', applied())).toEqual([])
+    expect(rollbackBlockers(L, 'expand', applied(workerStep.id)).join()).toMatch(/ROLLBACK_RUNTIME_DEPENDENT:/)
+    const unknown = new Map([[workerStep.id, { state: 'unknown' }]])
+    expect(rollbackBlockers(L, 'expand', unknown).join()).toMatch(/=unknown/)
+    expect(gate('rollback', 'expand', applied(workerStep.id), free).join()).toMatch(/ROLLBACK_RUNTIME_DEPENDENT/)
+  })
+})
+
+describe('#511 TEST-only pilot plan (the safe hosted read-only release-check on TEST)', () => {
+  const real = loadPlan('.', 'test-readonly-probe')
+  it('is valid, marked test_only, and its path is not Production full scope', () => {
+    expect(real.plan.test_only).toBe(true)
+    expect(real.plan.steps.map((s) => s.id)).toEqual(['probe'])
+    expect(fullCategory('release/plans/test-readonly-probe/plan.json')).toBeNull()
+    expect(fullCategory('release/plans/some-real-plan/plan.json')).toBe('sql')
+  })
+  it('requires the test- id and the mark to agree', () => {
+    expect(() => loadPlan(copy((p) => { delete p.test_only }), ID)).not.toThrow() // real plan without mark stays valid
+    expect(() => loadPlan(copy((p) => { p.test_only = true }), ID)).toThrow('PLAN_TEST_ONLY_MARK_MISMATCH')
+  })
+  it('is refused as a Production GO plan', () => {
+    const r = evaluateGo({ url: 'https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/1#issuecomment-1', comment: { id: 1, html_url: 'https://github.com/tranhuunguyenhuy-hue/dongphugia-web/issues/1#issuecomment-1', issue_url: 'https://api.github.com/repos/tranhuunguyenhuy-hue/dongphugia-web/issues/1', body: `GO-PROD ${'c'.repeat(40)}\nPLAN ${real.plan.id} ${real.digest}\nPREFLIGHT-RUN 1\nLANE full`, created_at: '2026-12-02T08:00:00Z', updated_at: '2026-12-02T08:00:00Z', author_association: 'OWNER', user: { login: 'tranhuunguyenhuy-hue' } },
+      issue: { number: 1, state: 'open' }, issueComments: [], m4Runs: [], stagingRuns: [], qualityRuns: [], candidateSha: 'c'.repeat(40), lane: 'full', fullTouch: { sql: 'c'.repeat(40) },
+      plan: { loaded: real, categories: { sql: [] }, sqlRuns: { production: [] }, testStates: new Map(), prodStates: new Map() } })
+    expect(r.reasons).toContain('PLAN_TEST_ONLY_NOT_FOR_PRODUCTION')
   })
 })

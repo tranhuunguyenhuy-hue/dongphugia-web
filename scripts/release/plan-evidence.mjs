@@ -92,6 +92,14 @@ export function dependencyGaps(loaded, environment, target, { testStates, prodSt
   return gaps
 }
 
+/** #511: an SQL rollback must not pull the schema from under a Function/Worker that is running or whose state is unknown. A step with
+ *  a runtime descendant that is anything but `none` is forward-fix only (or the owner first removes the runtime dependent). */
+export function rollbackBlockers(loaded, stepId, states) {
+  const plan = loaded.plan
+  return plan.steps.filter((s) => ['function', 'worker'].includes(s.type) && ancestors(plan, s.id).includes(stepId))
+    .filter((s) => (states?.get(s.id)?.state ?? 'none') !== 'none').map((s) => `ROLLBACK_RUNTIME_DEPENDENT:${s.id}=${states?.get(s.id)?.state ?? 'unknown'} (forward-fix instead)`)
+}
+
 const OP_TYPES = { apply: ['sql', 'backfill'], rollback: ['sql', 'backfill'], function: ['function'], worker: ['worker'], check: null }
 
 /** Pure TEST-writer gate: plan identity, op/type match, TEST dependencies and the shared Staging/TEST UAT lock. */
@@ -103,7 +111,10 @@ export function evaluateTestGate({ loaded, expectedDigest, stepId, op, testState
   if (!step) return [`PLAN_STEP_UNKNOWN:${stepId}`]
   if (!OP_TYPES[op]?.includes(step.type)) return [`PLAN_OP_DOES_NOT_MATCH_STEP:${op}/${step.type}`]
   if (op !== 'rollback') reasons.push(...dependencyGaps(loaded, 'test', step.id, { testStates }))
+  else reasons.push(...rollbackBlockers(loaded, step.id, testStates))
   if (!lock?.allowed) reasons.push(lock?.reason ?? 'LOCK_STATE_UNKNOWN') // shared TEST schema/function/Staging: never during another UAT
+  // The UAT holder itself must not change the TEST schema/function the Owner is accepting, even for the same issue and SHA.
+  else if (lock.state === 'held') reasons.push(`TEST_WRITE_REFUSED_UAT_LOCK_HELD issue=#${lock.holder} (release the label after the verdict, then write)`)
   return reasons
 }
 

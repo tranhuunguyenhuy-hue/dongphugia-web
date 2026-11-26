@@ -77,9 +77,11 @@ export function ancestors(plan, stepId) {
 
 /** Strict structural validation of a parsed plan (no file access). */
 export function validatePlanShape(plan) {
-  exactKeys(plan, { required: ['schema', 'id', 'issue', 'title', 'compatibility', 'steps'], optional: ['covers', 'note'] }, 'plan')
+  exactKeys(plan, { required: ['schema', 'id', 'issue', 'title', 'compatibility', 'steps'], optional: ['covers', 'note', 'test_only'] }, 'plan')
   if (plan.schema !== 1) fail('PLAN_SCHEMA_UNSUPPORTED')
   if (!ID.test(plan.id)) fail('PLAN_ID_INVALID')
+  // `test-` plans exist to exercise the lanes on the TEST project: marked, never runnable on Production, never Production release scope.
+  if (plan.id.startsWith('test-') !== (plan.test_only === true) || ('test_only' in plan && plan.test_only !== true)) fail('PLAN_TEST_ONLY_MARK_MISMATCH')
   if (!Number.isInteger(plan.issue) || plan.issue < 1) fail('PLAN_ISSUE_INVALID')
   if (typeof plan.title !== 'string' || !plan.title.trim()) fail('PLAN_TITLE_INVALID')
   exactKeys(plan.compatibility, { required: ['old_worker_with_new_schema', 'new_worker_with_old_schema'] }, 'compatibility')

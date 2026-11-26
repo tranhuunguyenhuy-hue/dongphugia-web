@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "test-readonly-probe",
+  "issue": 511,
+  "title": "TEST-only pilot: read-only release-check of the plan lane on the TEST project (applying it would only create one empty probe table in TEST)",
+  "test_only": true,
+  "compatibility": {
+    "old_worker_with_new_schema": true,
+    "new_worker_with_old_schema": true
+  },
+  "steps": [
+    {
+      "id": "probe",
+      "type": "sql",
+      "depends_on": [],
+      "sql": "001-probe.sql",
+      "precheck": "001-probe.pre.sql",
+      "postcheck": "001-probe.post.sql",
+      "rollback": {
+        "kind": "sql",
+        "sql": "001-probe.rollback.sql"
+      }
+    }
+  ]
+}

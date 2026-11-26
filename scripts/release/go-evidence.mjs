@@ -23,7 +23,7 @@ import {
   DEFAULT_REPOSITORY, M4_WORKFLOW, QUALITY_WORKFLOW, SHA, STAGING_WORKFLOW, appendSummary, byTime, currentMainHead, github,
   githubList, isMain, isOwnerComment, plainLines, qualityFromRuns,
 } from './lib.mjs'
-import { FUNCTION_LANE, SQL_LANE, dependencyGaps, preflightOk, stepStates } from './plan-evidence.mjs'
+import { FUNCTION_LANE, SQL_LANE, dependencyGaps, preflightOk, rollbackBlockers, stepStates } from './plan-evidence.mjs'
 import { ancestors, coverageGaps, loadPlan } from './plan.mjs'
 import { LANES, laneRank, maxLane, releaseScope } from './risk-lane.mjs'
 
@@ -198,6 +198,7 @@ export function evaluateGo(input) {
     const planLine = only('plan')
     if (!planLine) reasons.push('FULL_SCOPE_REQUIRES_PLAN')
     else if (!plan?.loaded) reasons.push(`PLAN_INVALID:${plan?.error ?? 'not loaded'}`)
+    else if (plan.loaded.plan.test_only) reasons.push('PLAN_TEST_ONLY_NOT_FOR_PRODUCTION')
     else if (plan.loaded.plan.id !== planLine.args[0] || plan.loaded.digest !== planLine.args[1]) reasons.push('PLAN_DIGEST_MISMATCH')
     else {
       const gaps = coverageGaps(plan.loaded, plan.categories ?? {})
@@ -215,6 +216,7 @@ export function evaluateGo(input) {
         && d.args[0] === candidateSha && d.args[1] === plan.loaded.plan.id && d.args[2] === step?.id))
       if (step && (step.destructive || step.privileged) && purpose.op !== 'rollback' && !separate('stepGo')) reasons.push(`STEP_GO_REQUIRED:${step.id}`)
       if (step && purpose.op === 'rollback' && !separate('rollbackGo')) reasons.push(`ROLLBACK_GO_REQUIRED:${step.id}`)
+      if (step && purpose.op === 'rollback') reasons.push(...rollbackBlockers(plan.loaded, step.id, plan.prodStates))
     }
   }
 
