@@ -1,4 +1,4 @@
-name: M6 Production SQL apply (protected, manual)
+name: 'Production Database Release'
 run-name: >-
   M6 ${{ inputs.operation }}${{ startsWith(inputs.operation, 'release-') && format(' [release plan={0} step={1} digest={2} env=production op={3}]',
   inputs.plan_id, inputs.step_id, inputs.plan_digest, inputs.operation == 'release-apply' && 'apply' || inputs.operation == 'release-rollback' && 'rollback' || 'check') || '' }}

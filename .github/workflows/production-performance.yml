@@ -1,4 +1,4 @@
-name: Production performance budget
+name: 'Performance Monitoring'
 
 on:
   workflow_dispatch:

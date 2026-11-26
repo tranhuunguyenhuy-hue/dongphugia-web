@@ -183,7 +183,7 @@ describe('schema mapping and reversible sequence control', () => {
     expect(SEQUENCE_BODY).toContain("session_user <> 'dpg_direct_import'")
   })
   it('separates the new workflow from backup, manual approvals and Production', () => {
-    const workflow = readFileSync(new URL('../../.github/workflows/catalogue-direct-migration.yml', import.meta.url), 'utf8')
+    const workflow = readFileSync(new URL('../../docs/archive/workflows/catalogue-direct-migration.yml', import.meta.url), 'utf8')
     expect(workflow).toContain('environment: catalogue-direct-migration')
     expect(workflow).not.toContain('environment: runtime-backup')
     expect(workflow).not.toContain('upload-artifact')

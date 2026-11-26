@@ -55,7 +55,7 @@ test('ledger observation rejects values outside the bounded bootstrap range', as
 })
 
 test('workflow restricts exact source, owner, environment and consumes only the database URL', () => {
-  const workflow = readFileSync('.github/workflows/supabase-database-preflight.yml', 'utf8')
+  const workflow = readFileSync('docs/archive/workflows/supabase-database-preflight.yml', 'utf8')
   for (const fragment of ["github.ref == 'refs/heads/main'", "github.actor == 'tranhuunguyenhuy-hue'", 'github.run_attempt == 1', 'environment: runtime-backup', 'test "$GITHUB_SHA" = "$APPROVED_SOURCE_SHA"']) assert.ok(workflow.includes(fragment))
   assert.deepEqual([...workflow.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]), ['SUPABASE_REHOME_DATABASE_URL'])
   assert.ok(!workflow.includes('bootstrap-backup'))

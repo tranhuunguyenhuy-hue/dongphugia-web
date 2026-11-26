@@ -104,7 +104,7 @@ describe('one-use approval and artifact identities',()=>{
     expect(()=>validateEnvelope(envelope,sha,'123')).toThrow()
   })
   it('workflow defaults read-only and binds protected execution to exact source/one-use gate',()=>{
-    const yaml=readFileSync('.github/workflows/existing-state-backup.yml','utf8')
+    const yaml=readFileSync('docs/archive/workflows/existing-state-backup.yml','utf8')
     for(const part of ['default: inspect','environment: runtime-backup','github.run_attempt == 1','execution-gate.mjs','retention-days: 14','*.age','envelope.json'])expect(yaml).toContain(part)
     expect(yaml).not.toContain('schedule:')
     const source=readFileSync('scripts/backup/existing-state/archive.mjs','utf8')

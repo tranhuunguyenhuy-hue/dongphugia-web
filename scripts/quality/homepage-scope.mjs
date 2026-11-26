@@ -14,7 +14,7 @@ const RELEVANT_FILES = new Set([
   'lighthouserc.toilet-listing.cjs',
   'src/app/globals.css', 'src/app/layout.tsx',
   'src/proxy.ts', 'src/middleware.ts',
-  '.github/workflows/homepage-quality.yml',
+  'docs/archive/workflows/homepage-quality.yml',
   'scripts/quality/homepage-scope.mjs',
   'scripts/quality/assert-lighthouse-toilet-median.mjs',
 ])

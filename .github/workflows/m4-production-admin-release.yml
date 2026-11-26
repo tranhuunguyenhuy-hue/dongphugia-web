@@ -1,9 +1,10 @@
-name: M4 Production Admin release
+name: 'Production Release'
 run-name: >-
   M4 Production Admin release${{ inputs.operation == 'publish' && inputs.plan_id != '' && format(' [release plan={0} step=* digest={1} env=production op=worker]', inputs.plan_id, inputs.plan_digest) || '' }}
 
 # Separate, explicit release lane for the accepted Admin (static SPA + same-origin gateway + dedicated upload) on top of the
-# unchanged canonical Public Worker. The Public-only lane (`v1-worker-release.yml`) is untouched and remains the rollback tool.
+# unchanged canonical Public Worker. Rollback = `wrangler rollback <recorded rollback_version_id>` (docs/ops/v1-fast-release.md); the
+# Public-only lane `v1-worker-release.yml` is archived (#510, docs/archive/workflows/) and is not a rollback tool.
 # Builds the exact main SHA once, verifies the packaged artifact against the Production PostgreSQL read-only role and, only for
 # operation=publish, deploys it to the existing Production Worker with the Admin secrets passed atomically (--secrets-file),
 # then smokes the real domain. No automatic rollback: the recorded previous version is restored by a separate explicit command.
