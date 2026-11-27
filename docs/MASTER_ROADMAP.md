@@ -1,5 +1,21 @@
-# Đông Phú Gia — Master Roadmap v1.3
+# Đông Phú Gia — Master Roadmap v1.4
 Owner-approved 2026-11-27 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Of the 104 decisions in rounds 1–6, v1.2 superseded 1.8, 4.14, 4.24 and 6.8 to preserve every phase record while deriving publication and SEO from the new IA. v1.3 applies Owner decisions D-D01–03 (inventory out of scope; discontinued catalogue retirement; existing price accepted) and amends 1.4, 3.4, 3.9, 3.13, 3.24, 4.14 and 6.8, plus the vision and the price/transaction wording in the acceptance boundaries; no decision ID is added or removed. [Owner decision v1.2](https://tranhuunguyenhuy.atlassian.net/browse/DPG-6?focusedCommentId=10027) · [Approved disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-22?focusedCommentId=10032) · [Owner decision D-D01–03](https://tranhuunguyenhuy.atlassian.net/browse/DPG-25?focusedCommentId=10048) · [TL disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-25?focusedCommentId=10046). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
+
+## BA-A1 · Owner-approved clarifications (v1.4)
+
+The Owner approved the following clarifications to decisions 3.6, 3.11–3.12, 3.15–3.18 and 3.22–3.24 on 2026-11-27. Apply them to the transaction contracts in 4.15–4.19. [Acceptance record](https://tranhuunguyenhuy.atlassian.net/browse/DPG-31?focusedCommentId=10072)
+
+| ID | Approved rule |
+| --- | --- |
+| BA1 | Combine a retail voucher with sale price only when the voucher program explicitly permits it. |
+| BA2 | Reject a voucher exceeding the eligible merchandise subtotal; explain and allow customer review. No unapproved fee discount or negative total. |
+| BA3 | One accept-enabled issued quote version per request; authorized staff sets explicit expiry within approved policy. An adjustment request alone does not invalidate the current offer; expiry, explicit withdrawal or replacement does. Show current terms clearly. |
+| BA4 | Authorized staff commit complete quoted price, discounts, fees, total and terms within delegated scope. Assignment is not authorization; no invented approval tier or threshold. |
+| BA5 | Authorized staff may record external acceptance only with evidence of the actual authorized customer, exact version/terms, affirmative action and time, and valid offer at processing. Late or uncertain evidence requires fresh acceptance of a valid offer. |
+| BA6 | Approve the principle of one demonstrably available secure transaction channel with verified staff-assisted recovery where feasible. Original authorized session only until out-of-session ownership verification is proven. No particular channel/provider, budget, configuration or lifetime is approved or verified. |
+| BA7 | Customer requests change/cancel; authorized staff assesses by transaction state. Material changes require explicit customer consent. Paid/in-flight/delivered and refund/return exceptions follow actual approved policy and auditable evidence. No automatic refund. |
+
+Operational evidence for staff delegations, expiry defaults, fees, channel capability and return/refund policies remains pending.
 
 ## Vision and scope
 Build a specialized sanitary-ware commerce website centered on products: discover, evaluate, order/request quotes and track transactions, with lean sustainable information, data, UX and operations. Preserve business continuity, identity and transaction history. Rebuild information architecture and SEO sitemap from first principles, not legacy SEO constraints. Preserve brand identity, selectively reuse V1. No ERP, compulsory customer account, default infrastructure expansion, inventory management or stock display, or automated shipping promises.
