@@ -1,5 +1,5 @@
-# Đông Phú Gia — Master Roadmap v1.1
-Owner-approved 2026-11-26 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Rounds 1–6 unchanged (104 decisions). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
+# Đông Phú Gia — Master Roadmap v1.2
+Owner-approved 2026-11-27 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Of the 104 decisions in rounds 1–6, v1.2 supersedes 1.8, 4.14, 4.24 and 6.8 to preserve every phase record while deriving publication and SEO from the new IA. [Owner decision](https://tranhuunguyenhuy.atlassian.net/browse/DPG-6?focusedCommentId=10027) · [Approved disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-22?focusedCommentId=10032). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
 
 ## Vision and scope
 Build a specialized sanitary-ware commerce website centered on products: discover, evaluate, order/request quotes and track transactions, with lean sustainable information, data, UX and operations. Preserve business continuity, identity and transaction history. Rebuild information architecture and SEO sitemap from first principles, not legacy SEO constraints. Preserve brand identity, selectively reuse V1. No ERP, compulsory customer account, default infrastructure expansion, or automatic stock/shipping promises.
@@ -31,7 +31,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 1.5 C: Reorganize Admin by business domain with public releases.
 - 1.6 C: Selective V1 reuse and module rebuild, no independent V2.
 - 1.7 B: Paid productivity tools only with Owner approval; default incremental infrastructure budget $0.
-- 1.8 E: Lean UI, database, page structure for long-term discoverability, usability, integrity and maintainability; not minimal table/page counts. Rebuild sitemap, no legacy SEO constraints. Equivalent redirects where appropriate.
+- 1.8 E: Keep the UI, database and page structure lean for discoverability, usability, integrity and maintenance. Design URLs and the sitemap from the new IA. Legacy rankings, index coverage, visibility rules, paths and redirects impose no design constraints. Handle old URLs for safe transition and business continuity, redirecting only where equivalence is verified.
 
 ### 2 — Information Architecture (14)
 - 2.1 D: Product type primary; brand additional discovery.
@@ -89,7 +89,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 4.11 B: Same eligible SKU must satisfy all SKU filters; OR within facet, AND across; count Products.
 - 4.12 B: Shared catalogue query/API contract; measured need before read model/external index.
 - 4.13 B: Price on SKU; derived representative/range at Product, no independently edited product price.
-- 4.14 B: Separate valid/contact/unverified price, business/publication status and eligibility; no zero sentinel.
+- 4.14 B: Every record in the target plan is Active regardless of legacy status. Define publication, discovery, sale, quote and index eligibility separately under the new business rules. Active alone establishes neither publication nor price, stock or eligibility to transact. Keep valid, contact and unverified price states distinct and never use zero for an unknown price.
 - 4.15 B: Guest cart local/session preferred; server authoritative SKU, price and eligibility revalidation; persistence only as needed.
 - 4.16 B: Order and Quotation separate entities/lines/snapshots/lifecycles; link accepted version.
 - 4.17 B: Transaction snapshots, immutable sent quote versions and meaningful change history; no global Event Sourcing.
@@ -99,7 +99,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 4.21 B: Relational core, structured JSONB when apt, measured denormalization.
 - 4.22 B: Target independent of legacy; inventory/map/clean, real TEST pilot, phased reconciliation and safe retirement.
 - 4.23 B: PDP switches related Products and concrete SKUs; update identity, URL, image/spec/price/eligibility consistently.
-- 4.24 B: Audit and verify entire sanitary catalogue before regroup migration. Do not blindly convert current variant groups. Exact SKU search preselects; no fabricated combinations. Historic identity preserved.
+- 4.24 B: Audit all records of each phase’s brands across legacy statuses before regroup migration, starting with TOTO and INAX. Audit the remaining brands before final synchronization. Verify in-scope Product identity, functional and installation differences, or explicitly adjudicate exceptions before regrouping or publication. Do not blindly convert current variant groups. Exact SKU search preselects the verified SKU. Preserve historical IDs and SKUs and never fabricate combinations.
 
 ### 5 — Design Strategy & Design System (20)
 - 5.1 C: Premium Technical Commerce.
@@ -131,7 +131,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 6.5 B: Vertical slices; foundation → catalogue → discovery → PDP → retail → negotiated → tracking → content; adapt dependency order.
 - 6.6 B: Capability-based release, group tight dependencies, no forced release per PR.
 - 6.7 B: Expand–Migrate–Switch–Contract preferred; approved maintenance cutover if compatibility/capacity prevents.
-- 6.8 B: Normalize sanitary catalogue, active-first pilot; preserve valuable data/history, evaluate outside scope archive.
+- 6.8 B: Normalize TOTO and INAX first, including every record and converting legacy inactive to target Active in the migration plan. Select phase brands by verified ID and keep the architecture extensible. Retain other brands’ data and defer their synchronization to the final rollout phase. Preserve data, provenance and history. Retain sector and D2 conflicts for explicit scope review under 1.4. Reconcile each phase before safe cutover under 4.22 and the existing release gates.
 - 6.9 B: One authoritative reader/writer per datum/phase; reconcile delta writes; explicit cutover.
 - 6.10 B: Prefer uninterrupted service; Owner-approved scoped maintenance window if needed.
 - 6.11 B: Risk-based QA, required gates remain; integration and E2E appropriate to risks.
