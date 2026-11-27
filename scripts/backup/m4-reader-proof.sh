@@ -88,4 +88,6 @@ if docker exec "$c" pg_dump -U dpg_backup_reader -d "$db" --format=custom --sche
 grep -Eq 'row-level security|row security' /tmp/dpg42-rls.log || fail rls_refusal_not_observed
 echo 'M5_READER without_bypassrls=FAILS (row-level security)'
 rm -f /tmp/dpg42-reader-verify.txt /tmp/dpg42-commerce-verify.txt /tmp/dpg42-rls.log /tmp/dpg42-full.inv /tmp/dpg42-reader.inv
+# the decrypted archive and reader dumps copied into the scratch container are no longer needed
+docker exec "$c" rm -f /tmp/production.dump /tmp/reader.dump /tmp/reader-rls.dump /tmp/schema.sql >/dev/null 2>&1 || true
 echo 'M5_READER status=PASS'

@@ -22,11 +22,30 @@
   offline: it is useless without the age private key.
 - Every run restores into a scratch PostgreSQL (`scripts/backup/m4-restore-rehearsal.sh`, usable for any bundle directory;
   labelled container, no network). For v2 the single gate is one **ownership-preserving** restore into database `restored`:
-  roles are bootstrapped from `roles.txt` (attributes and memberships), scratch platform prerequisites
+  roles are bootstrapped from `roles.txt` (attributes, memberships, role-level settings), scratch platform prerequisites
   (`scripts/backup/scratch-platform-prereqs.sql`) are applied first, then `pg_restore --exit-on-error`. The gate
   (`scripts/backup/m5-restore-gate.mjs`) hard-fails on any restore error or on any difference in row counts, content digests,
   schema objects, definitions, ACLs, ownership/SECURITY DEFINER, the security inventory or roles. It prints only fixed error
   classes and object labels, never values. An unreviewed or tampered `scope.json` fails the restore.
+- **Role recovery (what `roles.txt` covers).** Required set = roles the scope references (owners, ACL grantees/grantors, policy and
+  default-ACL roles) + the reviewed runtime roles in `backup-scope.json` (v2: `dpg_order_intake_login`) + the closure of both over
+  memberships in either direction restricted to this project's `dpg_*` roles, so a login that is only a *member* of a group role
+  (the intake login in `dpg_commerce_intake`, provisioned by `scripts/m6/production-sql-apply.mjs provisionIntake`) is included even
+  though it is not an ACL grantee. Recorded per role: attributes (LOGIN, INHERIT, CREATEROLE, BYPASSRLS, connection limit, ...),
+  memberships with ADMIN/INHERIT/SET, and global role settings (`statement_timeout`, `idle_in_transaction_session_timeout`, ...).
+  The restore refuses a bundle that does not record each reviewed runtime role, records it inconsistently, or whose login/membership
+  policy differs from the reviewed one (login, NOINHERIT, member of `dpg_commerce_intake` with SET and without INHERIT/ADMIN, no
+  CREATEROLE/BYPASSRLS/SUPERUSER); a role recorded `absent` must leave no trace. After the restore the real login -> group path is
+  exercised (direct table read and EXECUTE without `SET ROLE` are denied with SQLSTATE 42501, `SET ROLE dpg_commerce_intake` works,
+  the owner role is unreachable). **Passwords are never backed up**: a login recovered from a bundle has no usable password and is
+  re-provisioned through the existing approved provisioning (new password + Hyperdrive). **Not covered (documented platform
+  prerequisites, to be verified separately):** roles outside `dpg_*` (`postgres`, `authenticator`, `supabase_*`, `anon`,
+  `authenticated`, `service_role`) and their memberships, per-database role settings, Hyperdrive/Cloudflare configuration, and
+  any `dpg_*` login that is neither an ACL role, a reviewed runtime role nor linked to one by membership.
+- Every raw tool log and decrypted/derived digest file in the rehearsal workspace (`restore.log`, `bootstrap.err`, `prereq.err`,
+  `restored-content.txt`, `content.txt`, `production.dump`, `seq-safety.txt`, `toc.txt`) is shredded on every exit path, success
+  or failure; failures print only a fixed reason class. The backup job uploads the artifact only after the dump step succeeds; the
+  rehearsal job uploads nothing.
 - The scratch platform stubs (`auth` schema, `auth.uid()/role()/jwt()`) and bootstrapped roles exist **only** in the
   rehearsal. Never create them in a real Supabase project, which already provides `auth`.
 - **M6 caveat:** the M6 release gate recognises a backup run by job and step name, so it also accepts a scope-v1 run. Until
@@ -44,6 +63,13 @@
   backup fails closed. Exact rollback: `002_backup_reader_commerce_scope_rollback.sql`. The rehearsal applies 002 in scratch only.
 - Local proof without any hosted target: `bash scripts/backup/m4-commerce-coverage.local-test.sh` (synthetic data, throwaway key);
   digest/dump timing on production-shaped synthetic volume: `bash scripts/backup/m4-digest-perf.local-test.sh`.
+- **Verify the execution target externally before any GO** (read-only, separately authorized; the variables passed to 002 are a
+  last-line guard, **not evidence**): (1) project ref and URL confirmed from the platform tooling (not from the file or the
+  caller) as `bonxyxluzlxfkdetryoo`; (2) `sha256sum` of the exact `002_backup_reader_commerce_scope.sql` and its rollback equals
+  the reviewed checksums recorded in the GO package, and the file comes from the approved SHA; (3) the executing role's actual
+  privileges (owner membership of `dpg_commerce_owner`, ADMIN option) and the owner of every `dpg_commerce` object; (4) the
+  platform prerequisites and the real role inventory reconciled against `roles.txt` expectations. This reconciliation is **not**
+  done by this patch: it needs its own read-only precheck after TL review.
 - 002 is applied with `psql -X -v ON_ERROR_STOP=1 -v target_ref=bonxyxluzlxfkdetryoo -v approved_sha=<reviewed sha>`. It
   asserts target, contract, reader attributes, memberships and ownership before granting, and verifies the exact reader ACL,
   unchanged non-reader ACLs and memberships in the same transaction; it prints `DPG42_GRANT_VERIFIED`. The rollback refuses

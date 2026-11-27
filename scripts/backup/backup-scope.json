@@ -2,9 +2,44 @@
   "contract": "dpg-production-backup-scope",
   "current_version": 2,
   "versions": {
-    "1": { "schemas": ["dpg_app", "dpg_control"], "coverage": "limited", "note": "historical M4/M5 bundles before DPG-42; dpg_commerce is NOT covered" },
-    "2": { "schemas": ["dpg_app", "dpg_control", "dpg_commerce"], "coverage": "full", "note": "DPG-42: adds dpg_commerce (orders, quotes, events)" }
+    "1": {
+      "schemas": [
+        "dpg_app",
+        "dpg_control"
+      ],
+      "coverage": "limited",
+      "note": "historical M4/M5 bundles before DPG-42; dpg_commerce is NOT covered"
+    },
+    "2": {
+      "schemas": [
+        "dpg_app",
+        "dpg_control",
+        "dpg_commerce"
+      ],
+      "coverage": "full",
+      "note": "DPG-42: adds dpg_commerce (orders, quotes, events)",
+      "runtime_roles": {
+        "dpg_order_intake_login": {
+          "login": true,
+        "role_inherit": false,
+          "member_of": {
+            "dpg_commerce_intake": {
+              "admin": false,
+              "inherit": false,
+              "set": true
+            }
+          },
+          "note": "order-intake login provisioned by scripts/m6/production-sql-apply.mjs provisionIntake: NOINHERIT login, member of dpg_commerce_intake (SET ROLE only); password is never backed up"
+        }
+      }
+    }
   },
   "excluded": {},
-  "discovery": { "schema_pattern": "dpg\\_%", "relkinds": ["r", "p"] }
+  "discovery": {
+    "schema_pattern": "dpg\\_%",
+    "relkinds": [
+      "r",
+      "p"
+    ]
+  }
 }

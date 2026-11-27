@@ -18,7 +18,10 @@ prereqs="${SCRATCH_PREREQS:-$REPO/scripts/backup/scratch-platform-prereqs.sql}"
 source "$REPO/scripts/backup/m4-sanitize.sh"
 ok=false
 cleanup() {
-  ( cd "$BUNDLE" 2>/dev/null && for f in identity.txt production.dump content.txt; do if [ -e "$f" ]; then shred -u "$f" 2>/dev/null || rm -f "$f"; fi; done ) || true
+  # Decrypted material, per-table digests and every raw tool log are removed on EVERY exit path (success or failure); only the
+  # sanitized M4_RESTORE lines on stdout and the bundle's own (encrypted/plain-metadata) files remain.
+  ( cd "$BUNDLE" 2>/dev/null && for f in identity.txt production.dump content.txt restored-content.txt restore.log bootstrap.err prereq.err seq-safety.txt toc.txt schema.sql; do
+      if [ -f "$f" ] && [ ! -L "$f" ]; then shred -u "$f" 2>/dev/null || rm -f "$f"; elif [ -e "$f" ] || [ -L "$f" ]; then rm -f "$f"; fi; done ) || true
   if [ "$ok" != true ] && [ "$(docker inspect -f '{{index .Config.Labels "dpg42.scratch"}}' "$c" 2>/dev/null)" = 1 ]; then docker rm -f "$c" >/dev/null 2>&1 || true; fi
   return 0
 }
@@ -48,6 +51,9 @@ if [ "$version" = 2 ]; then
   [ "$(field schemas)" = "$schemas" ] || fail manifest_schemas_mismatch
   [ "$(field tables)" = "$(wc -l < row-counts.txt)" ] || fail manifest_tables_mismatch
   cmp -s <(awk '{print $1}' row-counts.txt | cut -d. -f1 | sort -u) <(tr ',' '\n' <<<"$schemas" | sort) || fail counts_schemas_mismatch
+  # Reviewed runtime roles (login roles that are only MEMBERS of a group role) must be recorded with the reviewed policy.
+  rr="$(node "$REPO/scripts/backup/backup-scope.mjs" check-runtime-roles "$version" roles.txt)" || { echo "$rr"; fail "$(sed -n 's/.*reason=\([a-z_]*\).*/\1/p' <<<"$rr")"; }
+  echo "$rr"
 fi
 
 umask 077
@@ -85,6 +91,18 @@ if [ "$version" = 2 ]; then
   while read -r _ g m a i s; do valid_role "$g" || fail role_name_invalid; valid_role "$m" || [ "$m" = postgres ] || fail role_name_invalid
     sql -c "grant \"$g\" to \"$m\" with admin ${a#admin=}, inherit ${i#inherit=}, set ${s#set=}" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
   done < <(grep '^member ' roles.txt)
+  # Role-level settings (e.g. the intake login's statement_timeout) are re-applied exactly as recorded; the value is passed as a
+  # psql variable (never interpolated into shell or SQL text) and stored through SET ... FROM CURRENT inside one transaction, so list
+  # values stay exact and a recorded default_transaction_read_only=on cannot block the ALTER itself.
+  while read -r _ r kv; do valid_role "$r" || fail role_name_invalid; k="${kv%%=*}"; v="${kv#*=}"
+    [[ "$k" =~ ^[a-z_][a-z0-9_.]*$ ]] || fail role_setting_name_invalid
+    sql -v r="$r" -v k="$k" -v v="$v" >/dev/null 2>>bootstrap.err <<'SQL' || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
+begin;
+select set_config(:'k', :'v', true);
+select format('alter role %I set %I from current', :'r', :'k') \gexec
+commit;
+SQL
+  done < <(grep '^rolesetting ' roles.txt)
   sql -c "create database restored" >/dev/null 2>>bootstrap.err || fail scratch_database_create
   db=restored
 else
@@ -119,7 +137,7 @@ gate_args=()
 if [ "$version" = 2 ]; then
   sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-ownership.sql" > restored-owners.txt 2>/dev/null || true
   sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-security.sql" > restored-security.txt 2>/dev/null || true
-  sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-roles.sql" > restored-roles.txt 2>/dev/null || true
+  sqldb -v schemas="$schemas" -v runtime_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" runtime-roles "$version")" -f - < "$REPO/scripts/backup/m5-roles.sql" > restored-roles.txt 2>/dev/null || true
   gate_args=(--content content.txt restored-content.txt --owners owners.txt restored-owners.txt --security security.txt restored-security.txt --roles roles.txt restored-roles.txt)
   # Sequence safety (values are non-transactional): the NEXT value each owned sequence would return must be beyond the
   # restored column maximum; descending, cycling or unowned-but-default sequences fail closed.
@@ -136,6 +154,5 @@ SQL
 fi
 node "$REPO/scripts/backup/m5-restore-gate.mjs" "$rc" restore.log row-counts.txt restored-counts.txt objects.txt restored-objects.txt \
   --scope-version "$version" --coverage "$coverage" "${gate_args[@]}" || fail gate
-rm -f restore.log prereq.err bootstrap.err restored-content.txt
 ok=true
 echo "M4_RESTORE status=PASS scope_version=$version coverage=$coverage schemas=$schemas database=$db tables=$(wc -l < row-counts.txt) counts=identical objects_acl=identical$([ "$version" = 2 ] && echo ' content=identical owners=identical security=identical roles=identical ownership_preserving=true')"

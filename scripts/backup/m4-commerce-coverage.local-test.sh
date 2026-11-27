@@ -36,6 +36,13 @@ src -c "alter role dpg_operator createrole password '$OPW'; grant create on data
 op -v approved_sha=local -f - < "$P470/001_canonical_price_columns.sql" >/dev/null 2>&1
 op -v approved_sha=local -f - < "$P470/002_canonical_price_grants.sql" >/dev/null 2>&1
 op -v approved_sha=local -v target=production -v admin_role=dpg_admin_api -f - < "$CM/001_commerce_schema.sql" >/dev/null 2>&1
+# the order-intake LOGIN exactly as provisionIntake creates it: NOINHERIT login, member of the dpg_commerce_intake group only
+src >/dev/null <<'SQL'
+create role dpg_order_intake_login login noinherit connection limit 5 password 'synthetic-not-a-secret';
+alter role dpg_order_intake_login set statement_timeout = '5s';
+alter role dpg_order_intake_login set idle_in_transaction_session_timeout = '10s';
+grant dpg_commerce_intake to dpg_order_intake_login;
+SQL
 src >/dev/null <<'SQL'
 update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=1000000, canonical_price_checked_at=now() where sku='VS-OK';
 update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=2000000, promotional_price_vnd=1800000, online_voucher_amount_vnd=100000, canonical_price_checked_at=now() where sku='VS-PROMO';
@@ -100,6 +107,20 @@ maxid="$(rs -c "select max(id) from dpg_commerce.orders")"
 newcode="$(rs -c "set role dpg_commerce_intake; select dpg_commerce.order_submit(jsonb_build_object('customerName','Khach Tong Hop','customerPhone','0939999999','deliveryAddress','1 Duong Tong Hop, Q1','items',jsonb_build_array(jsonb_build_object('productId',1,'quantity',1)),'expectedTotalVnd',1000000), 'post-restore-1', md5('pr')) ->> 'code'")"
 [ -n "$newcode" ] && [ "$(rs -c "select id from dpg_commerce.orders where code = '$newcode'")" -gt "$maxid" ] && ok "R7 SECURITY DEFINER intake works after restore; next id > restored max ($maxid)" || bad R7
 if rs -c "set role dpg_commerce_intake; select count(*) from dpg_commerce.orders" >/dev/null 2>&1; then bad "R8 intake direct read"; else ok "R8 intake role still cannot read tables directly"; fi
+# R9: the login role (a MEMBER of the group, not an ACL grantee) was recovered with its exact attributes, membership edge and settings
+[ "$(rs -c "select rolcanlogin::text || rolinherit::text || rolconnlimit || rolsuper::text || rolbypassrls::text || rolcreaterole::text from pg_roles where rolname='dpg_order_intake_login'")" = 'truefalse5falsefalsefalse' ] \
+  && [ "$(rs -c "select admin_option::text || inherit_option::text || set_option::text from pg_auth_members am join pg_roles g on g.oid = am.roleid join pg_roles m on m.oid = am.member where g.rolname='dpg_commerce_intake' and m.rolname='dpg_order_intake_login'")" = 'falsefalsetrue' ] \
+  && [ "$(rs -c "select array_to_string(setconfig, ',') from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where r.rolname='dpg_order_intake_login' and s.setdatabase = 0")" = 'idle_in_transaction_session_timeout=10s,statement_timeout=5s' ] \
+  && grep -qx 'runtime_role dpg_order_intake_login present' "$T/b2/roles.txt" \
+  && ok "R9 intake login recovered: LOGIN NOINHERIT conn limit 5, member of dpg_commerce_intake (admin=false inherit=false set=true), statement/idle timeouts" || bad R9
+# R10: the real login -> group path (no postgres SET ROLE): no direct data access, no function EXECUTE without SET ROLE, SET ROLE works, no other role reachable
+rl() { docker exec -i "$SCR" psql -U dpg_order_intake_login -d restored -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
+denied() { local out; out="$(docker exec -i "$SCR" psql -U dpg_order_intake_login -d restored -X -q -A -t -v ON_ERROR_STOP=0 -c "$1" -c "\echo STATE=:SQLSTATE" 2>&1 || true)"; grep -q 'STATE=42501' <<<"$out"; }
+sub="select dpg_commerce.order_submit(jsonb_build_object('customerName','Khach Dang Nhap','customerPhone','0938888888','deliveryAddress','2 Duong Dang Nhap, Q1','items',jsonb_build_array(jsonb_build_object('productId',1,'quantity',1)),'expectedTotalVnd',1000000), 'post-restore-login', md5('pr-login'))"
+if [ "$(rl -c 'show statement_timeout')" = 5s ] && denied "select count(*) from dpg_commerce.orders" && denied "$sub" && denied "set role dpg_commerce_owner" \
+   && [ -n "$(rl -c "set role dpg_commerce_intake; $sub" 2>/dev/null)" ] && denied "select count(*) from dpg_app.products" ; then
+  ok "R10 login -> group path after restore: statement_timeout 5s; direct table read, EXECUTE without SET ROLE and SET ROLE to the owner are all SQLSTATE 42501; SET ROLE dpg_commerce_intake submits an order"
+else bad R10; fi
 if REPO="$REPO" bash "$REPO/scripts/backup/m4-reader-proof.sh" > "$T/proof.log" 2>&1; then ok "L1 reader proof PASS: identical dump inventory, $(grep -c 'DENIED sqlstate=42501' "$T/proof.log") denials with SQLSTATE 42501 (read-only default off), BYPASSRLS required"; else cat "$T/proof.log"; bad L1; fi
 
 # ---- historical v1 bundle produced exactly like the pinned base revision (2 schemas, no scope.json) ----
@@ -120,7 +141,9 @@ grep -q 'coverage=limited' "$T/r1.log" && grep -q 'dpg_commerce_NOT_covered' "$T
 
 # ---- negative bundle cases (each must end without status=PASS, with the expected sanitized reason) ----
 neg() { local name="$1" mutate="$2" expect="$3" env="${4:-}"; rm -rf "$T/n"; cp -r "$T/b2-pristine" "$T/n"; ( cd "$T/n" && eval "$mutate" )
-  if env $env BUNDLE="$T/n" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$T/n.log" 2>&1; then bad "$name (restore passed)"
+  env $env BUNDLE="$T/n" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$T/n.log" 2>&1 || true
+  if ls "$T/n" | grep -Eq '^(production\.dump|content\.txt|identity\.txt|restored-content\.txt|restore\.log|bootstrap\.err|prereq\.err|seq-safety\.txt|toc\.txt)$'; then bad "$name (decrypted material or raw tool log left in the workspace: $(ls "$T/n" | grep -E '^(production\.dump|content\.txt|identity\.txt|restored-content\.txt|restore\.log|bootstrap\.err|prereq\.err|seq-safety\.txt|toc\.txt)$' | tr '\n' ' '))"
+  elif grep -q 'M4_RESTORE status=PASS' "$T/n.log"; then bad "$name (restore passed)"
   elif grep -q 'M4_RESTORE status=PASS' "$T/n.log"; then bad "$name (PASS printed)"
   elif grep -Eq -e 'Khach|09[0-9]{8}|DETAIL|ERROR:' "$T/n.log"; then bad "$name (unsanitized output)"
   elif grep -Eq "$expect" "$T/n.log"; then ok "$name -> $(grep -Eo "$expect" "$T/n.log" | head -1)"; else tail -4 "$T/n.log"; bad "$name (unexpected reason)"; fi; }
@@ -141,6 +164,12 @@ neg "N14 ACL swap with the SAME count (grantee moved between two tables)" "a=\$(
 neg "N15 RLS flags swapped between two tables (same totals)" "sed -i -E 's/^(rls dpg_commerce.orders) true false$/\\1 true true/; s/^(rls dpg_app.products) true true$/\\1 true false/' security.txt; resum" 'security_differs'
 neg "N16 grant option flipped (same counts)" "sed -i -E '0,/^tacl dpg_commerce.events dpg_admin_api SELECT ([a-z_]+) false$/s//tacl dpg_commerce.events dpg_admin_api SELECT \\1 true/' security.txt; resum" 'security_differs'
 neg "N17 missing platform dependency (no auth.uid stub)" "true" 'restore_failed|platform_prerequisites' "SCRATCH_PREREQS=/dev/null"
+neg "N36 runtime-role record stripped from roles.txt (login role omitted from the backup)" "sed -i '/^runtime_role /d' roles.txt; resum" 'runtime_roles_missing'
+neg "N37 runtime role recorded absent while its role lines exist" "sed -i 's/^runtime_role dpg_order_intake_login present/runtime_role dpg_order_intake_login absent/' roles.txt; resum" 'runtime_role_inconsistent'
+neg "N38 login role lines dropped but still marked present" "sed -i '/^roleattr dpg_order_intake_login /d; /^roleexists dpg_order_intake_login\$/d; / dpg_order_intake_login admin=/d; /^rolesetting dpg_order_intake_login /d' roles.txt; resum" 'runtime_role_inconsistent'
+neg "N39 membership policy weakened (INHERIT granted to the login)" "sed -i 's/^\(member dpg_commerce_intake dpg_order_intake_login admin=false\) inherit=false/\1 inherit=true/' roles.txt; resum" 'runtime_role_policy_differs'
+neg "N40 membership edge removed (login no longer in the group)" "sed -i '/^member dpg_commerce_intake dpg_order_intake_login /d' roles.txt; resum" 'runtime_role_policy_differs'
+neg "N41 login role attribute widened (CREATEROLE)" "sed -i 's/^\(roleattr dpg_order_intake_login .*\)createrole=false/\1createrole=true/' roles.txt; resum" 'runtime_role_policy_differs'
 neg "N18 referenced role missing from roles.txt" "sed -i '/^roleexists dpg_commerce_intake\$/d; /^roleattr dpg_commerce_intake /d; / dpg_commerce_intake admin=/d' roles.txt; resum" 'role_bootstrap_missing_role|roles_differ'
 neg "N19 sequence definition mismatch" "sed -i -E '0,/^seqdef dpg_commerce.orders_id_seq ([a-z]+) 1 1 /s//seqdef dpg_commerce.orders_id_seq \\1 1 2 /' security.txt; resum" 'security_differs'
 
