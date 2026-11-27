@@ -77,8 +77,9 @@ jobs:
           else
             echo "M4_BACKUP credential=owner_fallback (replace with dpg_backup_reader, see supabase/m5-production/001_backup_reader_role.sql)"
           fi
-          # DPG-42: fail closed unless every dpg_* schema with tables is in the reviewed scope and the reader can read all of
-          # it with no write path (table DML, sequence USAGE/UPDATE, EXECUTE on SECURITY DEFINER functions).
+          # DPG-42: fail closed unless every dpg_* schema with tables is in the reviewed scope and the connection is exactly the
+          # least-privilege reader (001 attributes, no memberships) that can read all of it with no write or escalation path.
+          # Scope v2 has no owner-credential fallback: a non-reader connection fails here (re-enabling needs separate approval).
           REPO="$GITHUB_WORKSPACE" bash scripts/backup/m4-scope-preflight.sh
       - name: Row-count manifest, encrypted dump and checksums
         id: dump
@@ -103,8 +104,10 @@ jobs:
             ${{ runner.temp }}/m4-backup/row-counts.txt
             ${{ runner.temp }}/m4-backup/objects.txt
             ${{ runner.temp }}/m4-backup/scope.json
-            ${{ runner.temp }}/m4-backup/content.txt
+            ${{ runner.temp }}/m4-backup/content.txt.age
             ${{ runner.temp }}/m4-backup/owners.txt
+            ${{ runner.temp }}/m4-backup/security.txt
+            ${{ runner.temp }}/m4-backup/roles.txt
             ${{ runner.temp }}/m4-backup/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
@@ -131,8 +134,9 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y --no-install-recommends age >/dev/null
-          # Scope is trusted only if it equals a reviewed version in scripts/backup/backup-scope.json; a v2 bundle is also gated on
-          # content digests, ownership (SECURITY DEFINER owners) and sequence safety. Leaves the `scratch` container for the next step.
+          # Scope is trusted only if it equals a reviewed version in scripts/backup/backup-scope.json. A v2 bundle is restored ONCE with
+          # ownership preserved (roles re-created with recorded attributes/memberships + documented platform prerequisites) and gated on
+          # counts, content digests, manifest, owners, per-object security, roles and sequence safety. Leaves `scratch` for the next step.
           BUNDLE="$RUNNER_TEMP/restore" REPO="$GITHUB_WORKSPACE" CONTAINER=scratch bash scripts/backup/m4-restore-rehearsal.sh
       - name: Prove the least-privilege backup role can produce a complete dump (and that BYPASSRLS is required)
         shell: bash
