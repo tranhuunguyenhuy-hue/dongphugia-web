@@ -1,6 +1,7 @@
 name: 'Production Backup'
 
-# Read-only logical backup of the Production Supabase project (dpg_app + dpg_control) BEFORE any M4 change, encrypted with the
+# Read-only logical backup of the Production Supabase project (approved scope in scripts/backup/backup-scope.json: dpg_app +
+# dpg_control + dpg_commerce since DPG-42, one exported snapshot) BEFORE any M4 change, encrypted with the
 # existing age recipient, plus a checksum-verified restore into a scratch PostgreSQL service container and an exact row-count
 # comparison. It never writes to Production and never prints connection details. `probe` only checks that the credential
 # reaches the exact Production target contract (role names are printed, nothing else).
@@ -49,6 +50,8 @@ jobs:
         with: { persist-credentials: false }
       - name: Pull the pinned PostgreSQL client image
         run: docker pull -q "$POSTGRES_IMAGE" >/dev/null
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
       - name: Probe the Production target (read-only)
         shell: bash
         run: |
@@ -74,6 +77,9 @@ jobs:
           else
             echo "M4_BACKUP credential=owner_fallback (replace with dpg_backup_reader, see supabase/m5-production/001_backup_reader_role.sql)"
           fi
+          # DPG-42: fail closed unless every dpg_* schema with tables is in the reviewed scope and the reader can read all of
+          # it with no write path (table DML, sequence USAGE/UPDATE, EXECUTE on SECURITY DEFINER functions).
+          REPO="$GITHUB_WORKSPACE" bash scripts/backup/m4-scope-preflight.sh
       - name: Row-count manifest, encrypted dump and checksums
         id: dump
         if: env.OPERATION == 'backup'
@@ -81,28 +87,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y --no-install-recommends age >/dev/null
-          work="$RUNNER_TEMP/m4-backup"; mkdir -p "$work"
-          chmod 700 "$work"
-          pg() { docker run --rm -i --network host -e DATABASE_URL "$POSTGRES_IMAGE" psql "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
-          # Production is Public-read-only before the Owner opens writes; counts are taken immediately before and after the dump.
-          counts() { pg -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | pg -f - | sort; }
-          counts > "$work/counts-before.txt"
-          # Schema object + ACL + referenced-role manifest (names and counts only), shared with the restore gate.
-          pg -f - < scripts/backup/m5-manifest.sql > "$work/objects.txt"
-          docker run --rm -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --schema=dpg_app --schema=dpg_control' > "$work/production.dump"
-          counts > "$work/counts-after.txt"
-          cmp "$work/counts-before.txt" "$work/counts-after.txt" || { echo 'M4_BACKUP status=FAIL stage=dump reason=source_changed_during_dump'; exit 1; }
-          tables="$(wc -l < "$work/counts-before.txt")"
-          dump_sha="$(sha256sum "$work/production.dump" | cut -d' ' -f1)"
-          age -r "$AGE_RECIPIENT" -o "$work/production.dump.age" "$work/production.dump"
-          shred -u "$work/production.dump" 2>/dev/null || rm -f "$work/production.dump"
-          # The manifest holds table names and counts only (no row data).
-          { echo "backup_id=m4-$GITHUB_RUN_ID"; echo "source_sha=$GITHUB_SHA"; echo "plaintext_dump_sha256=$dump_sha"; echo "tables=$tables"; echo "created_utc=$(date -u +%FT%TZ)"; } > "$work/manifest.txt"
-          cp "$work/counts-before.txt" "$work/row-counts.txt"
-          ( cd "$work" && sha256sum production.dump.age manifest.txt row-counts.txt objects.txt > SHA256SUMS )
-          rm -f "$work/counts-before.txt" "$work/counts-after.txt"
+          work="$RUNNER_TEMP/m4-backup"
+          # Counts, content digests, schema/ACL manifest, ownership and pg_dump read ONE exported snapshot (no before/after
+          # comparison needed: concurrent commits are simply not in the snapshot); plaintext is shredded after age encryption.
+          WORK="$work" REPO="$GITHUB_WORKSPACE" bash scripts/backup/m4-backup-dump.sh
           echo "bundle=$work" >> "$GITHUB_OUTPUT"
-          echo "M4_BACKUP status=PASS stage=dump tables=$tables dump_sha256=$dump_sha encrypted_bytes=$(stat -c %s "$work/production.dump.age")"
       - name: Upload encrypted bundle (14 days)
         if: env.OPERATION == 'backup'
         uses: actions/upload-artifact@v4
@@ -113,6 +102,9 @@ jobs:
             ${{ runner.temp }}/m4-backup/manifest.txt
             ${{ runner.temp }}/m4-backup/row-counts.txt
             ${{ runner.temp }}/m4-backup/objects.txt
+            ${{ runner.temp }}/m4-backup/scope.json
+            ${{ runner.temp }}/m4-backup/content.txt
+            ${{ runner.temp }}/m4-backup/owners.txt
             ${{ runner.temp }}/m4-backup/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
@@ -139,86 +131,16 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get install -y --no-install-recommends age >/dev/null
-          repo="$GITHUB_WORKSPACE"
-          cd "$RUNNER_TEMP/restore"
-          sha256sum --check SHA256SUMS
-          umask 077
-          printf '%s\n' "$AGE_IDENTITY" > identity.txt
-          age -d -i identity.txt -o production.dump production.dump.age
-          rm -f identity.txt
-          expected_sha="$(sed -n 's/^plaintext_dump_sha256=//p' manifest.txt)"
-          test "$(sha256sum production.dump | cut -d' ' -f1)" = "$expected_sha"
-          docker run -d --name scratch -e POSTGRES_PASSWORD=scratch "$POSTGRES_IMAGE" >/dev/null
-          for _ in $(seq 1 40); do docker exec scratch pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
-          sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
-          # Every role the source ACLs/policies reference (from the manifest), as NOLOGIN stubs: names only, no credentials.
-          for role in $(sed -n 's/^role //p' objects.txt); do
-            sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$role') then execute format('create role %I nologin', '$role'); end if; end \$\$"
-          done
-          # Supabase platform helpers referenced by some policies. SCRATCH ONLY: a real recovery restores into a Supabase
-          # project that already provides auth.*; see docs/ops/m5-backup-recovery-runbook.md.
-          sql -c "create schema if not exists auth; create or replace function auth.uid() returns uuid language sql stable as 'select null::uuid'; create or replace function auth.role() returns text language sql stable as 'select null::text'; create or replace function auth.jwt() returns jsonb language sql stable as 'select null::jsonb'"
-          docker cp production.dump scratch:/tmp/production.dump
-          rc=0; docker exec scratch pg_restore -U postgres -d postgres --no-owner /tmp/production.dump > restore.log 2>&1 || rc=$?
-          echo "M4_RESTORE pg_restore_exit=$rc"
-          sql -c "select format('select %L || '' '' || count(*) from %I.%I;', schemaname || '.' || tablename, schemaname, tablename) from pg_tables where schemaname in ('dpg_app','dpg_control') order by 1" | sql -f - | sort > restored-counts.txt
-          sql -f - < "$repo/scripts/backup/m5-manifest.sql" > restored-objects.txt
-          node "$repo/scripts/backup/m5-restore-gate.mjs" "$rc" restore.log row-counts.txt restored-counts.txt objects.txt restored-objects.txt
-          echo "M4_RESTORE status=PASS tables=$(wc -l < row-counts.txt) counts=identical objects_acl=identical"
+          # Scope is trusted only if it equals a reviewed version in scripts/backup/backup-scope.json; a v2 bundle is also gated on
+          # content digests, ownership (SECURITY DEFINER owners) and sequence safety. Leaves the `scratch` container for the next step.
+          BUNDLE="$RUNNER_TEMP/restore" REPO="$GITHUB_WORKSPACE" CONTAINER=scratch bash scripts/backup/m4-restore-rehearsal.sh
       - name: Prove the least-privilege backup role can produce a complete dump (and that BYPASSRLS is required)
         shell: bash
         run: |
           set -euo pipefail
-          repo="$GITHUB_WORKSPACE"
-          sql() { docker exec -i scratch psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
-          # Mirror Production ownership: schemas and objects owned by dpg_migration, the M4 Admin support tables owned by a
-          # NON-superuser stand-in for Supabase's postgres (CREATEROLE, BYPASSRLS, member of dpg_migration). The exact Owner
-          # file then runs as that stand-in, so a privilege error in Production reproduces here.
-          sql <<'SQL'
-          -- Production already has dpg_backup_reader, so the restored ACLs created a stub of it; start from a clean slate.
-          do $$ begin if exists (select 1 from pg_roles where rolname = 'dpg_backup_reader') then
-            execute 'drop owned by dpg_backup_reader'; execute 'drop role dpg_backup_reader'; end if; end $$;
-          create role sb_owner login createrole bypassrls;
-          grant dpg_migration to sb_owner;
-          do $$ declare o record; begin
-            for o in select nspname from pg_namespace where nspname in ('dpg_app','dpg_control') loop
-              execute format('alter schema %I owner to dpg_migration', o.nspname); end loop;
-            for o in select n.nspname, c.relname, c.relkind from pg_class c join pg_namespace n on n.oid = c.relnamespace
-                     where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','p','v','m')
-                       and c.relname not in ('admin_api_login_attempts','admin_api_nonces') loop
-              execute format('alter %s %I.%I owner to dpg_migration', case when o.relkind = 'v' then 'view' when o.relkind = 'm' then 'materialized view' else 'table' end, o.nspname, o.relname); end loop;
-            for o in select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-                     where n.nspname = 'dpg_app' and c.relname in ('admin_api_login_attempts','admin_api_nonces') loop
-              execute format('alter table %I.%I owner to sb_owner', o.nspname, o.relname); end loop;
-            for o in select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-                     where n.nspname in ('dpg_app','dpg_control') and c.relkind = 'S' and pg_get_userbyid(c.relowner) = 'postgres'
-                       and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype in ('a','i')) loop
-              execute format('alter sequence %I.%I owner to dpg_migration', o.nspname, o.relname); end loop;
-          end $$;
-          SQL
-          echo "M5_READER owners=$(sql -c "select string_agg(distinct pg_get_userbyid(c.relowner), ',') from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('dpg_app','dpg_control') and c.relkind in ('r','S','v')")"
-          pw="$(openssl rand -hex 24)"
-          sed -e "s/<OWNER_GENERATED_STRONG_PASSWORD>/$pw/" -e 's/for role postgres in schema/for role sb_owner in schema/' "$repo/supabase/m5-production/001_backup_reader_role.sql" \
-            | docker exec -i scratch psql -U sb_owner -d postgres -X -q -A -t -v ON_ERROR_STOP=1 -f - > reader-verify.txt
-          echo "M5_READER verify=$(tr '\n' ' ' < reader-verify.txt)"
-          IFS='|' read -r name login bypass superuser createrole createdb replication connlimit relations readable writable memberships < reader-verify.txt
-          test "$login" = t; test "$bypass" = t; test "$superuser" = f; test "$createrole" = f; test "$createdb" = f; test "$replication" = f
-          test "$connlimit" = 2; test "$relations" = "$readable"; test "$writable" = 0; test "$memberships" = 0
-          test "$(sql -c "select setconfig::text from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where r.rolname = 'dpg_backup_reader'" | grep -c default_transaction_read_only=on)" = 1
-          docker exec scratch pg_dump -U dpg_backup_reader -d postgres --format=custom --no-owner --schema=dpg_app --schema=dpg_control -f /tmp/reader.dump
-          full="$(docker exec scratch pg_restore -l /tmp/production.dump | grep -vc '^;')"; reader="$(docker exec scratch pg_restore -l /tmp/reader.dump | grep -vc '^;')"
-          echo "M5_READER dump=PASS toc_entries=$reader source_toc_entries=$full"
-          # Writes must be impossible even if the read-only default is overridden in a session.
-          if docker exec -i scratch psql -U dpg_backup_reader -d postgres -X -q -v ON_ERROR_STOP=1 -c "set default_transaction_read_only = off; delete from dpg_app.banners where false" >/dev/null 2>&1; then
-            echo 'M5_READER status=FAIL reason=write_possible'; exit 1
-          fi
-          echo 'M5_READER write=DENIED'
-          # Negative control: the same role subject to RLS cannot dump the FORCE RLS tables.
-          sql -c "alter role dpg_backup_reader nobypassrls"
-          if docker exec scratch pg_dump -U dpg_backup_reader -d postgres --format=custom --schema=dpg_app -f /tmp/reader-rls.dump > rls.log 2>&1; then
-            echo 'M5_READER status=FAIL reason=dump_succeeded_without_bypassrls'; exit 1
-          fi
-          echo "M5_READER without_bypassrls=FAILS ($(grep -oE 'row-level security|row security' rls.log | head -1))"
+          # 001 (as in Production) + the reviewed dpg_commerce grant (002, scratch only), executed by a non-superuser stand-in for
+          # Supabase's postgres; proves a complete scope dump, no writes, no nextval/setval, no SECURITY DEFINER EXECUTE, BYPASSRLS needed.
+          REPO="$GITHUB_WORKSPACE" CONTAINER=scratch bash scripts/backup/m4-reader-proof.sh
           docker rm -f scratch >/dev/null
 
   failure-signal:

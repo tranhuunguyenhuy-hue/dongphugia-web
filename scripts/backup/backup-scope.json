@@ -1,0 +1,10 @@
+{
+  "contract": "dpg-production-backup-scope",
+  "current_version": 2,
+  "versions": {
+    "1": { "schemas": ["dpg_app", "dpg_control"], "coverage": "limited", "note": "historical M4/M5 bundles before DPG-42; dpg_commerce is NOT covered" },
+    "2": { "schemas": ["dpg_app", "dpg_control", "dpg_commerce"], "coverage": "full", "note": "DPG-42: adds dpg_commerce (orders, quotes, events)" }
+  },
+  "excluded": {},
+  "discovery": { "schema_pattern": "dpg\\_%", "relkinds": ["r", "p"] }
+}

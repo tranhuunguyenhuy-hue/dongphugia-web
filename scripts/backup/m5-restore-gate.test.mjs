@@ -28,3 +28,30 @@ describe('Production restore gate (M5)', () => {
     expect(evaluateRestore({ ...ok, expectedManifest: 'object tables 2\n', restoredManifest: 'object tables 2\n' }).failures).toContain('manifest_missing_acl')
   })
 })
+
+describe('DPG-42 scope v2 gate (commerce coverage)', () => {
+  const v2m = 'object tables 3\nobject sequences 2\nacl dpg_admin_api table_SELECT 5\ndefs functions dpg_commerce abc\nschemaacl dpg_commerce dpg_backup_reader USAGE\nseq dpg_commerce.orders_id_seq\nrole dpg_admin_api\n'
+  const c3 = 'dpg_app.products 2\ndpg_commerce.orders 2\ndpg_control.target_contract 1\n'
+  const content = 'dpg_app.products 2 aa\ndpg_commerce.orders 2 bb\ndpg_control.target_contract 1 cc\n'
+  const owners = 'owner function dpg_commerce_owner secdef dpg_commerce.order_submit(jsonb,text,text)\n'
+  const ok2 = { exitCode: 0, restoreLog: '', expectedCounts: c3, restoredCounts: c3, expectedManifest: v2m, restoredManifest: v2m, scopeVersion: 2,
+    expectedContent: content, restoredContent: content, expectedOwners: owners, restoredOwners: owners }
+  it('passes an exact v2 restore', () => { expect(evaluateRestore(ok2)).toMatchObject({ pass: true, failures: [] }) })
+  it('fails on content, owner or required-kind differences', () => {
+    expect(evaluateRestore({ ...ok2, restoredContent: content.replace('bb', 'xx') }).failures).toContain('content_differs')
+    expect(evaluateRestore({ ...ok2, restoredOwners: owners.replace('dpg_commerce_owner', 'postgres') }).failures).toContain('owners_differ')
+    expect(evaluateRestore({ ...ok2, expectedContent: '' }).failures).toContain('content_missing')
+    expect(evaluateRestore({ ...ok2, expectedOwners: '', restoredOwners: '' }).failures).toContain('owners_missing')
+    const noDefs = v2m.replace(/^defs .*\n/m, '')
+    expect(evaluateRestore({ ...ok2, expectedManifest: noDefs, restoredManifest: noDefs }).failures).toContain('manifest_missing_kind_defs')
+    const noSeq = v2m.replace(/^seq .*\n/m, '')
+    expect(evaluateRestore({ ...ok2, expectedManifest: noSeq, restoredManifest: noSeq }).failures).toContain('manifest_missing_kind_seq')
+    expect(evaluateRestore({ ...ok2, expectedContent: content.replace('orders 2', 'orders 3'), restoredContent: content.replace('orders 2', 'orders 3') }).failures).toContain('content_counts_inconsistent')
+    expect(evaluateRestore({ ...ok2, scopeVersion: 7 }).failures).toContain('scope_version_unknown_7')
+  })
+  it('compares only the kinds a historical v1 bundle recorded (restorable, not upgraded to full)', () => {
+    const v1 = { ...ok, restoredManifest: manifest + 'defs functions dpg_app abc\nseq dpg_app.x_seq\n' }
+    expect(evaluateRestore(v1)).toMatchObject({ pass: true })
+    expect(evaluateRestore({ ...v1, restoredManifest: v1.restoredManifest.replace('object policies 188', 'object policies 187') }).failures).toContain('manifest_differs')
+  })
+})
