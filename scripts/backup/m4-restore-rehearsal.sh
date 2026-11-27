@@ -110,6 +110,8 @@ else
   rc=0; docker exec "$c" pg_restore -U postgres -d "$db" --no-owner /tmp/production.dump > restore.log 2>&1 || rc=$?
 fi
 echo "M4_RESTORE pg_restore_exit=$rc$([ "$rc" = 0 ] || echo " error_class=$(m4_error_class restore.log)")"
+# A failed restore stops here (sanitized class above), before any later check can report a misleading reason.
+[ "$rc" = 0 ] || fail restore_failed
 sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-content.sql" 2>/dev/null | sed '/^$/d' | sort > restored-content.txt
 awk '{print $1" "$2}' restored-content.txt | sort > restored-counts.txt
 sqldb -v schemas="$schemas" -v manifest_version="$version" -f - < "$REPO/scripts/backup/m5-manifest.sql" > restored-objects.txt 2>/dev/null || true

@@ -83,7 +83,7 @@ bundle_orders="$(sed -n 's/^dpg_commerce.orders //p' "$T/b2/row-counts.txt")"
   && ok "B2 order $wcode committed while the snapshot keeper was still open (writes not blocked); snapshot holds the pre-commit 3 orders" || bad "B2 synchronized concurrency (code=$wcode held=$wheld bundle=$bundle_orders)"
 grep -rq -e "$PW" -e "$RPW" "$T/dump.log" "$T/b2" && bad "B3 secret leaked" || ok "B3 no password in log or bundle files"
 grep -rqai -e 'Khach Tong Hop' -e '0910000001' "$T/b2" "$T/dump.log" && bad "B4 row data leaked" || ok "B4 no row data (names/phones) in any bundle file or log (content digests are age-encrypted)"
-[ ! -e "$T/b2/production.dump" ] && [ ! -e "$T/b2/content.txt" ] && [ -s "$T/b2/content.txt.age" ] && ok "B5 plaintext dump and content digests shredded; only .age copies" || bad B5
+[ ! -e "$T/b2/production.dump" ] && [ ! -e "$T/b2/content.txt" ] && [ ! -e "$T/b2/snapshot-control" ] && [ -s "$T/b2/content.txt.age" ] && ok "B5 plaintext dump and content digests shredded; only .age copies" || bad B5
 cp -r "$T/b2" "$T/b2-pristine"
 
 restore() { BUNDLE="$1" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$2" 2>&1; }
@@ -135,13 +135,13 @@ neg "N8 checksum mismatch (owners.txt edited, sums not updated)" "sed -i '1s/\$/
 neg "N9 missing archive" "rm -f production.dump.age" 'checksum_mismatch'
 neg "N10 corrupt archive with recomputed checksum" "head -c 2000 /dev/urandom > production.dump.age; resum" 'decrypt_failed'
 neg "N11 v2 bundle missing security.txt" "rm -f security.txt; sed -i '/security.txt/d' SHA256SUMS" 'v2_file_missing_security'
-neg "N12 truncated archive re-encrypted with matching sha" "age -d -i '$T/key.txt' production.dump.age > p.dump; head -c \$((\$(stat -c %s p.dump)/2)) p.dump > t.dump; sed -i \"s/^plaintext_dump_sha256=.*/plaintext_dump_sha256=\$(sha256sum t.dump | cut -d' ' -f1)/\" manifest.txt; age -r '$AGE_RECIPIENT' -o production.dump.age t.dump; rm -f p.dump t.dump; resum" 'archive_unreadable|toc_inventory_differs|gate'
+neg "N12 truncated archive re-encrypted with matching sha" "age -d -i '$T/key.txt' production.dump.age > p.dump; head -c \$((\$(stat -c %s p.dump)/2)) p.dump > t.dump; sed -i \"s/^plaintext_dump_sha256=.*/plaintext_dump_sha256=\$(sha256sum t.dump | cut -d' ' -f1)/\" manifest.txt; age -r '$AGE_RECIPIENT' -o production.dump.age t.dump; rm -f p.dump t.dump; resum" 'archive_unreadable|toc_inventory_differs|restore_failed'
 neg "N13 row-count mismatch" "sed -i 's/^dpg_commerce.orders [0-9]*/dpg_commerce.orders 999/' row-counts.txt; resum" 'toc_inventory_differs|gate'
 neg "N14 ACL swap with the SAME count (grantee moved between two tables)" "a=\$(grep -n '^tacl dpg_commerce.orders dpg_admin_api SELECT' security.txt | head -1 | cut -d: -f1); b=\$(grep -n '^tacl dpg_commerce.quotes dpg_admin_api SELECT' security.txt | head -1 | cut -d: -f1); sed -i \"\${a}s/dpg_admin_api/dpg_runtime/\" security.txt; sed -i \"\${b}s/dpg_admin_api/dpg_runtime/\" security.txt; resum" 'security_differs'
 neg "N15 RLS flags swapped between two tables (same totals)" "sed -i -E 's/^(rls dpg_commerce.orders) true false$/\\1 true true/; s/^(rls dpg_app.products) true true$/\\1 true false/' security.txt; resum" 'security_differs'
 neg "N16 grant option flipped (same counts)" "sed -i -E '0,/^tacl dpg_commerce.events dpg_admin_api SELECT ([a-z_]+) false$/s//tacl dpg_commerce.events dpg_admin_api SELECT \\1 true/' security.txt; resum" 'security_differs'
-neg "N17 missing platform dependency (no auth.uid stub)" "true" 'gate|platform_prerequisites' "SCRATCH_PREREQS=/dev/null"
-neg "N18 referenced role missing from roles.txt" "sed -i '/^roleexists dpg_commerce_intake\$/d; /^roleattr dpg_commerce_intake /d; / dpg_commerce_intake admin=/d' roles.txt; resum" 'gate|roles_differ'
+neg "N17 missing platform dependency (no auth.uid stub)" "true" 'restore_failed|platform_prerequisites' "SCRATCH_PREREQS=/dev/null"
+neg "N18 referenced role missing from roles.txt" "sed -i '/^roleexists dpg_commerce_intake\$/d; /^roleattr dpg_commerce_intake /d; / dpg_commerce_intake admin=/d' roles.txt; resum" 'role_bootstrap_missing_role|roles_differ'
 neg "N19 sequence definition mismatch" "sed -i -E '0,/^seqdef dpg_commerce.orders_id_seq ([a-z]+) 1 1 /s//seqdef dpg_commerce.orders_id_seq \\1 1 2 /' security.txt; resum" 'security_differs'
 
 # ---- unsafe sequence state (last_value = max, is_called = false would hand out a duplicate id) ----

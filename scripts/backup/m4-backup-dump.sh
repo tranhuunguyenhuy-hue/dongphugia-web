@@ -25,7 +25,9 @@ done_ok=false
 cleanup() {
   cleanup_snapshot_keeper 'ROLLBACK'
   for f in production.dump content.txt toc.txt psql snapshot.id snapshot-control snapshot-keeper.output snapshot-keeper.error session.err dump.err discovered-now.txt; do
-    if [ -e "$WORK/$f" ]; then shred -u "$WORK/$f" 2>/dev/null || rm -f "$WORK/$f"; fi
+    # Only regular files are shredded: shred on the snapshot-control FIFO would block forever waiting for a reader.
+    if [ -f "$WORK/$f" ] && [ ! -L "$WORK/$f" ]; then shred -u "$WORK/$f" 2>/dev/null || rm -f "$WORK/$f"
+    elif [ -e "$WORK/$f" ] || [ -L "$WORK/$f" ]; then rm -f "$WORK/$f"; fi
   done
   if [ "$done_ok" != true ]; then rm -f "$WORK"/production.dump.age "$WORK"/content.txt.age "$WORK"/SHA256SUMS; fi
   return 0
