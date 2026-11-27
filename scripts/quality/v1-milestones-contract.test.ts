@@ -14,7 +14,7 @@ describe('V1 post-M5 agent delivery authority', () => {
     for (const v of [
       '#306',
       'POST-M5 / ACTIVE DEVELOPMENT',
-      'Work only on the issue assigned to you',
+      'Work only on the explicitly assigned task',
       'agent-task.md',
       'serialized',
       'self-merges when every objective gate passes',
@@ -28,7 +28,7 @@ describe('V1 post-M5 agent delivery authority', () => {
     expect(prodDb).toContain('read-only')
     expect(handbook).toContain('#311')
     expect(agents).toContain('Merged is not deployed')
-    expect(agents).toContain('there is no hand-maintained status file')
+    expect(agents).toContain('No duplicate manual progress record')
     expect(claude.trim()).toBe('@AGENTS.md')
   })
 
