@@ -18,8 +18,9 @@ prereqs="${SCRATCH_PREREQS:-$REPO/scripts/backup/scratch-platform-prereqs.sql}"
 source "$REPO/scripts/backup/m4-sanitize.sh"
 ok=false
 cleanup() {
-  ( cd "$BUNDLE" 2>/dev/null && for f in identity.txt production.dump content.txt; do [ -e "$f" ] && { shred -u "$f" 2>/dev/null || rm -f "$f"; }; done ) || true
+  ( cd "$BUNDLE" 2>/dev/null && for f in identity.txt production.dump content.txt; do if [ -e "$f" ]; then shred -u "$f" 2>/dev/null || rm -f "$f"; fi; done ) || true
   if [ "$ok" != true ] && [ "$(docker inspect -f '{{index .Config.Labels "dpg42.scratch"}}' "$c" 2>/dev/null)" = 1 ]; then docker rm -f "$c" >/dev/null 2>&1 || true; fi
+  return 0
 }
 trap cleanup EXIT
 fail() { echo "M4_RESTORE status=FAIL reason=$1"; exit 1; }
@@ -75,16 +76,16 @@ if [ "$version" = 2 ]; then
   while read -r _ r attrs; do
     valid_role "$r" || fail role_name_invalid
     opts="$(sed -E 's/super=true/SUPERUSER/; s/super=false/NOSUPERUSER/; s/inherit=true/INHERIT/; s/inherit=false/NOINHERIT/; s/createrole=true/CREATEROLE/; s/createrole=false/NOCREATEROLE/; s/createdb=true/CREATEDB/; s/createdb=false/NOCREATEDB/; s/login=true/LOGIN/; s/login=false/NOLOGIN/; s/replication=true/REPLICATION/; s/replication=false/NOREPLICATION/; s/bypassrls=true/BYPASSRLS/; s/bypassrls=false/NOBYPASSRLS/; s/connlimit=(-?[0-9]+)/CONNECTION LIMIT \1/' <<<"$attrs")"
-    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$r') then execute format('create role %I', '$r'); end if; end \$\$" >/dev/null
-    sql -c "alter role \"$r\" $opts" >/dev/null
+    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$r') then execute format('create role %I', '$r'); end if; end \$\$" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
+    sql -c "alter role \"$r\" $opts" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
   done < <(grep '^roleattr ' roles.txt)
   while read -r _ r; do valid_role "$r" || [ "$r" = postgres ] || fail role_name_invalid
-    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$r') then execute format('create role %I nologin', '$r'); end if; end \$\$" >/dev/null
+    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$r') then execute format('create role %I nologin', '$r'); end if; end \$\$" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
   done < <(grep '^roleexists ' roles.txt)
   while read -r _ g m a i s; do valid_role "$g" || fail role_name_invalid; valid_role "$m" || [ "$m" = postgres ] || fail role_name_invalid
-    sql -c "grant \"$g\" to \"$m\" with admin ${a#admin=}, inherit ${i#inherit=}, set ${s#set=}" >/dev/null
+    sql -c "grant \"$g\" to \"$m\" with admin ${a#admin=}, inherit ${i#inherit=}, set ${s#set=}" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
   done < <(grep '^member ' roles.txt)
-  sql -c "create database restored" >/dev/null
+  sql -c "create database restored" >/dev/null 2>>bootstrap.err || fail scratch_database_create
   db=restored
 else
   # v1 (historical): unchanged behaviour - NOLOGIN stubs for every referenced role, --no-owner restore into postgres.
@@ -95,7 +96,7 @@ else
   for role in $(printf '%s\n' $roles | sort -u); do
     case "$role" in public|current_user|session_user|current_role|pg_*) continue;; esac
     valid_role "$role" || fail role_name_invalid
-    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$role') then execute format('create role %I nologin', '$role'); end if; end \$\$" >/dev/null
+    sql -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = '$role') then execute format('create role %I nologin', '$role'); end if; end \$\$" >/dev/null </dev/null 2>>bootstrap.err || fail "role_bootstrap_$(m4_error_class bootstrap.err)"
   done
   db=postgres
 fi
@@ -133,6 +134,6 @@ SQL
 fi
 node "$REPO/scripts/backup/m5-restore-gate.mjs" "$rc" restore.log row-counts.txt restored-counts.txt objects.txt restored-objects.txt \
   --scope-version "$version" --coverage "$coverage" "${gate_args[@]}" || fail gate
-rm -f restore.log prereq.err restored-content.txt
+rm -f restore.log prereq.err bootstrap.err restored-content.txt
 ok=true
 echo "M4_RESTORE status=PASS scope_version=$version coverage=$coverage schemas=$schemas database=$db tables=$(wc -l < row-counts.txt) counts=identical objects_acl=identical$([ "$version" = 2 ] && echo ' content=identical owners=identical security=identical roles=identical ownership_preserving=true')"

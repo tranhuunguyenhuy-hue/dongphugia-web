@@ -17,7 +17,7 @@ PW="$(openssl rand -hex 16)"; RPW="$(openssl rand -hex 16)"; OPW="$(openssl rand
 pass=0; fail=0; results=()
 ok() { pass=$((pass+1)); results+=("PASS $1"); echo "PASS $1"; }
 bad() { fail=$((fail+1)); results+=("FAIL $1"); echo "FAIL $1"; }
-cleanup() { docker rm -f "$SRC" "$SCR" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; rm -rf "$T"; }
+cleanup() { [ -n "${DPG42_KEEP:-}" ] && { echo "KEPT $T $SRC $NET"; return 0; }; docker rm -f "$SRC" "$SCR" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; rm -rf "$T"; }
 trap cleanup EXIT
 docker network create --internal --label dpg42.scratch=1 "$NET" >/dev/null
 docker run -d --name "$SRC" --label dpg42.scratch=1 --network "$NET" -e POSTGRES_PASSWORD="$PW" "$POSTGRES_IMAGE" >/dev/null
@@ -87,6 +87,7 @@ grep -rqai -e 'Khach Tong Hop' -e '0910000001' "$T/b2" "$T/dump.log" && bad "B4 
 cp -r "$T/b2" "$T/b2-pristine"
 
 restore() { BUNDLE="$1" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$2" 2>&1; }
+[ -n "${DPG42_STOP_BEFORE_RESTORE:-}" ] && exit 0
 if restore "$T/b2" "$T/r2.log"; then ok "R1 $(grep -o 'M4_RESTORE status=PASS.*' "$T/r2.log" | cut -c1-200)"; else cat "$T/r2.log"; bad R1; fi
 grep -q 'database=restored' "$T/r2.log" && grep -q 'ownership_preserving=true' "$T/r2.log" && grep -q 'security=identical roles=identical' "$T/r2.log" \
   && ok "R2 single ownership-preserving restore is the gate: counts, content, objects, owners, per-object security, roles identical" || bad R2

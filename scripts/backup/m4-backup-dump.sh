@@ -25,9 +25,10 @@ done_ok=false
 cleanup() {
   cleanup_snapshot_keeper 'ROLLBACK'
   for f in production.dump content.txt toc.txt psql snapshot.id snapshot-control snapshot-keeper.output snapshot-keeper.error session.err dump.err discovered-now.txt; do
-    [ -e "$WORK/$f" ] && { shred -u "$WORK/$f" 2>/dev/null || rm -f "$WORK/$f"; }
+    if [ -e "$WORK/$f" ]; then shred -u "$WORK/$f" 2>/dev/null || rm -f "$WORK/$f"; fi
   done
   if [ "$done_ok" != true ]; then rm -f "$WORK"/production.dump.age "$WORK"/content.txt.age "$WORK"/SHA256SUMS; fi
+  return 0
 }
 trap cleanup EXIT
 fail() { echo "M4_BACKUP status=FAIL stage=$1${2:+ reason=$2}"; exit 1; }
@@ -82,3 +83,4 @@ rm -f "$WORK/discovered.txt"
 ( cd "$WORK" && sha256sum production.dump.age content.txt.age manifest.txt row-counts.txt objects.txt scope.json owners.txt security.txt roles.txt > SHA256SUMS )
 done_ok=true
 echo "M4_BACKUP status=PASS stage=dump scope_version=$scope_version schemas=$schemas tables=$tables dump_sha256=$dump_sha encrypted_bytes=$(stat -c %s "$WORK/production.dump.age")"
+exit 0
