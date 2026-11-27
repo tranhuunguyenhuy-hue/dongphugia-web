@@ -1,8 +1,8 @@
-# Đông Phú Gia — Master Roadmap v1.2
-Owner-approved 2026-11-27 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Of the 104 decisions in rounds 1–6, v1.2 supersedes 1.8, 4.14, 4.24 and 6.8 to preserve every phase record while deriving publication and SEO from the new IA. [Owner decision](https://tranhuunguyenhuy.atlassian.net/browse/DPG-6?focusedCommentId=10027) · [Approved disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-22?focusedCommentId=10032). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
+# Đông Phú Gia — Master Roadmap v1.3
+Owner-approved 2026-11-27 · 120 decision IDs across seven rounds; v1.1 supersedes Linear governance in round 7 after Owner-accepted Jira connector pilot (DPG-1–DPG-4). Of the 104 decisions in rounds 1–6, v1.2 superseded 1.8, 4.14, 4.24 and 6.8 to preserve every phase record while deriving publication and SEO from the new IA. v1.3 applies Owner decisions D-D01–03 (inventory out of scope; discontinued catalogue retirement; existing price accepted) and amends 1.4, 3.4, 3.9, 3.13, 3.24, 4.14 and 6.8, plus the vision and the price/transaction wording in the acceptance boundaries; no decision ID is added or removed. [Owner decision v1.2](https://tranhuunguyenhuy.atlassian.net/browse/DPG-6?focusedCommentId=10027) · [Approved disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-22?focusedCommentId=10032) · [Owner decision D-D01–03](https://tranhuunguyenhuy.atlassian.net/browse/DPG-25?focusedCommentId=10048) · [TL disposition](https://tranhuunguyenhuy.atlassian.net/browse/DPG-25?focusedCommentId=10046). **Target direction, not deployed state or blanket authorization to implement.** V1 only. Project 00 authorized; no product-module kickoff before readiness. No V2. This stable contract is the versioned decision register; Jira will hold live tasks, checkpoints and progress after cutover. Do not maintain progress in this file.
 
 ## Vision and scope
-Build a specialized sanitary-ware commerce website centered on products: discover, evaluate, order/request quotes and track transactions, with lean sustainable information, data, UX and operations. Preserve business continuity, identity and transaction history. Rebuild information architecture and SEO sitemap from first principles, not legacy SEO constraints. Preserve brand identity, selectively reuse V1. No ERP, compulsory customer account, default infrastructure expansion, or automatic stock/shipping promises.
+Build a specialized sanitary-ware commerce website centered on products: discover, evaluate, order/request quotes and track transactions, with lean sustainable information, data, UX and operations. Preserve business continuity, identity and transaction history. Rebuild information architecture and SEO sitemap from first principles, not legacy SEO constraints. Preserve brand identity, selectively reuse V1. No ERP, compulsory customer account, default infrastructure expansion, inventory management or stock display, or automated shipping promises.
 
 ## Roadmap (one Jira project DPG; eight Epics)
 Each roadmap project maps to one Jira Epic and owns its deliverable. No arbitrary dates. Checkpoints guide work, not automatic authorization. Create Jira Tasks/Subtasks just in time. IA and BA inform data and UX; design-system and data work can iterate with UX, then implement vertical slices; measure baseline before material changes. Project 03 technical pilot and Project 06 R0 share evidence, not duplicated implementation; Project 04 framework pilot evaluates components, not a production migration.
@@ -27,7 +27,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 1.1 C: Hybrid commerce: direct order and negotiated quotation, based on eligibility.
 - 1.2 D: Whole discovery-to-purchase funnel; meaningful transactions and leads over traffic alone; baseline before numerical KPIs.
 - 1.3 C: B2C primary, separate B2B/contractor flow where needed; shared catalogue.
-- 1.4 C: Sanitary ware only; other industries excluded until Owner changes scope; preserve/archive valuable historical data, no irreversible deletion authority.
+- 1.4 C: Sanitary ware only; other industries excluded until Owner changes scope; preserve/archive valuable historical data. No irreversible deletion authority except the Owner-authorized retirement of discontinued catalogue records under 4.14 and 6.8; out-of-scope sectors are never deleted on that basis.
 - 1.5 C: Reorganize Admin by business domain with public releases.
 - 1.6 C: Selective V1 reuse and module rebuild, no independent V2.
 - 1.7 B: Paid productivity tools only with Owner approval; default incremental infrastructure budget $0.
@@ -53,16 +53,16 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 3.1 B: Exact SKU preferred; general results via listing/filter; no ambiguous auto-redirect.
 - 3.2 B: Select actual SKU before cart/order; quick add only if unambiguous.
 - 3.3 B: Compare comparable products with normalized attributes; favorites backlog; compare not first-release gate.
-- 3.4 E: Add to cart continues shopping; order now bypasses cart for selected SKU/qty and preserves existing cart; both require valid eligible price. Separate negotiated quote CTA; unpriced eligible SKU quote-only; final copy deferred.
+- 3.4 E: Add to cart continues shopping; order now bypasses cart for selected SKU/qty and preserves existing cart; both require an existing usable price under 4.14. Separate negotiated quote CTA; unpriced eligible SKU quote-only; final copy deferred.
 - 3.5 B: Unified cart, order or RFQ by eligibility.
 - 3.6 A: Regular/list, promotional/sale, fixed online voucher (apply once in retail cart/checkout); derived final price; negotiated price separate, no automatic voucher.
 - 3.7 C: Guest only, contact per transaction; staff auth remains.
 - 3.8 A: One-page checkout.
-- 3.9 B: Receipt records pending staff confirmation of supply/fees, not confirmed order.
+- 3.9 B: Receipt records pending staff confirmation of fees and transaction details, not confirmed order; no separate stock-check gate.
 - 3.10 B: COD or transfer/QR, no complex gateway; proof before paid.
 - 3.11 B: Structured RFQ SKU/quantity, staff quote versions/expiry; no ERP/B2B accounts.
 - 3.12 B: Accepted specific quote version converts to one order; staff may record acceptance evidence.
-- 3.13 A: No stock display or automated shipping commitment; staff confirms.
+- 3.13 A: Inventory is out of scope: no stock quantity or status display, inventory integration, stock verification or automated shipping commitment. Legacy stock_status is not an availability rule; staff handle transaction processing.
 - 3.14 B: Separate order/payment/fulfillment/quote lifecycles, not workflow engine.
 - 3.15 B: Secure private tracking URL/ownership verification, revocation, no indexing or code-only lookup.
 - 3.16 B: Key milestone notifications through approved channels, not all updates/marketing.
@@ -73,7 +73,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 3.21 B: Optional desired price per SKU, quantity mandatory.
 - 3.22 B: Private quote URL to view versions/accept/request adjustments; staff records external negotiation, no real-time chat.
 - 3.23 B: Revalidate before submit and snapshot; subsequent changes require notification/acceptance; no voucher on accepted quote.
-- 3.24 B: Staff confirms supply and full costs before transfer/QR instructions; COD delivery; proof before paid.
+- 3.24 B: Staff confirms full costs and transaction details before transfer/QR instructions; COD delivery; proof before paid.
 
 ### 4 — Product & Data Architecture (24)
 - 4.1 RC: Functional Product-centric architecture: meaningful function/install differences are separate Products; 1:N exact SKU, including singleton.
@@ -89,7 +89,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 4.11 B: Same eligible SKU must satisfy all SKU filters; OR within facet, AND across; count Products.
 - 4.12 B: Shared catalogue query/API contract; measured need before read model/external index.
 - 4.13 B: Price on SKU; derived representative/range at Product, no independently edited product price.
-- 4.14 B: Every record in the target plan is Active regardless of legacy status. Define publication, discovery, sale, quote and index eligibility separately under the new business rules. Active alone establishes neither publication nor price, stock or eligibility to transact. Keep valid, contact and unverified price states distinct and never use zero for an unknown price.
+- 4.14 B: Every retained record in the target plan is Active regardless of legacy active/inactive status. Records with an explicit discontinued status are retired under 6.8, not retained. Define publication, discovery, sale, quote and index eligibility separately under the new business rules; Active alone establishes none of them. An existing usable positive retail unit price on a retained eligible SKU is accepted as its initial sale price without further source verification; provenance is kept as audit metadata and the legacy contact/unknown price-state flag does not block it. Zero, null, invalid or non-price values are unpriced (quote-only if independently RFQ-eligible); never use zero for an unknown price. Normalize price fields deterministically by list, sale and promotional semantics; never invent a price, treat a reference-only value as a sale price without a rule, or discount twice. Unresolved contradictory amounts are data exceptions to resolve before use. Server-side validation at submit remains (3.23, 4.15).
 - 4.15 B: Guest cart local/session preferred; server authoritative SKU, price and eligibility revalidation; persistence only as needed.
 - 4.16 B: Order and Quotation separate entities/lines/snapshots/lifecycles; link accepted version.
 - 4.17 B: Transaction snapshots, immutable sent quote versions and meaningful change history; no global Event Sourcing.
@@ -131,7 +131,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 6.5 B: Vertical slices; foundation → catalogue → discovery → PDP → retail → negotiated → tracking → content; adapt dependency order.
 - 6.6 B: Capability-based release, group tight dependencies, no forced release per PR.
 - 6.7 B: Expand–Migrate–Switch–Contract preferred; approved maintenance cutover if compatibility/capacity prevents.
-- 6.8 B: Normalize TOTO and INAX first, including every record and converting legacy inactive to target Active in the migration plan. Select phase brands by verified ID and keep the architecture extensible. Retain other brands’ data and defer their synchronization to the final rollout phase. Preserve data, provenance and history. Retain sector and D2 conflicts for explicit scope review under 1.4. Reconcile each phase before safe cutover under 4.22 and the existing release gates.
+- 6.8 B: Normalize TOTO and INAX first, including every record and converting legacy inactive to target Active in the migration plan, except records with an explicit discontinued status. Owner authorizes the business policy of deleting those from the database, starting in this phase; only unambiguous cases qualify, and inactive status, missing price, a name signal or an out-of-scope sector never equals discontinued. Deletion runs only through the controlled release lane: exact reviewed ID list, dependency and consumer checks including transaction references, recoverable backup and restore, TEST rehearsal and reconciliation, Owner destructive STEP-GO and Production GO. Preserve raw audit and recovery evidence, transaction snapshots and history, and retained products; no broad cascade, no transaction deletion. Select phase brands by verified ID and keep the architecture extensible. Retain other brands’ data and defer their synchronization to the final rollout phase. Preserve data, provenance and history. Retain sector and D2 conflicts for explicit scope review under 1.4. Reconcile each phase before safe cutover under 4.22 and the existing release gates.
 - 6.9 B: One authoritative reader/writer per datum/phase; reconcile delta writes; explicit cutover.
 - 6.10 B: Prefer uninterrupted service; Owner-approved scoped maintenance window if needed.
 - 6.11 B: Risk-based QA, required gates remain; integration and E2E appropriate to risks.
@@ -158,7 +158,7 @@ Decision IDs retain the Owner-approved choices; RC/RB replace earlier choices. S
 - 7.16 v1.1: Governance setup, backlog reconciliation, reviewed docs, safe agent handoff and Owner readiness acceptance before kickoff.
 
 ## Acceptance, security and integration boundaries
-Design, schema, exact migration and library decisions remain to be validated; no automatic authority to execute hosted writes. Price and transaction state from verified source, never invented. All previous runtime safety and identity/slug contracts apply until specific approved replacement; historical order snapshots and IDs persist. TEST uses public/synthetic data, never customer PII. Maintain least privilege, rollback/forward recovery and exact candidate evidence. No production mutations authorized here.
+Design, schema, exact migration and library decisions remain to be validated; no automatic authority to execute hosted writes. Price and transaction state come from existing source fields under 4.14, never invented; no manufacturer or retailer re-verification is required. All previous runtime safety and identity/slug contracts apply until specific approved replacement; historical order snapshots and IDs persist. TEST uses public/synthetic data, never customer PII. Maintain least privilege, rollback/forward recovery and exact candidate evidence. No production mutations authorized here.
 
 Jira will own scope, priorities, dependencies and acceptance; GitHub remains authoritative for code, PR/CI, live release evidence and direct Owner approvals. While Project 00 is not accepted, retain existing authorized GitHub execution routes; no independent duplicated backlog. After cutover, engineering work links its Jira identifier/URL and GitHub PR; if an agent cannot access Jira, Tech Lead supplies one scoped linked GitHub handoff, not a second work authority. Only direct GitHub release issues/comments count for release gates. No bidirectional issue sync, copied release commands, auto-close on merge, automatic deployment, or custom integration service. Preserve release runbooks unchanged. Freeze unrelated merges during exact-SHA full release. UAT on locked SHA and Owner GO as existing pipeline requires. #511 hosted isolated SQL pilot passed; multi-batch hosted/function/worker/full Production chain remains unverified until relevant release. No CI/CD changes needed for this roadmap.
 
