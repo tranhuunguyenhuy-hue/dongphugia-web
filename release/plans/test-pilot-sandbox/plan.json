@@ -22,7 +22,7 @@
       },
       "privileged": true,
       "statement_timeout_s": 60,
-      "note": "Creates schema dpg_pilot, roles dpg_pilot_rw/dpg_pilot_ro (NOLOGIN, no BYPASSRLS, USAGE on dpg_pilot only), a registry and a baseline fingerprint of everything else. Rollback (S4) is a separately approved, registry-scoped cleanup that refuses on unregistered objects or foreign dependents."
+      "note": "Creates schema dpg_pilot, roles dpg_pilot_rw/dpg_pilot_ro (NOLOGIN, no BYPASSRLS, USAGE on dpg_pilot only), a registry and a baseline of everything else taken before the first DDL. The rollback SQL is an S4 DRAFT: not authorised in S2, never executed by it."
     }
   ]
 }
