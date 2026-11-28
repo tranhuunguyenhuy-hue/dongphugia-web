@@ -90,7 +90,8 @@ describe('DPG-42 trusted backup scope', () => {
     })
     it('exports only reviewed role settings and never echoes a value', () => {
       const ok = ['statement_timeout=5s', 'statement_timeout=15min', 'lock_timeout=3s', 'idle_in_transaction_session_timeout=10s', 'default_transaction_read_only=on',
-        'application_name=dpg-runtime', 'search_path=dpg_app', 'search_path=dpg_app, public', 'search_path="$user", public']
+        'application_name=dpg-runtime', 'application_name=dpg-readonly', 'row_security=off', 'row_security=on', 'search_path=dpg_app', 'search_path=dpg_app, public', 'search_path="$user", public',
+        'search_path=pg_catalog, dpg_app, dpg_control, dpg_commerce, public, auth, extensions, pg_temp']
       for (const kv of ok) expect(checkRolesFile(c, 2, [`rolesetting dpg_runtime ${kv}`]), kv).toEqual({ ok: true })
       const secret = 'sk-live-synthetic-secret'
       const cases = [
@@ -99,6 +100,13 @@ describe('DPG-42 trusted backup scope', () => {
         [`rolesetting dpg_runtime statement_timeout=${secret}`, 'role_setting_value_rejected'],
         ['rolesetting dpg_runtime search_path=dpg_app; drop table x', 'role_setting_value_rejected'],
         ['rolesetting dpg_runtime search_path=Dpg_App', 'role_setting_value_rejected'],
+        [`rolesetting dpg_runtime search_path=dpg_app, ${secret}`, 'role_setting_value_rejected'],
+        ['rolesetting dpg_runtime search_path=dpg_app_extra', 'role_setting_value_rejected'],
+        ['rolesetting dpg_runtime search_path=$user, public', 'role_setting_value_rejected'],
+        ['rolesetting dpg_runtime row_security=maybe', 'role_setting_value_rejected'],
+        ['rolesetting dpg_runtime row_security=1', 'role_setting_value_rejected'],
+        [`rolesetting dpg_runtime row_security=${secret}`, 'role_setting_value_rejected'],
+        ['rolesetting dpg_runtime Row_Security=off', 'role_setting_unreviewed'],
         [`rolesetting_rejected dpg_runtime app.api_key name_unreviewed`, 'role_setting_unreviewed'],
         [`rolesetting_rejected dpg_runtime application_name value_rejected`, 'role_setting_value_rejected'],
       ]
@@ -108,8 +116,13 @@ describe('DPG-42 trusted backup scope', () => {
         expect(JSON.stringify(r)).not.toContain(secret)
       }
     })
-    it('keeps the allowlist reviewed: exactly the setting names already defined by repo migrations', () => {
-      expect(Object.keys(roleSettingsAllow(c, 2)).sort()).toEqual(['application_name', 'default_transaction_read_only', 'idle_in_transaction_session_timeout', 'lock_timeout', 'search_path', 'statement_timeout'])
+    it('keeps the allowlist reviewed: the setting names of the Production precheck crosswalk and nothing else', () => {
+      expect(Object.keys(roleSettingsAllow(c, 2)).sort()).toEqual(['application_name', 'default_transaction_read_only', 'idle_in_transaction_session_timeout', 'lock_timeout', 'row_security', 'search_path', 'statement_timeout'])
+    })
+    it('accepts one line per reviewed setting name (Production crosswalk) and rejects a v1-style export of anything else', () => {
+      const crosswalk = ['statement_timeout=15s', 'lock_timeout=3s', 'idle_in_transaction_session_timeout=15s', 'default_transaction_read_only=on', 'row_security=off', 'application_name=dpg-migration', 'search_path=dpg_app']
+      expect(checkRolesFile(c, 2, crosswalk.map((kv) => `rolesetting dpg_m2_snapshot_read ${kv}`))).toEqual({ ok: true })
+      expect(checkRolesFile(c, 1, ['rolesetting dpg_runtime statement_timeout=5s'])).toMatchObject({ ok: false, reason: 'role_setting_unreviewed' })
     })
   })
 })

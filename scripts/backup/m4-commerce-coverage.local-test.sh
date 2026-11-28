@@ -52,6 +52,17 @@ SQL
 src >/dev/null <<'SQL'
 create role dpg_direct_read nologin;
 grant usage on schema dpg_app to dpg_direct_read;
+-- dpg_m2_snapshot_read carries the full Production setting-name crosswalk reported by the TL precheck (10178): the three timeouts,
+-- default_transaction_read_only, row_security, a reviewed application_name and a reviewed search_path
+create role dpg_m2_snapshot_read nologin;
+grant usage on schema dpg_control to dpg_m2_snapshot_read;
+alter role dpg_m2_snapshot_read set statement_timeout = '15s';
+alter role dpg_m2_snapshot_read set lock_timeout = '3s';
+alter role dpg_m2_snapshot_read set idle_in_transaction_session_timeout = '15s';
+alter role dpg_m2_snapshot_read set default_transaction_read_only = on;
+alter role dpg_m2_snapshot_read set row_security = off;
+alter role dpg_m2_snapshot_read set application_name = 'dpg-migration';
+alter role dpg_m2_snapshot_read set search_path = 'dpg_app';
 do $$ declare g text; begin
   foreach g in array array['dpg_admin_api','dpg_migration','dpg_readonly','dpg_runtime','dpg_direct_read','dpg_direct_import'] loop
     execute format('grant %I to postgres with admin true, inherit false, set false', g);
@@ -113,15 +124,15 @@ grep -rqai -e 'Khach Tong Hop' -e '0910000001' "$T/b2" "$T/dump.log" && bad "B4 
 [ ! -e "$T/b2/production.dump" ] && [ ! -e "$T/b2/content.txt" ] && [ ! -e "$T/b2/snapshot-control" ] && [ -s "$T/b2/content.txt.age" ] && ok "B5 plaintext dump and content digests shredded; only .age copies" || bad B5
 # D2: a role setting that is not on the reviewed allowlist (by name, or by value) must never reach the plaintext roles.txt or any log;
 # the backup fails closed with names only. Both cases use secret-looking synthetic values and are reset afterwards.
-src -c "alter role dpg_runtime set application_name = 'leaky-synthetic-secret'; alter role dpg_readonly set \"app.api_key\" = 'sk-live-synthetic-secret'" >/dev/null
+src -c "alter role dpg_runtime set application_name = 'leaky-synthetic-secret'; alter role dpg_readonly set \"app.api_key\" = 'sk-live-synthetic-secret'; alter role dpg_m2_snapshot_read set search_path = 'dpg_app, sk_live_synthetic_secret_path'" >/dev/null
 rm -rf "$T/b3"
 if DATABASE_URL="$DBURL" WORK="$T/b3" timeout 600 bash "$REPO/scripts/backup/m4-backup-dump.sh" > "$T/d3.log" 2>&1; then bad "D2 backup passed with unreviewed role settings"
-elif grep -rqE 'leaky-synthetic-secret|sk-live-synthetic-secret' "$T/d3.log" "$T/b3" 2>/dev/null; then bad "D2 role-setting VALUE leaked into the log or workspace"
+elif grep -rqE 'leaky-synthetic-secret|sk-live-synthetic-secret|sk_live_synthetic_secret_path' "$T/d3.log" "$T/b3" 2>/dev/null; then bad "D2 role-setting VALUE leaked into the log or workspace"
 elif [ -e "$T/b3/production.dump.age" ] || [ -e "$T/b3/SHA256SUMS" ]; then bad "D2 bundle produced despite unreviewed role settings"
-elif grep -q 'stage=completeness reason=role_setting_' "$T/d3.log" && grep -Eq 'role=[a-z_]+ setting=[a-z_.]+' "$T/d3.log"; then
-  ok "D2 unreviewed role settings fail the backup before encryption: names only ($(grep -Eo 'role=[a-z_]+ setting=[a-z_.]+' "$T/d3.log" | head -1)), no value in log or workspace, no bundle"
+elif grep -q 'stage=completeness reason=role_setting_' "$T/d3.log" && grep -Eq 'role=[a-z0-9_]+ setting=[a-z0-9_.]+' "$T/d3.log"; then
+  ok "D2 unreviewed role settings fail the backup before encryption: names only ($(grep -Eo 'role=[a-z0-9_]+ setting=[a-z0-9_.]+' "$T/d3.log" | head -1)), no value in log or workspace, no bundle"
 else cat "$T/d3.log"; bad "D2 unexpected reason"; fi
-src -c "alter role dpg_runtime reset application_name; alter role dpg_readonly reset \"app.api_key\"" >/dev/null
+src -c "alter role dpg_runtime reset application_name; alter role dpg_readonly reset \"app.api_key\"; alter role dpg_m2_snapshot_read set search_path = 'dpg_app'" >/dev/null
 cp -r "$T/b2" "$T/b2-pristine"
 
 restore() { BUNDLE="$1" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$2" 2>&1; }
@@ -159,6 +170,13 @@ if [ "$(grep -c '^platform_edge ' "$T/b2/roles.txt")" = 12 ] && ! grep -q '^memb
    && [ "$(rs -c "select count(*) from pg_auth_members am join pg_roles m on m.oid = am.member where m.rolname = 'postgres'")" = 0 ]; then
   ok "R11 provider-controlled edges: 12 platform_edge rows (6 groups x 2 grantors) recorded with grantor and options, none replayed, none collapsed into an elevated edge"
 else bad R11; fi
+# R12: the whole Production setting-name crosswalk (incl. row_security and search_path) is exported once per setting, passes the allowlist
+# on the real dump and is reproduced exactly by the owned restore (the roles comparison in the gate is identical as well)
+want='application_name=dpg-migration,default_transaction_read_only=on,idle_in_transaction_session_timeout=15s,lock_timeout=3s,row_security=off,search_path=dpg_app,statement_timeout=15s'
+got="$(rs -c "select array_to_string(array(select x from unnest(setconfig) x order by 1), ',') from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where r.rolname = 'dpg_m2_snapshot_read' and s.setdatabase = 0")"
+if [ "$got" = "$want" ] && [ "$(grep -c '^rolesetting dpg_m2_snapshot_read ' "$T/b2/roles.txt")" = 7 ] && ! grep -q '^rolesetting_rejected' "$T/b2/roles.txt"; then
+  ok "R12 Production setting crosswalk (statement/lock/idle timeouts, default_transaction_read_only, row_security, application_name, search_path): 7 settings exported by name and reviewed value, reproduced exactly by the owned restore"
+else bad "R12 ($got)"; fi
 if REPO="$REPO" bash "$REPO/scripts/backup/m4-reader-proof.sh" > "$T/proof.log" 2>&1; then ok "L1 reader proof PASS: identical dump inventory, $(grep -c 'DENIED sqlstate=42501' "$T/proof.log") denials with SQLSTATE 42501 (read-only default off), BYPASSRLS required"; else cat "$T/proof.log"; bad L1; fi
 
 # ---- historical v1 bundle produced exactly like the pinned base revision (2 schemas, no scope.json) ----
@@ -214,8 +232,12 @@ neg "N44 provider edge that lost its grantor" "sed -i 's/^platform_edge dpg_runt
 neg "N45 ambiguous app edge (two grantors for one non-provider pair)" "printf 'member_conflict dpg_commerce_intake dpg_order_intake_login\n' >> roles.txt; resum" 'role_edge_multi_grantor_unsupported'
 neg "N46 unreviewed role setting in roles.txt" "printf 'rolesetting dpg_runtime app.api_key=sk-live-synthetic-secret\n' >> roles.txt; resum" 'role_setting_unreviewed'
 cp "$T/n.log" "$T/n46.log"
+neg "N48 row_security with a value outside the reviewed boolean shape" "printf 'rolesetting dpg_m2_snapshot_read row_security=maybe\n' >> roles.txt; resum" 'role_setting_value_rejected'
+cp "$T/n.log" "$T/n48.log"
+neg "N49 search_path carrying a token outside the reviewed schema set" "printf 'rolesetting dpg_m2_snapshot_read search_path=dpg_app, sk_live_synthetic_secret_path\n' >> roles.txt; resum" 'role_setting_value_rejected'
+cp "$T/n.log" "$T/n49.log"
 neg "N47 role setting value outside the reviewed shape" "printf 'rolesetting dpg_runtime application_name=leaky-synthetic-secret\n' >> roles.txt; resum" 'role_setting_value_rejected'
-if grep -qE 'sk-live-synthetic-secret|leaky-synthetic-secret' "$T/n.log" "$T/n46.log"; then bad "N46/N47 setting VALUE echoed in restore output"; else ok "N46/N47 restore output names the setting only, never its value"; fi
+if grep -qE 'sk-live-synthetic-secret|leaky-synthetic-secret|sk_live_synthetic_secret_path' "$T/n.log" "$T/n46.log" "$T/n48.log" "$T/n49.log"; then bad "N46/N47 setting VALUE echoed in restore output"; else ok "N46/N47 restore output names the setting only, never its value"; fi
 neg "N18 referenced role missing from roles.txt" "sed -i '/^roleexists dpg_commerce_intake\$/d; /^roleattr dpg_commerce_intake /d; / dpg_commerce_intake admin=/d' roles.txt; resum" 'role_bootstrap_missing_role|roles_differ'
 neg "N19 sequence definition mismatch" "sed -i -E '0,/^seqdef dpg_commerce.orders_id_seq ([a-z]+) 1 1 /s//seqdef dpg_commerce.orders_id_seq \\1 1 2 /' security.txt; resum" 'security_differs'
 

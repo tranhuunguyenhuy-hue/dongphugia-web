@@ -55,11 +55,15 @@
   `backup-scope.json` (`supabase_admin` ADMIN-only; `postgres` INHERIT+SET; `postgres` all-false). Any other shape - for example
   `postgres` holding ADMIN through its own grant - fails the restore (`platform_edge_unreviewed`) instead of being collapsed into an
   elevated edge. Two rows for the same pair between non-provider roles are `member_conflict` and fail closed. Whether Production
-  still has exactly these edges is a platform prerequisite confirmed by the read-only precheck, not by the bundle.
+  still has exactly these edges is a platform prerequisite confirmed by the read-only precheck, not by the bundle. **Validating each
+  recorded shape does not prove that no provider edge is missing**: completeness against the provider's grant inventory is checked by
+  the separately authorized read-only revalidation before the operational GO package, never inferred from the bundle.
 - **Role settings are allowlisted before they reach plaintext metadata.** Only these names, with values matching the reviewed
   pattern in `backup-scope.json`, are written to `roles.txt`: `statement_timeout`, `lock_timeout`,
-  `idle_in_transaction_session_timeout` (duration), `default_transaction_read_only` (boolean), `application_name`
-  (`dpg-migration`, `dpg-runtime`, `dpg-readonly`) and `search_path` (identifier list). The filter is applied in the SQL itself, so
+  `idle_in_transaction_session_timeout` (duration), `default_transaction_read_only` and `row_security` (boolean `on|off|true|false`,
+  exported as-is, never altered), `application_name` (`dpg-migration`, `dpg-runtime`, `dpg-readonly`) and `search_path` (only the
+  reviewed schema tokens `pg_catalog`, `dpg_app`, `dpg_control`, `dpg_commerce`, `public`, `auth`, `extensions`, `pg_temp` and the
+  literal quoted `"$user"`, so an arbitrary token-shaped string cannot pass into plaintext). The filter is applied in the SQL itself, so
   an unreviewed setting never leaves the database; it is reported as `rolesetting_rejected <role> <name> name_unreviewed|value_rejected`
   (name only, never the value) and fails the backup before encryption and upload. The restore re-validates the file before it
   creates any role. Adding a setting needs a reviewed change to the contract. Per-database role settings are not exported.

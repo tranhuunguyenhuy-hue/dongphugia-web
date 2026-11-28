@@ -59,14 +59,15 @@
         }
       ],
       "role_settings": {
-        "statement_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
-        "lock_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
-        "idle_in_transaction_session_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
-        "default_transaction_read_only": "^(on|off|true|false)$",
         "application_name": "^(dpg-migration|dpg-runtime|dpg-readonly)$",
-        "search_path": "^(\"[$]user\"|[a-z_][a-z0-9_]*)(, ?(\"[$]user\"|[a-z_][a-z0-9_]*)){0,7}$"
+        "default_transaction_read_only": "^(on|off|true|false)$",
+        "idle_in_transaction_session_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
+        "lock_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
+        "row_security": "^(on|off|true|false)$",
+        "search_path": "^(\"[$]user\"|pg_catalog|dpg_app|dpg_control|dpg_commerce|public|auth|extensions|pg_temp)(, ?(\"[$]user\"|pg_catalog|dpg_app|dpg_control|dpg_commerce|public|auth|extensions|pg_temp)){0,8}$",
+        "statement_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$"
       },
-      "role_settings_note": "Only these setting names with values matching the pattern are exported to the plaintext roles.txt; anything else fails the backup (name only is reported, never the value). Adding a setting needs a reviewed change here."
+      "role_settings_note": "Only these setting names with values matching the pattern are exported to the plaintext roles.txt; anything else fails the backup (name only is reported, never the value). search_path accepts only the reviewed schema tokens (pg_catalog, dpg_app, dpg_control, dpg_commerce, public, auth, extensions, pg_temp and the literal quoted $user); row_security is boolean. Adding a setting or a token needs a reviewed change here."
     }
   },
   "excluded": {},
