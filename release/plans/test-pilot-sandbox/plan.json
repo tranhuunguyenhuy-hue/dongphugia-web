@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "id": "test-pilot-sandbox",
+  "issue": 47,
+  "title": "TEST-only 03.9 pilot sandbox (S2): additive private namespace dpg_pilot + two NOLOGIN roles on the Staging TEST project; no data, no function, no change to any existing object",
+  "test_only": true,
+  "compatibility": {
+    "old_worker_with_new_schema": true,
+    "new_worker_with_old_schema": true
+  },
+  "steps": [
+    {
+      "id": "create-sandbox",
+      "type": "sql",
+      "depends_on": [],
+      "sql": "001-create-sandbox.sql",
+      "precheck": "001-create-sandbox.pre.sql",
+      "postcheck": "001-create-sandbox.post.sql",
+      "rollback": {
+        "kind": "sql",
+        "sql": "001-create-sandbox.rollback.sql"
+      },
+      "privileged": true,
+      "statement_timeout_s": 60,
+      "note": "Creates schema dpg_pilot, roles dpg_pilot_rw/dpg_pilot_ro (NOLOGIN, no BYPASSRLS, USAGE on dpg_pilot only), a registry and a baseline fingerprint of everything else. Rollback (S4) is a separately approved, registry-scoped cleanup that refuses on unregistered objects or foreign dependents."
+    }
+  ]
+}
