@@ -13,6 +13,8 @@ mkdir -p "$WORK"; chmod 700 "$WORK"
 source "$REPO/scripts/backup/m4-sanitize.sh"
 schemas="$(node "$REPO/scripts/backup/backup-scope.mjs" schemas)"
 runtime_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" runtime-roles)"
+platform_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" platform-roles)"
+role_settings="$(node "$REPO/scripts/backup/backup-scope.mjs" role-settings)"
 schema_args=(); IFS=',' read -r -a list <<<"$schemas"; for s in "${list[@]}"; do schema_args+=("--schema=$s"); done
 
 cat > "$WORK/psql" <<WRAP
@@ -49,7 +51,7 @@ SNAPSHOT_ID="$exported_snapshot_id"
   printf '\\o %s\n' "$WORK/security.txt"; cat "$REPO/scripts/backup/m5-security.sql"; printf "\n;\n"
   printf '\\o %s\n' "$WORK/roles.txt"; cat "$REPO/scripts/backup/m5-roles.sql"; printf "\n;\n"
   printf '\\o\nCOMMIT;\n'
-} | "$PSQL_BIN" "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 -v schemas="$schemas" -v manifest_version=2 -v runtime_roles="$runtime_roles" -f - 2> "$WORK/session.err" \
+} | "$PSQL_BIN" "$DATABASE_URL" -X -q -A -t -v ON_ERROR_STOP=1 -v schemas="$schemas" -v manifest_version=2 -v runtime_roles="$runtime_roles" -v platform_roles="$platform_roles" -v role_settings="$role_settings" -f - 2> "$WORK/session.err" \
   || fail snapshot_manifest "$(m4_error_class "$WORK/session.err")"
 node "$REPO/scripts/backup/backup-scope.mjs" check-discovered "$WORK/discovered.txt" | sed 's/^M4_SCOPE/M4_BACKUP snapshot_scope/' || fail snapshot_scope uncovered_or_missing_schema
 docker run --rm --network "$net" -e DATABASE_URL "$POSTGRES_IMAGE" sh -c 'snap="$1"; shift; pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --snapshot="$snap" "$@"' \
@@ -68,6 +70,9 @@ awk '{print $1" "$2}' "$WORK/content.txt" | sort > "$WORK/row-counts.txt"
 tables="$(wc -l < "$WORK/row-counts.txt")"
 for s in "${list[@]}"; do grep -q "^$s\." "$WORK/row-counts.txt" || fail completeness "schema_without_tables_$s"; done
 for f in objects.txt owners.txt security.txt roles.txt; do test -s "$WORK/$f" || fail completeness "${f%.txt}_empty"; done
+# role settings reach the plaintext roles.txt only if name AND value are on the reviewed allowlist; anything else (or an ambiguous
+# multi-grantor edge, or a provider edge with an unreviewed shape) fails the backup before encryption/upload and reports names only
+rg="$(node "$REPO/scripts/backup/backup-scope.mjs" check-roles-file 2 "$WORK/roles.txt")" || { echo "$rg" | sed 's/^M4_SCOPE/M4_BACKUP/'; fail completeness "$(sed -n 's/.*reason=\([a-z_]*\).*/\1/p' <<<"$rg")"; }
 # every reviewed runtime role must be recorded (present or absent); the policy itself is verified by the restore rehearsal
 for r in ${runtime_roles//,/ }; do grep -Eqx "runtime_role $r (present|absent)" "$WORK/roles.txt" || fail completeness runtime_role_not_recorded; done
 docker run --rm -i "$POSTGRES_IMAGE" pg_restore -l < "$WORK/production.dump" > "$WORK/toc.txt" 2>/dev/null || fail completeness archive_unreadable

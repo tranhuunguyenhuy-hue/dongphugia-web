@@ -51,8 +51,9 @@ if [ "$version" = 2 ]; then
   [ "$(field schemas)" = "$schemas" ] || fail manifest_schemas_mismatch
   [ "$(field tables)" = "$(wc -l < row-counts.txt)" ] || fail manifest_tables_mismatch
   cmp -s <(awk '{print $1}' row-counts.txt | cut -d. -f1 | sort -u) <(tr ',' '\n' <<<"$schemas" | sort) || fail counts_schemas_mismatch
-  # Reviewed runtime roles (login roles that are only MEMBERS of a group role) must be recorded with the reviewed policy.
-  rr="$(node "$REPO/scripts/backup/backup-scope.mjs" check-runtime-roles "$version" roles.txt)" || { echo "$rr"; fail "$(sed -n 's/.*reason=\([a-z_]*\).*/\1/p' <<<"$rr")"; }
+  # Reviewed runtime roles (login roles that are only MEMBERS of a group role) must be recorded with the reviewed policy; role
+  # settings must be on the reviewed allowlist; provider-controlled (postgres) edges must have a reviewed shape and are NOT replayed.
+  rr="$(node "$REPO/scripts/backup/backup-scope.mjs" check-roles "$version" roles.txt)" || { echo "$rr"; fail "$(sed -n 's/.*reason=\([a-z_]*\).*/\1/p' <<<"$rr")"; }
   echo "$rr"
 fi
 
@@ -137,7 +138,7 @@ gate_args=()
 if [ "$version" = 2 ]; then
   sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-ownership.sql" > restored-owners.txt 2>/dev/null || true
   sqldb -v schemas="$schemas" -f - < "$REPO/scripts/backup/m5-security.sql" > restored-security.txt 2>/dev/null || true
-  sqldb -v schemas="$schemas" -v runtime_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" runtime-roles "$version")" -f - < "$REPO/scripts/backup/m5-roles.sql" > restored-roles.txt 2>/dev/null || true
+  sqldb -v schemas="$schemas" -v runtime_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" runtime-roles "$version")" -v platform_roles="$(node "$REPO/scripts/backup/backup-scope.mjs" platform-roles "$version")" -v role_settings="$(node "$REPO/scripts/backup/backup-scope.mjs" role-settings "$version")" -f - < "$REPO/scripts/backup/m5-roles.sql" > restored-roles.txt 2>/dev/null || true
   gate_args=(--content content.txt restored-content.txt --owners owners.txt restored-owners.txt --security security.txt restored-security.txt --roles roles.txt restored-roles.txt)
   # Sequence safety (values are non-transactional): the NEXT value each owned sequence would return must be beyond the
   # restored column maximum; descending, cycling or unowned-but-default sequences fail closed.

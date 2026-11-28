@@ -57,7 +57,9 @@ export function evaluateRestore({ exitCode, restoreLog, expectedCounts, restored
     for (const k of ['tacl', 'nacl', 'rls', 'coldef']) if (!es.some((l) => kind(l) === k)) failures.push(`security_missing_kind_${k}`)
     if (es.join('\n') !== rs.join('\n')) failures.push('security_differs')
     securityDiff.push(...es.filter((l) => !rs.includes(l)), ...rs.filter((l) => !es.includes(l)))
-    const er = lines(expectedRoles).sort(), rr = lines(restoredRoles).sort()
+    // provider-controlled edges (platform_edge) are exported with every grantor row but never replayed: they are verified against the
+    // reviewed shapes by backup-scope.mjs check-roles, so they are excluded from the replay comparison on both sides
+    const er = lines(expectedRoles).filter((l) => kind(l) !== 'platform_edge').sort(), rr = lines(restoredRoles).filter((l) => kind(l) !== 'platform_edge').sort()
     if (!er.some((l) => kind(l) === 'roleexists')) failures.push('roles_missing')
     else if (er.join('\n') !== rr.join('\n')) failures.push('roles_differ')
   }

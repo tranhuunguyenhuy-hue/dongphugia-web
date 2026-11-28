@@ -20,8 +20,11 @@ bad() { fail=$((fail+1)); results+=("FAIL $1"); echo "FAIL $1"; }
 cleanup() { [ -n "${DPG42_KEEP:-}" ] && { echo "KEPT $T $SRC $NET"; return 0; }; docker rm -f "$SRC" "$SCR" >/dev/null 2>&1 || true; docker network rm "$NET" >/dev/null 2>&1 || true; rm -rf "$T"; }
 trap cleanup EXIT
 docker network create --internal --label dpg42.scratch=1 "$NET" >/dev/null
-docker run -d --name "$SRC" --label dpg42.scratch=1 --network "$NET" -e POSTGRES_PASSWORD="$PW" "$POSTGRES_IMAGE" >/dev/null
-for _ in $(seq 1 90); do docker logs "$SRC" 2>&1 | grep -q "PostgreSQL init process complete" && docker exec "$SRC" pg_isready -U postgres >/dev/null 2>&1 && break; sleep 1; done
+# The source mirrors Supabase: the bootstrap superuser is supabase_admin and `postgres` is an ordinary (super)user created later, so
+# grants made by postgres get the bootstrap superuser as grantor exactly as in Production (implicit grantor supabase_admin).
+docker run -d --name "$SRC" --label dpg42.scratch=1 --network "$NET" -e POSTGRES_USER=supabase_admin -e POSTGRES_PASSWORD="$PW" "$POSTGRES_IMAGE" >/dev/null
+for _ in $(seq 1 90); do docker logs "$SRC" 2>&1 | grep -q "PostgreSQL init process complete" && docker exec "$SRC" pg_isready -U supabase_admin >/dev/null 2>&1 && break; sleep 1; done
+docker exec "$SRC" psql -U supabase_admin -d postgres -X -q -A -t -v ON_ERROR_STOP=1 -c "create role postgres superuser login createrole createdb" >/dev/null
 src() { docker exec -i "$SRC" psql -U postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
 op() { docker exec -i "$SRC" psql -U dpg_operator -d postgres -X -q -A -t -v ON_ERROR_STOP=1 "$@"; }
 g002() { op -v target_ref=bonxyxluzlxfkdetryoo -v approved_sha="$SHA40" -f - < "$REPO/supabase/m5-production/002_backup_reader_commerce_scope$1.sql"; }
@@ -43,6 +46,20 @@ alter role dpg_order_intake_login set statement_timeout = '5s';
 alter role dpg_order_intake_login set idle_in_transaction_session_timeout = '10s';
 grant dpg_commerce_intake to dpg_order_intake_login;
 SQL
+# Production-observed multi-grantor edges (TL 10174): `postgres` is a member of six scoped groups twice - the implicit creator grant
+# (grantor supabase_admin = bootstrap superuser, ADMIN only) and an explicit grant by postgres with other options (four groups
+# INHERIT+SET, two groups all-false). dpg_direct_read joins the scope through a schema ACL like the Production role of that name.
+src >/dev/null <<'SQL'
+create role dpg_direct_read nologin;
+grant usage on schema dpg_app to dpg_direct_read;
+do $$ declare g text; begin
+  foreach g in array array['dpg_admin_api','dpg_migration','dpg_readonly','dpg_runtime','dpg_direct_read','dpg_direct_import'] loop
+    execute format('grant %I to postgres with admin true, inherit false, set false', g);
+    if g in ('dpg_direct_read','dpg_direct_import') then execute format('grant %I to postgres with admin false, inherit false, set false granted by postgres', g);
+    else execute format('grant %I to postgres with admin false, inherit true, set true granted by postgres', g); end if;
+  end loop;
+end $$;
+SQL
 src >/dev/null <<'SQL'
 update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=1000000, canonical_price_checked_at=now() where sku='VS-OK';
 update dpg_app.products set canonical_price_status='PRICE_VERIFIED', regular_price_vnd=2000000, promotional_price_vnd=1800000, online_voucher_amount_vnd=100000, canonical_price_checked_at=now() where sku='VS-PROMO';
@@ -53,6 +70,9 @@ create table dpg_app.owner_notes(id serial primary key, owner_id uuid, note text
 alter table dpg_app.owner_notes enable row level security; alter table dpg_app.owner_notes force row level security;
 create policy owner_notes_own on dpg_app.owner_notes for select to authenticated using (owner_id = auth.uid());
 grant select on dpg_app.owner_notes to authenticated;
+-- `postgres` referenced by a scoped policy puts it into the scoped role set, so its membership edges are exported (as the legacy
+-- objects owned by postgres do in Production); a policy keeps the historical v1 ACL manifest unchanged
+create policy owner_notes_postgres on dpg_app.owner_notes for select to postgres using (false);
 reset role;
 insert into dpg_app.products(sku,name,slug,category_id,brand_id,price_state,stock_status)
   select 'SYN-' || g, 'Synthetic product ' || g, 'syn-' || g, 5, 1, 'unknown', 'in_stock' from generate_series(1, 17000) g;
@@ -91,6 +111,17 @@ bundle_orders="$(sed -n 's/^dpg_commerce.orders //p' "$T/b2/row-counts.txt")"
 grep -rq -e "$PW" -e "$RPW" "$T/dump.log" "$T/b2" && bad "B3 secret leaked" || ok "B3 no password in log or bundle files"
 grep -rqai -e 'Khach Tong Hop' -e '0910000001' "$T/b2" "$T/dump.log" && bad "B4 row data leaked" || ok "B4 no row data (names/phones) in any bundle file or log (content digests are age-encrypted)"
 [ ! -e "$T/b2/production.dump" ] && [ ! -e "$T/b2/content.txt" ] && [ ! -e "$T/b2/snapshot-control" ] && [ -s "$T/b2/content.txt.age" ] && ok "B5 plaintext dump and content digests shredded; only .age copies" || bad B5
+# D2: a role setting that is not on the reviewed allowlist (by name, or by value) must never reach the plaintext roles.txt or any log;
+# the backup fails closed with names only. Both cases use secret-looking synthetic values and are reset afterwards.
+src -c "alter role dpg_runtime set application_name = 'leaky-synthetic-secret'; alter role dpg_readonly set \"app.api_key\" = 'sk-live-synthetic-secret'" >/dev/null
+rm -rf "$T/b3"
+if DATABASE_URL="$DBURL" WORK="$T/b3" timeout 600 bash "$REPO/scripts/backup/m4-backup-dump.sh" > "$T/d3.log" 2>&1; then bad "D2 backup passed with unreviewed role settings"
+elif grep -rqE 'leaky-synthetic-secret|sk-live-synthetic-secret' "$T/d3.log" "$T/b3" 2>/dev/null; then bad "D2 role-setting VALUE leaked into the log or workspace"
+elif [ -e "$T/b3/production.dump.age" ] || [ -e "$T/b3/SHA256SUMS" ]; then bad "D2 bundle produced despite unreviewed role settings"
+elif grep -q 'stage=completeness reason=role_setting_' "$T/d3.log" && grep -Eq 'role=[a-z_]+ setting=[a-z_.]+' "$T/d3.log"; then
+  ok "D2 unreviewed role settings fail the backup before encryption: names only ($(grep -Eo 'role=[a-z_]+ setting=[a-z_.]+' "$T/d3.log" | head -1)), no value in log or workspace, no bundle"
+else cat "$T/d3.log"; bad "D2 unexpected reason"; fi
+src -c "alter role dpg_runtime reset application_name; alter role dpg_readonly reset \"app.api_key\"" >/dev/null
 cp -r "$T/b2" "$T/b2-pristine"
 
 restore() { BUNDLE="$1" bash "$REPO/scripts/backup/m4-restore-rehearsal.sh" > "$2" 2>&1; }
@@ -121,6 +152,13 @@ if [ "$(rl -c 'show statement_timeout')" = 5s ] && denied "select count(*) from 
    && [ -n "$(rl -c "set role dpg_commerce_intake; $sub" 2>/dev/null)" ] && denied "select count(*) from dpg_app.products" ; then
   ok "R10 login -> group path after restore: statement_timeout 5s; direct table read, EXECUTE without SET ROLE and SET ROLE to the owner are all SQLSTATE 42501; SET ROLE dpg_commerce_intake submits an order"
 else bad R10; fi
+# R11: Production's multi-grantor provider edges (six groups x two grantors) are recorded with every grantor row, are NOT replayed
+# (so nothing is collapsed or elevated in the scratch project) and no postgres membership leaks into the restored database
+if [ "$(grep -c '^platform_edge ' "$T/b2/roles.txt")" = 12 ] && ! grep -q '^member [a-z_]* postgres ' "$T/b2/roles.txt" \
+   && [ "$(grep -c '^platform_edge .* grantor=supabase_admin admin=true inherit=false set=false$' "$T/b2/roles.txt")" = 6 ] \
+   && [ "$(rs -c "select count(*) from pg_auth_members am join pg_roles m on m.oid = am.member where m.rolname = 'postgres'")" = 0 ]; then
+  ok "R11 provider-controlled edges: 12 platform_edge rows (6 groups x 2 grantors) recorded with grantor and options, none replayed, none collapsed into an elevated edge"
+else bad R11; fi
 if REPO="$REPO" bash "$REPO/scripts/backup/m4-reader-proof.sh" > "$T/proof.log" 2>&1; then ok "L1 reader proof PASS: identical dump inventory, $(grep -c 'DENIED sqlstate=42501' "$T/proof.log") denials with SQLSTATE 42501 (read-only default off), BYPASSRLS required"; else cat "$T/proof.log"; bad L1; fi
 
 # ---- historical v1 bundle produced exactly like the pinned base revision (2 schemas, no scope.json) ----
@@ -170,6 +208,14 @@ neg "N38 login role lines dropped but still marked present" "sed -i '/^roleattr 
 neg "N39 membership policy weakened (INHERIT granted to the login)" "sed -i 's/^\(member dpg_commerce_intake dpg_order_intake_login admin=false\) inherit=false/\1 inherit=true/' roles.txt; resum" 'runtime_role_policy_differs'
 neg "N40 membership edge removed (login no longer in the group)" "sed -i '/^member dpg_commerce_intake dpg_order_intake_login /d' roles.txt; resum" 'runtime_role_policy_differs'
 neg "N41 login role attribute widened (CREATEROLE)" "sed -i 's/^\(roleattr dpg_order_intake_login .*\)createrole=false/\1createrole=true/' roles.txt; resum" 'runtime_role_policy_differs'
+neg "N42 provider edge with an elevated shape (postgres granted itself ADMIN)" "sed -i 's/^platform_edge dpg_admin_api postgres grantor=postgres admin=false inherit=true set=true\$/platform_edge dpg_admin_api postgres grantor=postgres admin=true inherit=true set=true/' roles.txt; resum" 'platform_edge_unreviewed'
+neg "N43 provider edge whose member is not the reviewed platform role" "sed -i 's/^platform_edge dpg_runtime postgres /platform_edge dpg_runtime dpg_operator /' roles.txt; resum" 'platform_edge_unreviewed'
+neg "N44 provider edge that lost its grantor" "sed -i 's/^platform_edge dpg_runtime postgres grantor=postgres /platform_edge dpg_runtime postgres /' roles.txt; resum" 'platform_edge_malformed'
+neg "N45 ambiguous app edge (two grantors for one non-provider pair)" "printf 'member_conflict dpg_commerce_intake dpg_order_intake_login\n' >> roles.txt; resum" 'role_edge_multi_grantor_unsupported'
+neg "N46 unreviewed role setting in roles.txt" "printf 'rolesetting dpg_runtime app.api_key=sk-live-synthetic-secret\n' >> roles.txt; resum" 'role_setting_unreviewed'
+cp "$T/n.log" "$T/n46.log"
+neg "N47 role setting value outside the reviewed shape" "printf 'rolesetting dpg_runtime application_name=leaky-synthetic-secret\n' >> roles.txt; resum" 'role_setting_value_rejected'
+if grep -qE 'sk-live-synthetic-secret|leaky-synthetic-secret' "$T/n.log" "$T/n46.log"; then bad "N46/N47 setting VALUE echoed in restore output"; else ok "N46/N47 restore output names the setting only, never its value"; fi
 neg "N18 referenced role missing from roles.txt" "sed -i '/^roleexists dpg_commerce_intake\$/d; /^roleattr dpg_commerce_intake /d; / dpg_commerce_intake admin=/d' roles.txt; resum" 'role_bootstrap_missing_role|roles_differ'
 neg "N19 sequence definition mismatch" "sed -i -E '0,/^seqdef dpg_commerce.orders_id_seq ([a-z]+) 1 1 /s//seqdef dpg_commerce.orders_id_seq \\1 1 2 /' security.txt; resum" 'security_differs'
 

@@ -9,6 +9,9 @@
 //   node backup-scope.mjs runtime-roles [version]       -> reviewed runtime roles (comma separated) recovery must reproduce
 //   node backup-scope.mjs check-runtime-roles <version> <roles.txt> -> the bundle's roles.txt must record each reviewed runtime role
 //                                                         (present: login + membership policy exactly as reviewed; absent: no trace)
+//   node backup-scope.mjs platform-roles [version]      -> provider-controlled principals whose membership edges are exported, not replayed
+//   node backup-scope.mjs role-settings [version]       -> JSON allowlist (setting name -> value regex) for role settings written to roles.txt
+//   node backup-scope.mjs check-roles <version> <roles.txt> -> runtime roles + platform edge shapes + role-setting allowlist + no multi-grantor
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -23,7 +26,11 @@ export function loadContract(path = join(here, 'backup-scope.json')) {
   if (!v || !Array.isArray(v.schemas) || !v.schemas.length) throw new Error('SCOPE_CURRENT_VERSION_INVALID')
   for (const ver of Object.values(c.versions)) for (const s of ver.schemas) if (!IDENT.test(s)) throw new Error('SCOPE_SCHEMA_NAME_INVALID')
   for (const s of Object.keys(c.excluded ?? {})) if (!IDENT.test(s) || !String(c.excluded[s] ?? '').trim()) throw new Error('SCOPE_EXCLUSION_INVALID')
-  for (const k of Object.keys(c.versions)) runtimeRoles(c, k)
+  for (const k of Object.keys(c.versions)) {
+    runtimeRoles(c, k)
+    for (const r of platformRoles(c, k)) if (!IDENT.test(r)) throw new Error('SCOPE_PLATFORM_ROLE_INVALID')
+    for (const [name, pat] of Object.entries(roleSettingsAllow(c, k))) { if (!/^[a-z_][a-z0-9_.]{0,62}$/.test(name)) throw new Error('SCOPE_ROLE_SETTING_INVALID'); new RegExp(pat) }
+  }
   return c
 }
 
@@ -66,6 +73,38 @@ export function checkRuntimeRoles(c, version, lines) {
     for (const [g, o] of want) {
       const e = edges.find((l) => l.split(' ')[1] === g)
       if (!e || e !== `member ${g} ${name} admin=${o.admin} inherit=${o.inherit} set=${o.set}`) return { ok: false, reason: 'runtime_role_policy_differs', role: name }
+    }
+  }
+  return { ok: true }
+}
+
+export function platformRoles(c, version = c.current_version) { return [...(c.versions[String(version)]?.platform_roles ?? [])] }
+export function roleSettingsAllow(c, version = c.current_version) { return { ...(c.versions[String(version)]?.role_settings ?? {}) } }
+function platformShapes(c, version) { return c.versions[String(version)]?.platform_edge_shapes ?? [] }
+
+// Whole-file guard for a v2 roles.txt, run by the restore BEFORE any role is created and by the dump before anything is uploaded:
+// no rejected role setting (name only is ever reported), every exported setting matches the reviewed allowlist, no ambiguous
+// (group, member) pair with several grantors outside the provider-controlled principals, and every provider-controlled edge has a
+// reviewed shape (a different shape could be an elevated grant that a replay would silently collapse).
+export function checkRolesFile(c, version, lines) {
+  const rows = lines.map((l) => l.trim()).filter(Boolean)
+  const allow = roleSettingsAllow(c, version)
+  const platform = new Set(platformRoles(c, version))
+  const shapes = platformShapes(c, version)
+  for (const l of rows) {
+    const p = l.split(' ')
+    if (p[0] === 'rolesetting_rejected') return { ok: false, reason: p[3] === 'value_rejected' ? 'role_setting_value_rejected' : 'role_setting_unreviewed', role: p[1], setting: /^[a-z_][a-z0-9_.]{0,62}$/.test(p[2] ?? '') ? p[2] : 'invalid_name' }
+    if (p[0] === 'member_conflict') return { ok: false, reason: 'role_edge_multi_grantor_unsupported', role: p[2] }
+    if (p[0] === 'rolesetting') {
+      const kv = l.slice(l.indexOf(' ', 'rolesetting '.length) + 1), eq = kv.indexOf('='), name = eq < 0 ? kv : kv.slice(0, eq), value = eq < 0 ? '' : kv.slice(eq + 1)
+      if (!Object.hasOwn(allow, name)) return { ok: false, reason: 'role_setting_unreviewed', role: p[1], setting: /^[a-z_][a-z0-9_.]{0,62}$/.test(name) ? name : 'invalid_name' }
+      if (!new RegExp(allow[name]).test(value)) return { ok: false, reason: 'role_setting_value_rejected', role: p[1], setting: name }
+    }
+    if (p[0] === 'platform_edge') {
+      const m = /^platform_edge (\S+) (\S+) grantor=(\S+) admin=(true|false) inherit=(true|false) set=(true|false)$/.exec(l)
+      if (!m) return { ok: false, reason: 'platform_edge_malformed' }
+      const [, group, member, grantor, admin, inherit, set] = m
+      if (!platform.has(member) || !shapes.some((x) => x.grantor === grantor && String(x.admin) === admin && String(x.inherit) === inherit && String(x.set) === set)) return { ok: false, reason: 'platform_edge_unreviewed', role: group }
     }
   }
   return { ok: true }
@@ -117,6 +156,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`M4_SCOPE runtime_roles=${r.ok ? 'PASS' : 'FAIL'} reason=${r.reason ?? 'none'}${r.role ? ` role=${r.role}` : ''}`)
     process.exit(r.ok ? 0 : 1)
   }
+  if (cmd === 'platform-roles') { process.stdout.write(platformRoles(c, arg ?? c.current_version).join(',')); process.exit(0) }
+  if (cmd === 'role-settings') { process.stdout.write(JSON.stringify(roleSettingsAllow(c, arg ?? c.current_version))); process.exit(0) }
+  if (cmd === 'check-roles-file') {
+    const q = checkRolesFile(c, arg, readFileSync(process.argv[4], 'utf8').split(/\r?\n/))
+    console.log(`M4_SCOPE roles_file=${q.ok ? 'PASS' : 'FAIL'} reason=${q.reason ?? 'none'}${q.role ? ` role=${q.role}` : ''}${q.setting ? ` setting=${q.setting}` : ''}`)
+    process.exit(q.ok ? 0 : 1)
+  }
+  if (cmd === 'check-roles') {
+    const lines = readFileSync(process.argv[4], 'utf8').split(/\r?\n/)
+    const r = checkRuntimeRoles(c, arg, lines)
+    const q = r.ok ? checkRolesFile(c, arg, lines) : r
+    console.log(`M4_SCOPE roles=${q.ok ? 'PASS' : 'FAIL'} reason=${q.reason ?? 'none'}${q.role ? ` role=${q.role}` : ''}${q.setting ? ` setting=${q.setting}` : ''}`)
+    process.exit(q.ok ? 0 : 1)
+  }
   if (cmd === 'write-bundle-scope') { writeFileSync(arg, JSON.stringify(bundleScope(c)) + '\n'); process.exit(0) }
   if (cmd === 'resolve-bundle') {
     const p = join(arg, 'scope.json')
@@ -125,5 +178,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log(`version=${r.version} coverage=${r.coverage} schemas=${r.schemas.join(',')}`)
     process.exit(0)
   }
-  console.error('usage: backup-scope.mjs schemas|check-discovered <file>|write-bundle-scope <out>|resolve-bundle <dir>|runtime-roles [version]|check-runtime-roles <version> <roles.txt>'); process.exit(2)
+  console.error('usage: backup-scope.mjs schemas|check-discovered <file>|write-bundle-scope <out>|resolve-bundle <dir>|runtime-roles [version]|check-runtime-roles <version> <roles.txt>|platform-roles [version]|role-settings [version]|check-roles <version> <roles.txt>|check-roles-file <version> <roles.txt>'); process.exit(2)
 }

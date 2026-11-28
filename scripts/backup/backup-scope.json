@@ -21,7 +21,7 @@
       "runtime_roles": {
         "dpg_order_intake_login": {
           "login": true,
-        "role_inherit": false,
+          "role_inherit": false,
           "member_of": {
             "dpg_commerce_intake": {
               "admin": false,
@@ -31,7 +31,42 @@
           },
           "note": "order-intake login provisioned by scripts/m6/production-sql-apply.mjs provisionIntake: NOINHERIT login, member of dpg_commerce_intake (SET ROLE only); password is never backed up"
         }
-      }
+      },
+      "platform_roles": [
+        "postgres"
+      ],
+      "platform_edge_shapes": [
+        {
+          "grantor": "supabase_admin",
+          "admin": true,
+          "inherit": false,
+          "set": false,
+          "note": "implicit creator grant recorded by the bootstrap superuser when postgres creates a role"
+        },
+        {
+          "grantor": "postgres",
+          "admin": false,
+          "inherit": true,
+          "set": true,
+          "note": "repo migrations: grant <role> to postgres"
+        },
+        {
+          "grantor": "postgres",
+          "admin": false,
+          "inherit": false,
+          "set": false,
+          "note": "legacy direct-access roles"
+        }
+      ],
+      "role_settings": {
+        "statement_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
+        "lock_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
+        "idle_in_transaction_session_timeout": "^[0-9]{1,9}(ms|s|min|h|d)?$",
+        "default_transaction_read_only": "^(on|off|true|false)$",
+        "application_name": "^(dpg-migration|dpg-runtime|dpg-readonly)$",
+        "search_path": "^(\"[$]user\"|[a-z_][a-z0-9_]*)(, ?(\"[$]user\"|[a-z_][a-z0-9_]*)){0,7}$"
+      },
+      "role_settings_note": "Only these setting names with values matching the pattern are exported to the plaintext roles.txt; anything else fails the backup (name only is reported, never the value). Adding a setting needs a reviewed change here."
     }
   },
   "excluded": {},

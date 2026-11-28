@@ -60,6 +60,11 @@ describe('DPG-42 scope v2 gate (commerce coverage)', () => {
     expect(evaluateRestore({ ...ok2, restoredRoles: roles.replace('login=false', 'login=true') }).failures).toContain('roles_differ')
     expect(evaluateRestore({ ...ok2, expectedSecurity: '', restoredSecurity: '' }).failures).toContain('security_missing_kind_tacl')
     expect(evaluateRestore({ ...ok2, expectedRoles: '', restoredRoles: '' }).failures).toContain('roles_missing')
+    // provider-controlled edges are verified by check-roles and never replayed: absent from the restored side is not a difference,
+    // but a differing replayed `member` edge still is
+    const platform = 'platform_edge dpg_runtime postgres grantor=supabase_admin admin=true inherit=false set=false\nplatform_edge dpg_runtime postgres grantor=postgres admin=false inherit=true set=true\n'
+    expect(evaluateRestore({ ...ok2, expectedRoles: roles + platform, restoredRoles: roles }).failures).not.toContain('roles_differ')
+    expect(evaluateRestore({ ...ok2, expectedRoles: roles + platform + 'member dpg_a dpg_b admin=false inherit=true set=true\n', restoredRoles: roles }).failures).toContain('roles_differ')
   })
   it('reports only object labels and fixed error classes, never raw server text', () => {
     const r = evaluateRestore({ ...ok2, restoredSecurity: security.replace('abc', 'zzz'), exitCode: 1, restoreLog: 'pg_restore: error: could not execute query: ERROR:  duplicate key value violates unique constraint "x" DETAIL:  Key (phone)=(0912345678) already exists.\n' })

@@ -42,6 +42,27 @@
   prerequisites, to be verified separately):** roles outside `dpg_*` (`postgres`, `authenticator`, `supabase_*`, `anon`,
   `authenticated`, `service_role`) and their memberships, per-database role settings, Hyperdrive/Cloudflare configuration, and
   any `dpg_*` login that is neither an ACL role, a reviewed runtime role nor linked to one by membership.
+  Extensions: the only `create extension` statements in this repository are `pgcrypto`, `uuid-ossp` and `plpgsql` (migrations); the
+  restore reads the extensions recorded in `security.txt` and installs them from the pinned image's contrib set, so an extension the
+  image does not ship fails the rehearsal (`extension_unavailable_*`). The Production extension list itself is UNKNOWN until the
+  read-only precheck.
+- **Provider-controlled role edges (`platform_edge`).** Supabase records `postgres`'s membership in an application role as separate
+  rows per grantor: the implicit creator grant by `supabase_admin` (ADMIN only; SET/INHERIT false) plus a later grant by `postgres`
+  (INHERIT+SET for `dpg_admin_api`, `dpg_migration`, `dpg_readonly`, `dpg_runtime`; all false for `dpg_direct_read`,
+  `dpg_direct_import`). A restore runs under a different bootstrap superuser, so replaying them would collapse the rows and
+  could not reproduce the grantors. They are therefore exported as `platform_edge <group> <member> grantor= admin= inherit= set=`
+  (every grantor row, evidence only), **never replayed**, and verified against exactly three reviewed shapes in
+  `backup-scope.json` (`supabase_admin` ADMIN-only; `postgres` INHERIT+SET; `postgres` all-false). Any other shape - for example
+  `postgres` holding ADMIN through its own grant - fails the restore (`platform_edge_unreviewed`) instead of being collapsed into an
+  elevated edge. Two rows for the same pair between non-provider roles are `member_conflict` and fail closed. Whether Production
+  still has exactly these edges is a platform prerequisite confirmed by the read-only precheck, not by the bundle.
+- **Role settings are allowlisted before they reach plaintext metadata.** Only these names, with values matching the reviewed
+  pattern in `backup-scope.json`, are written to `roles.txt`: `statement_timeout`, `lock_timeout`,
+  `idle_in_transaction_session_timeout` (duration), `default_transaction_read_only` (boolean), `application_name`
+  (`dpg-migration`, `dpg-runtime`, `dpg-readonly`) and `search_path` (identifier list). The filter is applied in the SQL itself, so
+  an unreviewed setting never leaves the database; it is reported as `rolesetting_rejected <role> <name> name_unreviewed|value_rejected`
+  (name only, never the value) and fails the backup before encryption and upload. The restore re-validates the file before it
+  creates any role. Adding a setting needs a reviewed change to the contract. Per-database role settings are not exported.
 - Every raw tool log and decrypted/derived digest file in the rehearsal workspace (`restore.log`, `bootstrap.err`, `prereq.err`,
   `restored-content.txt`, `content.txt`, `production.dump`, `seq-safety.txt`, `toc.txt`) is shredded on every exit path, success
   or failure; failures print only a fixed reason class. The backup job uploads the artifact only after the dump step succeeds; the
