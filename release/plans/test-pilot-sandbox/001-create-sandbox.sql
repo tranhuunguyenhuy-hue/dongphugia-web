@@ -12,7 +12,7 @@ select (select count(*) = 1 from dpg_control.target_contract)
   and pg_database_size(current_database()) + 2 * 1048576 + 15 * 1048576 <= least(350 * 1048576, (select t.hard_database_ceiling_bytes from dpg_control.target_contract t limit 1))
   and not exists (select 1 from pg_default_acl d where d.defaclnamespace = 0 and d.defaclrole = (select r.oid from pg_roles r where r.rolname = current_user))
   and not exists (select 1 from pg_event_trigger e join pg_proc p on p.oid = e.evtfoid join pg_namespace n on n.oid = p.pronamespace where e.evtenabled <> 'D'
-    and not (n.nspname = 'public' and p.proname = 'rls_auto_enable' and p.pronargs = 0 and p.prorettype = 'event_trigger'::regtype and p.prosecdef and p.proconfig = array['search_path=pg_catalog'] and md5(p.prosrc) = 'c44fb229ea8a6b0afd04a0a33261c16c')) as ok
+    and (n.nspname = 'public' and p.proname = 'rls_auto_enable' and p.pronargs = 0 and p.prorettype = 'event_trigger'::regtype and p.prosecdef and p.proconfig = array['search_path=pg_catalog'] and md5(p.prosrc) = 'c44fb229ea8a6b0afd04a0a33261c16c') is not true) as ok
 ) q);
 -- 2) baseline of every non-pilot object, taken BEFORE the first DDL of this step (transaction-local; the executor's own dpg_release bookkeeping already ran, so it is inside the baseline)
 with
